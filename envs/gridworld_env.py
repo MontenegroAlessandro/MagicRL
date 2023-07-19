@@ -7,7 +7,7 @@ Date: 12/7/2023
 # Libraries
 import numpy as np
 from envs.base_env import BaseEnv
-from envs.utils import Position
+from envs.utils import Position, GWContMove, Obstacle
 from copy import deepcopy
 import json, os, io, errno
 import matplotlib.pyplot as plt
@@ -31,8 +31,8 @@ class GridWorldState:
         self.agent_pos = Position(x=x, y=y)
 
 # Class Environment       
-class GridWorldEnv(BaseEnv):
-    """GridWorld Environment"""
+class GridWorldEnvDisc(BaseEnv):
+    """GridWorld Environment Discrete"""
     def __init__(
             self, horizon: int = 0, gamma: float = 0, grid_size: int = 0,
             reward_type: str = "linear", env_type: str = "empty", 
@@ -316,3 +316,235 @@ class GridWorldEnv(BaseEnv):
             bool: True if "position" is an absorbing state, False otherwise
         """
         return position.x == self.goal_pos.x and position.y == self.goal_pos.y
+
+class GridWorldEnvCont(BaseEnv):
+    """GridWorld Environment Continuous"""
+    def __init__(
+            self, horizon: int = 0, gamma: float = 0, grid_size: int = 0,
+            reward_type: str = "linear", 
+            render: bool = False, dir: str = None, init_state: list = None,
+            obstacles: list = []
+            ) -> None:
+        """
+        Summary: Initializaiton function
+        Args: 
+            horizon (int): look BaseEnv.
+            
+            gamma (float): look BaseEnv.
+            
+            grid_size (int): the size of the grid (default to 0).
+            
+            reward_type (str): how to shape the rewards, legal values in 
+            LEGAL_REWARDS (default "linear").
+
+            env_type (str): if and which obstacles to embody in the environment,
+            legal values in LEGAL_ENV_CONFIG (default "empty").
+            
+            render (bool): flag indicating whether to save graphically the results.
+            
+            dir (str): directory in which save the results.
+            
+            init_state (list): a list of 2 coordinates stating how to initialize
+            the state. If not passed, the state will be initialized randomly.
+            Defaults to None.
+            
+            obstacles (list): list of Obstacles to put in the environment. 
+            Defaults to empty list [].
+        """
+        # Super class initialization
+        super().__init__(horizon=horizon, gamma=gamma)  # self.horizon, self.gamma, self.time
+
+        # Map initialization
+        self.grid_size = grid_size
+        self.goal_pos = Position(x=self.grid_size/2, 
+                                 y= self.grid_size/2)
+        
+        # State initialization
+        self.init_state = init_state
+        if init_state is not None:
+            self.state = GridWorldState(x=init_state[0], y=init_state[1])
+        else:
+            space = np.linspace(start=0, stop=grid_size, num=100)
+            self.state = GridWorldState(x=np.random.choice(space),
+                                        y=np.random.choice(space))
+            print(f"{self.state.agent_pos.x}, {self.state.agent_pos.y}")
+
+        # Reward
+        assert reward_type in LEGAL_REWARDS, "[ERROR] Illegal reward type."
+        self.reward_type = reward_type
+        
+        # Obstacles
+        self.obstacles = obstacles
+        
+        # Saving parameters
+        self.render = render
+        self.dir = dir
+        self.episode_conuter = 1
+        if self.render and self.dir is None:
+            print("[Error] No directory provided.")
+            quit(-1)
+        self.history = {"0": {
+            "pos_x": self.state.agent_pos.x,
+            "pos_y": self.state.agent_pos.y,
+            "r": self.reward(),
+            "abs": int(False)
+        }}
+        if self.render:
+            self.save_single_image()
+
+    def step(self, action: GWContMove = None):
+        """
+        Summary: function implementing a step of the environment.
+        Args:
+            action (GWContMove): the action to apply to the environment.
+        Returns:
+            new position and reward and absorbing flag.
+        """
+        # Update of self.time
+        self.time += 1
+
+        # Compute the next state
+        new_pos = deepcopy(self.state.agent_pos)
+        new_pos.x = (action.radius * np.cos(np.deg2rad(action.theta)) + self.state.agent_pos.x) % self.grid_size
+        new_pos.y = (action.radius * np.sin(np.deg2rad(action.theta)) + self.state.agent_pos.y) % self.grid_size
+        
+        # Check if the new position is forbidden
+        isAbs = self.is_absorbing(self.state.agent_pos)
+        forbidden = False
+        for obs in self.obstacles:
+            if obs.is_in(pos=new_pos):
+                forbidden = True
+                break
+        if not forbidden and not isAbs:
+            # Update state
+            self.state.agent_pos = deepcopy(new_pos)
+        else:
+            # Reload old state
+            new_pos = deepcopy(self.state.agent_pos)
+            
+        # Save results
+        reward = self.reward()
+        isNewAbs = self.is_absorbing(position=new_pos)
+        self.history[str(self.time)] = {
+            "pos_x": int(new_pos.x), 
+            "pos_y": int(new_pos.y), 
+            "r": int(reward), 
+            "abs": int(isNewAbs)
+        }
+        if self.render:
+            self.save_single_image()
+        return new_pos, reward, isNewAbs
+    
+    def reset(self) -> None:
+        # self.time init
+        super().reset()
+        
+        # State initialization
+        if self.init_state is not None:
+            self.state = GridWorldState(x=self.init_state[0], y=self.init_state[1])
+        else:
+            space = np.linspace(start=0, stop=self.grid_size, num=100)
+            self.state = GridWorldState(x=np.random.choice(space),
+                                        y=np.random.choice(space))
+        
+        # Save results
+        if self.dir is not None:
+            self.save_history()
+            if self.render:
+                self.save_gif()
+        self.episode_conuter += 1
+        
+        # History
+        self.history = {"0": {
+            "pos_x": self.state.agent_pos.x,
+            "pos_y": self.state.agent_pos.y,
+            "r": self.reward(),
+            "abs": int(False)
+        }}
+        if self.render:
+            self.save_single_image()
+            
+    def reward(self):
+        if self.state.agent_pos.x == self.goal_pos.x and self.state.agent_pos.y == self.goal_pos.y:
+            return 1
+        if self.reward_type == "linear":
+            dist = (self.state.agent_pos.x - self.goal_pos.x) ** 2
+            dist += (self.state.agent_pos.y - self.goal_pos.y) ** 2
+            dist = np.sqrt(dist)
+            return -dist
+        elif self.reward_type == "sparse":
+            return -1
+        else:
+            return 0 
+        
+    def is_absorbing(self, position: Position):
+        return position.x == self.goal_pos.x and position.y == self.goal_pos.y
+    
+    def save_history(self) -> None:
+        """Save json of the history"""
+        name = self.dir + f"/GridWorldContResults_{self.episode_conuter}.json"
+        if not os.path.exists(os.path.dirname(name)):
+            try:
+                os.makedirs(os.path.dirname(name))
+            except OSError as exc:  # Guard against race condition
+                if exc.errno != errno.EEXIST:
+                    raise
+
+        with io.open(name, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(self.history, ensure_ascii=False, indent=4))
+            f.close()
+    
+    def save_single_image(self) -> None:
+        """Save an image of the current state of the environment"""
+        # clear plot
+        plt.clf()
+        fig, ax = plt.subplots(figsize=(8,8))
+        ax.set_xlim(0, self.grid_size)
+        ax.set_ylim(0, self.grid_size)
+        ax.set_xticks(np.arange(self.grid_size+1))
+        ax.set_yticks(np.arange(self.grid_size+1))
+        
+        # goal pos
+        ax.plot(self.goal_pos.x, self.goal_pos.y, "o", color="green", label="GOAL")
+        
+        # agent
+        ax.plot(self.state.agent_pos.x, self.state.agent_pos.y, "o", color="blue", label="AGENT")
+        
+        # plot walls
+        for obs in self.obstacles:
+            if obs.type == "square":
+                x = obs.features["p1"].x
+                y = obs.features["p1"].y
+                w = obs.features["p2"].x - obs.features["p1"].x
+                h = obs.features["p4"].y - obs.features["p1"].y
+                ax.add_patch(plt.Rectangle((x,y), w, h, alpha=0.3, color="red", label="obstacle"))
+            elif obs.type == "circle":
+                x = obs.features["center"].x
+                y = obs.features["center"].y
+                r = obs.features["radius"]
+                ax.add_patch(plt.Circle((x,y), r, alpha=0.3, color="orange", label="obstacle"))
+        
+        # plot positions
+        plt.grid()
+        plt.legend(loc="best")
+        plt.title(f"GridWorld EPISODE{self.episode_conuter} FRAME {self.time}")
+        
+        if self.time < 10:
+            name = self.dir + f"/frames_{self.episode_conuter}" + f"/GridWorldFrame_{self.episode_conuter}_0{self.time}.jpeg"
+        else:
+            name = self.dir + f"/frames_{self.episode_conuter}" + f"/GridWorldFrame_{self.episode_conuter}_{self.time}.jpeg"
+        if not os.path.exists(os.path.dirname(name)):
+            try:
+                os.makedirs(os.path.dirname(name))
+            except OSError as exc:  # Guard against race condition
+                if exc.errno != errno.EEXIST:
+                    raise
+        plt.savefig(name, format="jpeg")
+        plt.close(fig)
+    
+    def save_gif(self) -> None:
+        name = self.dir + f"/frames_{self.episode_conuter}"
+        frames = [Image.open(image) for image in sorted(glob.glob(f"{name}/*.jpeg"))]
+        frame_one = frames[0]
+        frame_one.save(f"{self.dir}/GridWorldContGif_{self.episode_conuter}.gif", format="GIF", append_images=frames, save_all=True, duration=150, loop=0)
+        
