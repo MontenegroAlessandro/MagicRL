@@ -367,7 +367,6 @@ class GridWorldEnvCont(BaseEnv):
             space = np.linspace(start=0, stop=grid_size, num=100)
             self.state = GridWorldState(x=np.random.choice(space),
                                         y=np.random.choice(space))
-            print(f"{self.state.agent_pos.x}, {self.state.agent_pos.y}")
 
         # Reward
         assert reward_type in LEGAL_REWARDS, "[ERROR] Illegal reward type."

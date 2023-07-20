@@ -50,6 +50,6 @@ class GWDataProcessorRBF(BaseProcessor):
         feat_x = np.zeros(self.num_basis)
         feat_y = np.zeros(self.num_basis)
         for i, mean in enumerate(self.means):
-            feat_x[i] = gauss(state.x, mean, self.std_dev)
-            feat_y[i] = gauss(state.y, mean, self.std_dev)
+            feat_x[i] = gauss(state.agent_pos.x, mean, self.std_dev)
+            feat_y[i] = gauss(state.agent_pos.y, mean, self.std_dev)
         return np.concatenate((feat_x, feat_y))

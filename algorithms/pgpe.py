@@ -1,6 +1,6 @@
 """
 Summary: PGPE implementation
-Author: Alessandro Montenegro
+Author: @MontenegroAlessandro
 Date: 14/7/2023
 """
 # Libraries
@@ -8,6 +8,10 @@ import numpy as np
 from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
+
+# Macros
+MEAN = 0
+STD = 1
 
 # Objects
 class PGPE:
@@ -37,8 +41,8 @@ class PGPE:
             env (BaseEnv, optional): The environment in which the agent has to 
             act. Defaults to None.
             
-            policy (BasePolicy, optional): The parametric policy to use. Defaults to 
-            None.
+            policy (BasePolicy, optional): The parametric policy to use. 
+            Defaults to None.
             
             data_processor (IdentityDataProcessor, optional): the object in 
             charge of transforming the state into a feature vector. Defaults to 
@@ -87,20 +91,26 @@ class PGPE:
             # Update time counter
             self.time += 1
     
-    def update_rho(self):
+    def update_rho(self): # FIXME
         """This function modifies the self.rho vector, by updating via the 
         estimated gradient."""
         for id, elem in enumerate(self.rho):
-            
-            pass
+            batch_perf = self.performance_idx_theta[self.time, :]
+            update = np.array([
+                (self.thetas[id] - self.rho[id, MEAN]) / (self.rho[id, STD] ** 2),
+                (((self.thetas[id] - self.rho[id, STD]) ** 2) - (self.rho[id, STD]**2)) / (self.rho[id, STD] ** 3)
+            ])
+            self.rho[id, MEAN] += self.lr * np.mean(update[MEAN] * batch_perf)
+            self.rho[id, STD] += self.lr * np.mean(update[STD] * batch_perf)
+            print(f"{self.rho}")
     
     def sample_theta(self):
         """This funciton modifies the self.thetas vector, by sampling parameters
         from the current rho configuration. Each element of rho is assumed to
-        be of the form: "[mean, variance]"."""
-        for id, elem in self.rho:
+        be of the form: "[mean, std_dev]"."""
+        for id, elem in enumerate(self.rho):
             self.thetas[id] = np.random.normal(
-                loc=elem[0], scale=np.sqrt(elem[1])
+                loc=elem[MEAN], scale=elem[STD]
             )
     
     def collect_trajectory(self) -> float:
@@ -114,7 +124,7 @@ class PGPE:
         
         # initialize parameters
         perf = 0
-        pol = self.policy(thetas=self.thetas)
+        self.policy.set_parameters(thetas=self.thetas)
         
         # act
         for t in range(self.env.horizon):
@@ -125,7 +135,7 @@ class PGPE:
             features = self.data_processor.transform(state=state)
             
             # select the action
-            a = pol.draw_action(state=features)
+            a = self.policy.draw_action(state=features)
             
             # play the action
             _, rew, _ = self.env.step(action=a)

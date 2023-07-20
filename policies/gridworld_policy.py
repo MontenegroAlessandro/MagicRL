@@ -5,8 +5,19 @@ Author: Alessandro Montenegro
 Date: 19/7/2023
 """
 # Libraries
-from base_policy import BasePolicy
+from policies.base_policy import BasePolicy
 import numpy as np
+
+# Action class
+class GWContAction:
+    def __init__(self, radius: float = 0, theta: float = 0) -> None:
+        """
+        Args:
+            radius (float, optional): radius of the action. Defaults to 0.
+            theta (float, optional): orientation of the action. Defaults to 0.
+        """
+        self.radius = radius
+        self.theta = theta
 
 # Policy Implementation
 class GWPolicy(BasePolicy):
@@ -39,8 +50,8 @@ class GWPolicy(BasePolicy):
         state = np.array(state)
         radius = np.exp(self.omegas.T @ state)
         theta = np.rad2deg(np.pi * np.tanh(self.thetas.T @ state)) + 180
-        return radius, theta
-
+        return GWContAction(radius=radius, theta=theta)
+    
     def set_parameters(self, thetas: list):
         """
         Summary:
