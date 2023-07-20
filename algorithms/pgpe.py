@@ -6,6 +6,8 @@ Date: 14/7/2023
 # Libraries
 import numpy as np
 from envs.base_env import BaseEnv
+from policies import BasePolicy
+from data_processors import BaseProcessor, IdentityDataProcessor
 
 # Objects
 class PGPE:
@@ -13,7 +15,8 @@ class PGPE:
     def __init__(
         self, lr: float = 1e-3, initial_rho: np.array = None, ite: int = 0,
         batch_size: int = 10, episodes_per_theta: int = 10, env: BaseEnv = None,
-        policy=None
+        policy: BasePolicy = None, 
+        data_processor: BaseProcessor = IdentityDataProcessor()
         ) -> None:
         """
         Args:
@@ -34,7 +37,11 @@ class PGPE:
             env (BaseEnv, optional): The environment in which the agent has to 
             act. Defaults to None.
             
-            policy (..., optional): The parametric policy to use. Defaults to 
+            policy (BasePolicy, optional): The parametric policy to use. Defaults to 
+            None.
+            
+            data_processor (IdentityDataProcessor, optional): the object in 
+            charge of transforming the state into a feature vector. Defaults to 
             None.
         """
         # Arguments
@@ -52,6 +59,9 @@ class PGPE:
         
         assert policy is not None, "[ERROR] No policy provided."
         self.policy = policy
+        
+        assert data_processor is not None, "[ERROR] No data processor."
+        self.data_processor = data_processor
         
         # Other paraemeters
         self.thetas = np.zeros(len(self.rho))
@@ -111,8 +121,11 @@ class PGPE:
             # retrieve the state
             state = self.env.state
             
+            # transform the state
+            features = self.data_processor.transform(state=state)
+            
             # select the action
-            a = pol.draw_action(state=state)
+            a = pol.draw_action(state=features)
             
             # play the action
             _, rew, _ = self.env.step(action=a)

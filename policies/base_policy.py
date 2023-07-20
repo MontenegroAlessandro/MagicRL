@@ -6,6 +6,7 @@ Date: 19/7/2023
 # Libraries
 from abc import ABC, abstractmethod
 
+# Class
 class BasePolicy(ABC):
     def __init__(self) -> None:
         super().__init__()
