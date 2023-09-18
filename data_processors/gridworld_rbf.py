@@ -37,7 +37,7 @@ class GWDataProcessorRBF(BaseProcessor):
     def transform(self, state: Position) -> np.array:
         """
         Summary: 
-            Conpute the mapping from teh Position to the feature vector using 
+            Compute the mapping from teh Position to the feature vector using 
             the gaussians
 
         Args:

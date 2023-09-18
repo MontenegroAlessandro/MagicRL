@@ -1,6 +1,6 @@
 """
 Smmary: Utils classes and functions for environments
-Author: Alessandro Montenegro
+Author: @MontenegroAlessandro
 Date: 12/7/2023
 """
 # Libraries

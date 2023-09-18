@@ -10,11 +10,14 @@ from algorithms import PGPE
 from data_processors import GWDataProcessorRBF
 
 # Global Vars
-horizon = 30
+horizon = 50
 gamma = 1
-grid_size = 20
+grid_size = 10
 num_basis = 3
 dim_state = 2
+dir = "~/PyProjects/results/cpgpe_exp/test"
+RENDER = False
+DEBUG = False
 
 # Obstacles
 square = Obstacle(
@@ -30,11 +33,11 @@ env = GridWorldEnvCont(
     horizon=horizon, 
     gamma=gamma, 
     grid_size=grid_size, 
-    reward_type="sparse", 
-    render=True,
-    dir="../../Desktop/cpgpe_exp/test",
-    obstacles=[square],
-    #init_state=[1, 12]
+    reward_type="linear",
+    render=RENDER,
+    dir=dir,
+    # obstacles=[square],
+    # init_state=[1, 12]
 )
 
 # Data Processor
@@ -51,22 +54,55 @@ pol = GWPolicy(
 )
 
 # Algorithm
-hp = np.array([
-    [1, 0.1], [2, 0.1], [3, 0.1], [4, 0.1], [5, 0.1], [6, 0.1],
-    [1, 0.1], [2, 0.1], [3, 0.1], [4, 0.1], [5, 0.1], [6, 0.1]
-])
+hp = np.array([[0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+               [0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001]])
 alg = PGPE(
     lr=1e-3,
     initial_rho=hp,
     ite=100,
-    batch_size=10,
-    episodes_per_theta=10,
+    batch_size=20,
+    episodes_per_theta=20,
     env=env,
     policy=pol,
     data_processor=dp,
+    directory=dir,
+    verbose=DEBUG
 )
 
 if __name__ == "__main__":
+    # Learn phase
     alg.learn()
+    alg.save_results()
     print(alg.performance_idx)
+
+    # Test phase
+    pol.set_parameters(thetas=alg.best_theta)
+    env.reset()
+    perf = 0
+    env.dir = dir
+    env.render = True
+    perfs = []
+    for i in range(10):
+        env.reset()
+        for t in range(env.horizon):
+            # retrieve the state
+            state = env.state
+
+            # transform the state
+            features = dp.transform(state=state)
+
+            # select the action
+            a = pol.draw_action(state=features)
+
+            # play the action
+            _, rew, _ = env.step(action=a)
+
+            # update the performance index
+            perf += (env.gamma ** t) * rew
+        
+        perfs.append(perf)
+        perf = 0
+    
+    print(f"Evaluation Performance: {np.mean(perfs)} +/- {np.std(perfs)}")
+    env.reset()
     

@@ -1,6 +1,6 @@
 """
 Summary: Python Script implementing the GridWorldMDP with goal in the center
-Author: Alessandro Montenegro
+Author: @MontenegroAlessandro
 Date: 12/7/2023
 """
 
@@ -323,7 +323,7 @@ class GridWorldEnvCont(BaseEnv):
             self, horizon: int = 0, gamma: float = 0, grid_size: int = 0,
             reward_type: str = "linear", 
             render: bool = False, dir: str = None, init_state: list = None,
-            obstacles: list = []
+            obstacles: list = [], verbose: bool = False
             ) -> None:
         """
         Summary: Initializaiton function
@@ -352,7 +352,7 @@ class GridWorldEnvCont(BaseEnv):
             Defaults to empty list [].
         """
         # Super class initialization
-        super().__init__(horizon=horizon, gamma=gamma)  # self.horizon, self.gamma, self.time
+        super().__init__(horizon=horizon, gamma=gamma, verbose=verbose)  # self.horizon, self.gamma, self.time
 
         # Map initialization
         self.grid_size = grid_size

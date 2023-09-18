@@ -1,7 +1,7 @@
 """
 Summary: implementation of a parametric policy for the continuous verison of 
 Grid World.
-Author: Alessandro Montenegro
+Author: @MontenegroAlessandro
 Date: 19/7/2023
 """
 # Libraries
@@ -48,8 +48,9 @@ class GWPolicy(BasePolicy):
             float, float: radius of the next move, angle of the next move
         """
         state = np.array(state)
-        radius = np.exp(self.omegas.T @ state)
-        theta = np.rad2deg(np.pi * np.tanh(self.thetas.T @ state)) + 180
+        #radius = np.clip(np.exp(self.omegas.T @ state), 0, 1)
+        radius = 1 / (1 + np.exp(-self.omegas.T @ state))
+        theta = np.rad2deg(np.pi * np.tanh(self.thetas.T @ state)) #+ 180
         return GWContAction(radius=radius, theta=theta)
     
     def set_parameters(self, thetas: list):
