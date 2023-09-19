@@ -10,12 +10,12 @@ from algorithms import PGPE
 from data_processors import GWDataProcessorRBF
 
 # Global Vars
-horizon = 50
+horizon = 30
 gamma = 1
 grid_size = 10
-num_basis = 3
+num_basis = 4
 dim_state = 2
-dir = "~/PyProjects/results/cpgpe_exp/test"
+dir = "../results/cpgpe_exp/test"
 RENDER = False
 DEBUG = False
 
@@ -35,16 +35,18 @@ env = GridWorldEnvCont(
     grid_size=grid_size, 
     reward_type="linear",
     render=RENDER,
-    dir=dir,
+    dir=None,
     # obstacles=[square],
-    # init_state=[1, 12]
+    # init_state=[0, 0],
+    pacman=False,
+    epsilon=0.6
 )
 
 # Data Processor
 dp = GWDataProcessorRBF(
     num_basis=num_basis,
     grid_size=grid_size,
-    std_dev=0.5
+    std_dev=1
 )
 
 # Policy
@@ -54,19 +56,23 @@ pol = GWPolicy(
 )
 
 # Algorithm
-hp = np.array([[0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
-               [0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001]])
+# FIXME dim_state * num_basis * 2
+hp = np.zeros((2, dim_state * num_basis))
+hp[0] = [0.5] * dim_state * num_basis
+hp[1] = [0.001] * dim_state * num_basis
+
 alg = PGPE(
     lr=1e-3,
     initial_rho=hp,
     ite=100,
     batch_size=20,
-    episodes_per_theta=20,
+    episodes_per_theta=30,
     env=env,
     policy=pol,
     data_processor=dp,
     directory=dir,
-    verbose=DEBUG
+    verbose=DEBUG,
+    natural=True
 )
 
 if __name__ == "__main__":
@@ -76,14 +82,18 @@ if __name__ == "__main__":
     print(alg.performance_idx)
 
     # Test phase
-    pol.set_parameters(thetas=alg.best_theta)
+    # pol.set_parameters(thetas=alg.best_theta)
+    pol.set_parameters(thetas=alg.sample_theta_from_best())
     env.reset()
     perf = 0
+    perfs = []
+    
+    # Set the saving image logic
     env.dir = dir
     env.render = True
-    perfs = []
+    
+    # test start
     for i in range(10):
-        env.reset()
         for t in range(env.horizon):
             # retrieve the state
             state = env.state
@@ -102,6 +112,7 @@ if __name__ == "__main__":
         
         perfs.append(perf)
         perf = 0
+        env.reset()
     
     print(f"Evaluation Performance: {np.mean(perfs)} +/- {np.std(perfs)}")
     env.reset()

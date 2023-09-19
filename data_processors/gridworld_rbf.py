@@ -31,7 +31,8 @@ class GWDataProcessorRBF(BaseProcessor):
     
         self.num_basis = num_basis
         self.step = grid_size / num_basis
-        self.means = np.arange(self.step/2, grid_size, self.step)
+        # self.means = np.arange(self.step/2, grid_size, self.step)
+        self.means = np.linspace(0, grid_size, self.num_basis)
         self.std_dev = std_dev
         
     def transform(self, state: Position) -> np.array:
@@ -41,7 +42,7 @@ class GWDataProcessorRBF(BaseProcessor):
             the gaussians
 
         Args:
-            state (Position): teh current position of the agent in the Grid 
+            state (Position): the current position of the agent in the Grid 
             World Continuous Env
 
         Returns:

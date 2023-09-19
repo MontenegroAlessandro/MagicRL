@@ -20,3 +20,7 @@ class BaseEnv(ABC):
     def reset(self) -> None:
         """todo"""
         self.time = 0
+
+    @abstractmethod
+    def sample_random_state(self):
+        pass

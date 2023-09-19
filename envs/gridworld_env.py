@@ -323,7 +323,8 @@ class GridWorldEnvCont(BaseEnv):
             self, horizon: int = 0, gamma: float = 0, grid_size: int = 0,
             reward_type: str = "linear", 
             render: bool = False, dir: str = None, init_state: list = None,
-            obstacles: list = [], verbose: bool = False
+            obstacles: list = [], verbose: bool = False, pacman: bool = False,
+            epsilon: float = 0
             ) -> None:
         """
         Summary: Initializaiton function
@@ -350,6 +351,14 @@ class GridWorldEnvCont(BaseEnv):
             
             obstacles (list): list of Obstacles to put in the environment. 
             Defaults to empty list [].
+            
+            verbose (bool): tells whther to print more information.
+            
+            pacman (bool): tells whther to employ the pacman effect in the env.
+            
+            epsilon (float): degree of tolerance to be in the goal position.
+            The absorbing state will be considered if the distance bewteen the 
+            goal and the agent is epsilon.
         """
         # Super class initialization
         super().__init__(horizon=horizon, gamma=gamma, verbose=verbose)  # self.horizon, self.gamma, self.time
@@ -358,15 +367,15 @@ class GridWorldEnvCont(BaseEnv):
         self.grid_size = grid_size
         self.goal_pos = Position(x=self.grid_size/2, 
                                  y= self.grid_size/2)
+        self.pacman = pacman
+        self.epsilon = epsilon
         
         # State initialization
         self.init_state = init_state
         if init_state is not None:
             self.state = GridWorldState(x=init_state[0], y=init_state[1])
         else:
-            space = np.linspace(start=0, stop=grid_size, num=100)
-            self.state = GridWorldState(x=np.random.choice(space),
-                                        y=np.random.choice(space))
+            self.state = self.sample_random_state()
 
         # Reward
         assert reward_type in LEGAL_REWARDS, "[ERROR] Illegal reward type."
@@ -391,6 +400,11 @@ class GridWorldEnvCont(BaseEnv):
         if self.render:
             self.save_single_image()
 
+    def sample_random_state(self):
+        # FIXME: remove the int()
+        space = np.linspace(start=0, stop=self.grid_size, num=100)
+        return GridWorldState(x=int(np.random.choice(space)), y=int(np.random.choice(space)))
+
     def step(self, action: GWContMove = None):
         """
         Summary: function implementing a step of the environment.
@@ -401,11 +415,22 @@ class GridWorldEnvCont(BaseEnv):
         """
         # Update of self.time
         self.time += 1
+        outside_flag = False
 
         # Compute the next state
         new_pos = deepcopy(self.state.agent_pos)
-        new_pos.x = (action.radius * np.cos(np.deg2rad(action.theta)) + self.state.agent_pos.x) % self.grid_size
-        new_pos.y = (action.radius * np.sin(np.deg2rad(action.theta)) + self.state.agent_pos.y) % self.grid_size
+        new_pos.x = action.radius * np.cos(np.deg2rad(action.theta)) + self.state.agent_pos.x
+        new_pos.y = action.radius * np.sin(np.deg2rad(action.theta)) + self.state.agent_pos.y
+        if self.pacman:
+            new_pos.x = new_pos.x % self.grid_size
+            new_pos.y = new_pos.y % self.grid_size
+        else: 
+            clippedx = np.clip(new_pos.x, 0, self.grid_size)
+            clippedy = np.clip(new_pos.y, 0, self.grid_size)
+            if clippedx != new_pos.x or clippedy != new_pos.y:
+                outside_flag = True
+                new_pos.x = clippedx
+                new_pos.y = clippedy
         
         # Check if the new position is forbidden
         isAbs = self.is_absorbing(self.state.agent_pos)
@@ -422,7 +447,7 @@ class GridWorldEnvCont(BaseEnv):
             new_pos = deepcopy(self.state.agent_pos)
             
         # Save results
-        reward = self.reward()
+        reward = self.reward(outside=outside_flag)
         isNewAbs = self.is_absorbing(position=new_pos)
         self.history[str(self.time)] = {
             "pos_x": int(new_pos.x), 
@@ -442,9 +467,7 @@ class GridWorldEnvCont(BaseEnv):
         if self.init_state is not None:
             self.state = GridWorldState(x=self.init_state[0], y=self.init_state[1])
         else:
-            space = np.linspace(start=0, stop=self.grid_size, num=100)
-            self.state = GridWorldState(x=np.random.choice(space),
-                                        y=np.random.choice(space))
+            self.state = self.sample_random_state()
         
         # Save results
         if self.dir is not None:
@@ -463,21 +486,29 @@ class GridWorldEnvCont(BaseEnv):
         if self.render:
             self.save_single_image()
             
-    def reward(self):
-        if self.state.agent_pos.x == self.goal_pos.x and self.state.agent_pos.y == self.goal_pos.y:
+    def reward(self, outside=False):
+        # Distance computation
+        dist = (self.state.agent_pos.x - self.goal_pos.x) ** 2
+        dist += (self.state.agent_pos.y - self.goal_pos.y) ** 2
+        dist = np.sqrt(dist)
+
+        # Penalization if the policy said to go outside
+        dist += 10 if outside else 0
+        
+        # Give reward
+        if dist <= self.epsilon:
             return 1
         if self.reward_type == "linear":
-            dist = (self.state.agent_pos.x - self.goal_pos.x) ** 2
-            dist += (self.state.agent_pos.y - self.goal_pos.y) ** 2
-            dist = np.sqrt(dist)
             return -dist
         elif self.reward_type == "sparse":
             return -1
         else:
-            return 0 
+            raise NotImplementedError
         
     def is_absorbing(self, position: Position):
-        return position.x == self.goal_pos.x and position.y == self.goal_pos.y
+        dist = np.sqrt((self.goal_pos.x - position.x) ** 2 + (self.goal_pos.y - position.y) ** 2)
+        # return position.x == self.goal_pos.x and position.y == self.goal_pos.y
+        return dist <= self.epsilon
     
     def save_history(self) -> None:
         """Save json of the history"""

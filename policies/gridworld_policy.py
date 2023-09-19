@@ -33,8 +33,9 @@ class GWPolicy(BasePolicy):
         """
         super().__init__()
         self.dim_state = dim_state
-        self.thetas = np.array(thetas[:dim_state])
-        self.omegas = np.array(thetas[dim_state:])
+        # self.thetas = np.array(thetas[:dim_state])
+        # self.omegas = np.array(thetas[dim_state:])
+        self.thetas = np.array(thetas)
     
     def draw_action(self, state: list):
         """
@@ -48,9 +49,10 @@ class GWPolicy(BasePolicy):
             float, float: radius of the next move, angle of the next move
         """
         state = np.array(state)
-        #radius = np.clip(np.exp(self.omegas.T @ state), 0, 1)
-        radius = 1 / (1 + np.exp(-self.omegas.T @ state))
-        theta = np.rad2deg(np.pi * np.tanh(self.thetas.T @ state)) #+ 180
+        # FIXME
+        # radius = 1 / (1 + np.exp(-self.omegas.T @ state))
+        radius = 0.5
+        theta = np.rad2deg(np.pi * np.tanh(self.thetas.T @ state))
         return GWContAction(radius=radius, theta=theta)
     
     def set_parameters(self, thetas: list):
@@ -61,5 +63,6 @@ class GWPolicy(BasePolicy):
         Args:
             thetas (list): new parameters for the policy
         """
-        self.thetas = np.array(thetas[:self.dim_state])
-        self.omegas = np.array(thetas[self.dim_state:])
+        # self.thetas = np.array(thetas[:self.dim_state])
+        # self.omegas = np.array(thetas[self.dim_state:])
+        self.thetas = np.array(thetas)

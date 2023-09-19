@@ -3,6 +3,8 @@ Summary: PGPE implementation
 Author: @MontenegroAlessandro
 Date: 14/7/2023
 """
+import copy
+
 # Libraries
 import numpy as np
 from envs.base_env import BaseEnv
@@ -27,7 +29,7 @@ class PGPE:
             env: BaseEnv = None,
             policy: BasePolicy = None,
             data_processor: BaseProcessor = IdentityDataProcessor(),
-            directory: str = "", verbose: bool = False
+            directory: str = "", verbose: bool = False, natural: bool = False
     ) -> None:
         """
         Args:
@@ -56,6 +58,8 @@ class PGPE:
             None.
             
             directory (str, optional): where to save the results
+            
+            natural (bool): whether to use the natural gradient
         """
         # Arguments
         self.lr = lr
@@ -78,6 +82,7 @@ class PGPE:
 
         self.directory = directory
         self.verbose = verbose
+        self.natural = natural
 
         # Other paraemeters
         dim = len(self.rho[RhoElem.MEAN])
@@ -90,12 +95,14 @@ class PGPE:
         # Best saving parameters
         self.best_theta = np.zeros(dim, dtype=float)
         self.best_rho = self.rho
-        self.best_performance = -np.inf
+        self.best_performance_theta = -np.inf
+        self.best_performance_rho = -np.inf
         return
 
     def learn(self) -> None:
         """Learning function"""
         for i in tqdm(range(self.ite)):
+            starting_state = self.env.sample_random_state()
             for j in range(self.batch_size):
                 # Sample theta
                 self.sample_theta(index=j)
@@ -104,15 +111,23 @@ class PGPE:
                 sample_mean = np.zeros(self.episodes_per_theta)
                 for z in range(self.episodes_per_theta):
                     sample_mean[z] = self.collect_trajectory(
-                        params=self.thetas[j, :])
+                        params=self.thetas[j, :],
+                        starting_state=starting_state
+                    )
                 perf = np.mean(sample_mean)
                 self.performance_idx_theta[i, j] = perf
 
                 # Try to update the best config
-                self.update_best(current_perf=perf, params=self.thetas[j, :])
+                self.update_best_theta(current_perf=perf,
+                                       params=self.thetas[j, :])
+
+            # Update performance
+            self.performance_idx[i] = np.mean(self.performance_idx_theta[i, :])
+
+            # Update best rho
+            self.update_best_rho(current_perf=self.performance_idx[i])
 
             # Update parameters
-            self.performance_idx[i] = np.mean(self.performance_idx_theta[i, :])
             self.update_rho()
 
             # Update time counter
@@ -131,11 +146,19 @@ class PGPE:
         # Loop over the rho elements
         for id in range(len(self.rho[RhoElem.MEAN])):
             cur_mean_vec = self.rho[RhoElem.MEAN, id] * np.ones(self.batch_size)
-            cur_std_vec = self.rho[RhoElem.STD, id] * np.ones(self.batch_size)
-            cur_real_std_vec = np.exp(cur_std_vec)
+            cur_std_vec = np.exp(
+                np.float128(self.rho[RhoElem.STD, id])) * np.ones(
+                self.batch_size)
 
-            log_nu_rho_mean = (self.thetas[:, id] - cur_mean_vec) / (cur_real_std_vec**2)
-            log_nu_rho_std = (((self.thetas[:, id] - cur_mean_vec) ** 2) - (cur_real_std_vec ** 2)) / (cur_real_std_vec ** 3)
+            if not self.natural:
+                log_nu_rho_mean = (self.thetas[:, id] - cur_mean_vec) / (
+                            cur_std_vec ** 2)
+                log_nu_rho_std = (((self.thetas[:, id] - cur_mean_vec) ** 2) - (
+                            cur_std_vec ** 2)) / (cur_std_vec ** 3)
+            else:
+                log_nu_rho_mean = self.thetas[:, id] - cur_mean_vec
+                log_nu_rho_std = (((self.thetas[:, id] - cur_mean_vec) ** 2) - (
+                            cur_std_vec ** 2)) / (2 * cur_std_vec ** 2 + 1e-24)
 
             grad_m = (log_nu_rho_mean * batch_perf)
             grad_s = (log_nu_rho_std * batch_perf)
@@ -147,8 +170,10 @@ class PGPE:
                 print(f"MEANs: {cur_mean_vec[0]} - STD: {cur_std_vec[0]}")
                 print(f"LOG MEANs: {log_nu_rho_mean}")
                 print(f"LOG STDs: {log_nu_rho_std}")
-                print(f"GRAD MEANs: {np.mean(grad_m)} - GRAD STDs: {np.mean(grad_s)}")
-                print(f"RHO: mean => {self.rho[RhoElem.MEAN, id]} - std => {np.exp(self.rho[RhoElem.STD, id])}")
+                print(
+                    f"GRAD MEANs: {np.mean(grad_m)} - GRAD STDs: {np.mean(grad_s)}")
+                print(
+                    f"RHO: mean => {self.rho[RhoElem.MEAN, id]} - std => {self.rho[RhoElem.STD, id]}")
                 # input("Press ENTER to CONTINUE...")
         return
 
@@ -163,22 +188,36 @@ class PGPE:
         """
         for id in range(len(self.rho[RhoElem.MEAN])):
             self.thetas[index, id] = np.random.normal(
-                loc=self.rho[RhoElem.MEAN, id], scale=np.exp(self.rho[RhoElem.STD, id])
+                loc=self.rho[RhoElem.MEAN, id],
+                scale=np.exp(np.float128(self.rho[RhoElem.STD, id]))
             )
         return
 
-    def collect_trajectory(self, params: np.array) -> float:
+    def sample_theta_from_best(self):
+        thetas = []
+        for id in range(len(self.best_rho[RhoElem.MEAN])):
+            thetas.append(np.random.normal(
+                loc=self.rho[RhoElem.MEAN, id],
+                scale=np.exp(np.float128(self.rho[RhoElem.STD, id])))
+            )
+        return thetas
+
+    def collect_trajectory(self, params: np.array,
+                           starting_state=None) -> float:
         """
         Summary:
             Function collecting a trajectory reward for a particular theta 
             configuration.
         Args:
             params (np.array): the current sampling of theta values
+            starting_state (any): teh starting state for the iterations
         Returns:
             float: the discounted reward of the trajectory
         """
         # reset the environment
         self.env.reset()
+        if starting_state is not None:
+            self.env.state = copy.deepcopy(starting_state)
 
         # initialize parameters
         perf = 0
@@ -211,7 +250,23 @@ class PGPE:
 
         return perf
 
-    def update_best(self, current_perf: float, params: np.array) -> None:
+    def update_best_rho(self, current_perf: float):
+        """
+        Summary:
+            Function updating the best configuration found so far
+        Args:
+            current_perf (float): current performance value to evaluate
+        """
+        if current_perf > self.best_performance_rho:
+            self.best_rho = self.rho
+            self.best_performance_rho = current_perf
+            print("-----------------------------------------------------------")
+            print(f"New best RHO: {self.best_rho}")
+            print(f"New best PERFORMANCE: {self.best_performance_rho}")
+            print("-----------------------------------------------------------")
+        return
+
+    def update_best_theta(self, current_perf: float, params: np.array) -> None:
         """
         Summary:
             Function updating the best configuration found so far
@@ -219,14 +274,12 @@ class PGPE:
             current_perf (float): current performance value to evaluate
             params (np.array): the current sampling of theta values
         """
-        if current_perf > self.best_performance:
-            self.best_rho = self.rho
+        if current_perf > self.best_performance_theta:
             self.best_theta = params
-            self.best_performance = current_perf
+            self.best_performance_theta = current_perf
             print("-----------------------------------------------------------")
-            print(f"New best RHO: {self.best_rho}")
             print(f"New best THETA: {self.best_theta}")
-            print(f"New best PERFORMANCE: {self.best_performance}")
+            print(f"New best PERFORMANCE: {self.best_performance_theta}")
             print("-----------------------------------------------------------")
         return
 

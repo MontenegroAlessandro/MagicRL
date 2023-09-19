@@ -10,7 +10,7 @@ from copy import deepcopy
 # Position Class
 class Position:
     """Class implementing a position"""
-    def __init__(self, x: int, y: int) -> None:
+    def __init__(self, x: float, y: float) -> None:
         """
         Args:
             x (int): x axis coordinate
