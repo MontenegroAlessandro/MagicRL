@@ -8,6 +8,7 @@ from envs import *
 from policies import GWPolicy
 from algorithms import PGPE
 from data_processors import GWDataProcessorRBF
+from algorithms.utils import RhoElem
 
 # Global Vars
 horizon = 30
@@ -39,14 +40,14 @@ env = GridWorldEnvCont(
     # obstacles=[square],
     # init_state=[0, 0],
     pacman=False,
-    epsilon=0.6
+    epsilon=0.5
 )
 
 # Data Processor
 dp = GWDataProcessorRBF(
     num_basis=num_basis,
     grid_size=grid_size,
-    std_dev=1
+    std_dev=0.8
 )
 
 # Policy
@@ -64,9 +65,9 @@ hp[1] = [0.001] * dim_state * num_basis
 alg = PGPE(
     lr=1e-3,
     initial_rho=hp,
-    ite=100,
-    batch_size=20,
-    episodes_per_theta=30,
+    ite=200,
+    batch_size=50,
+    episodes_per_theta=100,
     env=env,
     policy=pol,
     data_processor=dp,
@@ -82,8 +83,9 @@ if __name__ == "__main__":
     print(alg.performance_idx)
 
     # Test phase
-    # pol.set_parameters(thetas=alg.best_theta)
-    pol.set_parameters(thetas=alg.sample_theta_from_best())
+    pol.set_parameters(thetas=alg.best_theta)
+    # pol.set_parameters(thetas=alg.sample_theta_from_best())
+    # pol.set_parameters(thetas=alg.best_rho[RhoElem.MEAN])
     env.reset()
     perf = 0
     perfs = []
@@ -113,7 +115,8 @@ if __name__ == "__main__":
         perfs.append(perf)
         perf = 0
         env.reset()
-    
+    print(f"BEST THETA: {alg.best_theta}")
+    print(f"BEST RHO: {alg.best_rho}")
     print(f"Evaluation Performance: {np.mean(perfs)} +/- {np.std(perfs)}")
     env.reset()
     

@@ -457,7 +457,11 @@ class GridWorldEnvCont(BaseEnv):
         }
         if self.render:
             self.save_single_image()
-        return new_pos, reward, isNewAbs
+        
+        if isNewAbs:
+            return new_pos, self.horizon - self.time, True
+        else:
+            return new_pos, reward, isNewAbs
     
     def reset(self) -> None:
         # self.time init

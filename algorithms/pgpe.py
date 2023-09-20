@@ -102,7 +102,7 @@ class PGPE:
     def learn(self) -> None:
         """Learning function"""
         for i in tqdm(range(self.ite)):
-            starting_state = self.env.sample_random_state()
+            # starting_state = self.env.sample_random_state()
             for j in range(self.batch_size):
                 # Sample theta
                 self.sample_theta(index=j)
@@ -112,7 +112,7 @@ class PGPE:
                 for z in range(self.episodes_per_theta):
                     sample_mean[z] = self.collect_trajectory(
                         params=self.thetas[j, :],
-                        starting_state=starting_state
+                        # starting_state=starting_state
                     )
                 perf = np.mean(sample_mean)
                 self.performance_idx_theta[i, j] = perf
@@ -161,7 +161,8 @@ class PGPE:
                             cur_std_vec ** 2)) / (2 * cur_std_vec ** 2 + 1e-24)
 
             grad_m = (log_nu_rho_mean * batch_perf)
-            grad_s = (log_nu_rho_std * batch_perf)
+            # grad_s = (log_nu_rho_std * batch_perf)
+            grad_s = (log_nu_rho_std * cur_std_vec * batch_perf)
 
             self.rho[RhoElem.MEAN, id] += self.lr * np.mean(grad_m)
             self.rho[RhoElem.STD, id] += self.lr * np.mean(grad_s)
@@ -235,7 +236,7 @@ class PGPE:
             a = self.policy.draw_action(state=features)
 
             # play the action
-            _, rew, _ = self.env.step(action=a)
+            _, rew, abs = self.env.step(action=a)
 
             # update the performance index
             perf += (self.env.gamma ** t) * rew
@@ -247,6 +248,9 @@ class PGPE:
                 print(f"REWARD: {rew}")
                 print(f"PERFORMANCE: {perf}")
                 print("******************************************************")
+            
+            if abs:
+                break
 
         return perf
 
