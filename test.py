@@ -9,14 +9,15 @@ from policies import GWPolicy
 from algorithms import PGPE
 from data_processors import GWDataProcessorRBF
 from algorithms.utils import RhoElem
+from art import *
 
 # Global Vars
-horizon = 30
+horizon = 150
 gamma = 1
 grid_size = 10
 num_basis = 4
 dim_state = 2
-dir = "../results/cpgpe_exp/test"
+dir = "../results/cpgpe_exp/test_obs"
 RENDER = False
 DEBUG = False
 
@@ -29,6 +30,33 @@ square = Obstacle(
               "p4": Position(grid_size/2-1, grid_size)}
 )
 
+# Design a U near the goal
+edge1 = Obstacle(
+    type="square",
+    features={"p1": Position(grid_size/2 - 1, grid_size/2 - 1),
+              "p2": Position(grid_size/2 + 1, grid_size/2 - 1),
+              "p3": Position(grid_size/2 + 1, grid_size/2 - .5),
+              "p4": Position(grid_size/2 - 1, grid_size/2 - .5)}
+)
+
+edge2 = Obstacle(
+    type="square",
+    features={"p1": Position(grid_size/2 - 1, grid_size/2 - 1),
+              "p2": Position(grid_size/2 - .5, grid_size/2 - 1),
+              "p3": Position(grid_size/2 - .5, grid_size/2 + 1),
+              "p4": Position(grid_size/2 - 1, grid_size/2 + 1)}
+)
+
+edge3 = Obstacle(
+    type="square",
+    features={"p1": Position(grid_size/2 + .5, grid_size/2 - 1),
+              "p2": Position(grid_size/2 + 1, grid_size/2 - 1),
+              "p3": Position(grid_size/2 + 1, grid_size/2 + 1),
+              "p4": Position(grid_size/2 + .5, grid_size/2 + 1)}
+)
+
+U_object = [edge1, edge2, edge3]
+
 # Environment
 env = GridWorldEnvCont(
     horizon=horizon, 
@@ -37,10 +65,10 @@ env = GridWorldEnvCont(
     reward_type="linear",
     render=RENDER,
     dir=None,
-    # obstacles=[square],
+    obstacles=U_object,
     # init_state=[0, 0],
     pacman=False,
-    epsilon=0.5
+    goal_tol=0.5
 )
 
 # Data Processor
@@ -63,9 +91,9 @@ hp[0] = [0.5] * dim_state * num_basis
 hp[1] = [0.001] * dim_state * num_basis
 
 alg = PGPE(
-    lr=1e-3,
+    lr=[1e-3],
     initial_rho=hp,
-    ite=200,
+    ite=100,
     batch_size=50,
     episodes_per_theta=100,
     env=env,
@@ -78,6 +106,7 @@ alg = PGPE(
 
 if __name__ == "__main__":
     # Learn phase
+    print(text2art("Learn Start"))
     alg.learn()
     alg.save_results()
     print(alg.performance_idx)
@@ -95,6 +124,7 @@ if __name__ == "__main__":
     env.render = True
     
     # test start
+    print(text2art("Test Start"))
     for i in range(10):
         for t in range(env.horizon):
             # retrieve the state

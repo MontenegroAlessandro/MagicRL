@@ -10,7 +10,7 @@ import numpy as np
 from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
-from algorithms.utils import RhoElem
+from algorithms.utils import RhoElem, LearnRates
 import json, io, os, errno
 from tqdm import tqdm
 
@@ -24,7 +24,7 @@ class PGPE:
     """Class implementing PGPE"""
 
     def __init__(
-            self, lr: float = 1e-3, initial_rho: np.array = None, ite: int = 0,
+            self, lr: list = None, initial_rho: np.array = None, ite: int = 0,
             batch_size: int = 10, episodes_per_theta: int = 10,
             env: BaseEnv = None,
             policy: BasePolicy = None,
@@ -35,9 +35,9 @@ class PGPE:
         Args:
             lr (float, optional): learning rate. Defaults to 1e-3.
             
-            initial_rho (np.array, optional): Initial configuraiton of the 
+            initial_rho (np.array, optional): Initial configuration of the
             hyperpolicy. Each element is assumed to be an array containing
-            "[mean, log(varinace)]". Defaults to None.
+            "[mean, log(variance)]". Defaults to None.
             
             ite (int, optional): Number of required iterations. Defaults to 0.
             
@@ -62,7 +62,8 @@ class PGPE:
             natural (bool): whether to use the natural gradient
         """
         # Arguments
-        self.lr = lr
+        assert lr is not None, "[ERROR] No Learning rate provided"
+        self.lr = lr[LearnRates.RHO]
 
         assert initial_rho is not None, "[ERROR] No initial hyperpolicy."
         self.rho = np.array(initial_rho, dtype=float)
@@ -84,13 +85,14 @@ class PGPE:
         self.verbose = verbose
         self.natural = natural
 
-        # Other paraemeters
+        # Other parameters
         dim = len(self.rho[RhoElem.MEAN])
+        if len(self.rho[RhoElem.STD]) != dim:
+            raise ValueError("[PGPE] different size in RHO for µ and σ.")
         self.thetas = np.zeros((self.batch_size, dim))
         self.time = 0
         self.performance_idx = np.zeros(ite, dtype=float)
         self.performance_idx_theta = np.zeros((ite, batch_size), dtype=float)
-        self.epsilon = 0
 
         # Best saving parameters
         self.best_theta = np.zeros(dim, dtype=float)
@@ -268,6 +270,13 @@ class PGPE:
             print(f"New best RHO: {self.best_rho}")
             print(f"New best PERFORMANCE: {self.best_performance_rho}")
             print("-----------------------------------------------------------")
+
+            # Save the best rho configuration
+            if self.directory != "":
+                file_name = self.directory + "/best_rho"
+            else:
+                file_name = "best_rho"
+            np.save(file_name, self.best_rho)
         return
 
     def update_best_theta(self, current_perf: float, params: np.array) -> None:
@@ -285,6 +294,14 @@ class PGPE:
             print(f"New best THETA: {self.best_theta}")
             print(f"New best PERFORMANCE: {self.best_performance_theta}")
             print("-----------------------------------------------------------")
+
+            # Save the best theta configuration
+            if self.directory != "":
+                file_name = self.directory + "/best_theta"
+                
+            else:
+                file_name = "best_theta"
+            np.save(file_name, self.best_theta)
         return
 
     def save_results(self) -> None:

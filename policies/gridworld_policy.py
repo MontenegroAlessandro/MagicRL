@@ -51,7 +51,7 @@ class GWPolicy(BasePolicy):
         state = np.array(state)
         # FIXME
         # radius = 1 / (1 + np.exp(-self.omegas.T @ state))
-        radius = 0.5
+        radius = 0.1
         theta = np.rad2deg(np.pi * np.tanh(self.thetas.T @ state))
         return GWContAction(radius=radius, theta=theta)
     
