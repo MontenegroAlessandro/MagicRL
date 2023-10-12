@@ -3,8 +3,7 @@ Summary: PGPE implementation
 Author: @MontenegroAlessandro
 Date: 14/7/2023
 """
-import copy
-
+# todo -> parallelize the sampling process via joblib
 # Libraries
 import numpy as np
 from envs.base_env import BaseEnv
@@ -13,6 +12,7 @@ from data_processors import BaseProcessor, IdentityDataProcessor
 from algorithms.utils import RhoElem, LearnRates
 import json, io, os, errno
 from tqdm import tqdm
+import copy
 
 
 # from adam import Adam
@@ -86,10 +86,10 @@ class PGPE:
         self.natural = natural
 
         # Other parameters
-        dim = len(self.rho[RhoElem.MEAN])
-        if len(self.rho[RhoElem.STD]) != dim:
+        self.dim = len(self.rho[RhoElem.MEAN])
+        if len(self.rho[RhoElem.STD]) != self.dim:
             raise ValueError("[PGPE] different size in RHO for µ and σ.")
-        self.thetas = np.zeros((self.batch_size, dim))
+        self.thetas = np.zeros((self.batch_size, self.dim))
         self.time = 0
         self.performance_idx = np.zeros(ite, dtype=float)
         self.performance_idx_theta = np.zeros((ite, batch_size), dtype=float)
@@ -110,7 +110,7 @@ class PGPE:
                 self.sample_theta(index=j)
 
                 # Collect Trajectories
-                sample_mean = np.zeros(self.episodes_per_theta)
+                sample_mean = np.zeros(self.episodes_per_theta, dtype=float)
                 for z in range(self.episodes_per_theta):
                     sample_mean[z] = self.collect_trajectory(
                         params=self.thetas[j, :],

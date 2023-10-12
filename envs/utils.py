@@ -7,21 +7,25 @@ Date: 12/7/2023
 import numpy as np
 from copy import deepcopy
 
+
 # Position Class
 class Position:
     """Class implementing a position"""
+
     def __init__(self, x: float, y: float) -> None:
         """
         Args:
-            x (int): x axis coordinate
-            y (int): y axis coordinate
+            x (int): x-axis coordinate
+            y (int): y-axis coordinate
         """
         self.x = x
         self.y = y
 
+
 # Move for continuous gridworld env
 class GWContMove:
     """Class implementing a continuous move for the Continuous Grid World Env"""
+
     def __init__(self, radius: float, theta: float) -> None:
         """
         Args:
@@ -33,11 +37,15 @@ class GWContMove:
         """
         self.radius = np.clip(radius, 0, 1)
         self.theta = np.clip(theta, 0, 360)
-        
+
+
 # Obstacles for continuous gridworld env
 LEGAL_OBS_TYPE = ["square", "circle", "sector"]
+
+
 class Obstacle:
     """Class implementing an obstacle for the Continuous Grid World Env"""
+
     def __init__(self, type: str, features: dict):
         """
         Args:
@@ -55,14 +63,14 @@ class Obstacle:
         """
         assert type in LEGAL_OBS_TYPE, "[ERROR] Illegal Ostacle type."
         self.type = type
-        self. features = deepcopy(features)
-        
+        self.features = deepcopy(features)
+
         if self.type == "square":
             assert features["p1"].x == features["p4"].x
             assert features["p2"].x == features["p3"].x
             assert features["p1"].y == features["p2"].y
             assert features["p3"].y == features["p4"].y
-        
+
     def is_in(self, pos: Position) -> bool:
         """
         Summary:
@@ -76,7 +84,10 @@ class Obstacle:
         """
         res = False
         if self.type == "square":
-            if (pos.x >= self.features["p1"].x and pos.x <= self.features["p2"].x) and (pos.y >= self.features["p1"].y and pos.y <= self.features["p4"].y):
+            if (pos.x >= self.features["p1"].x and pos.x <= self.features[
+                "p2"].x) and (
+                    pos.y >= self.features["p1"].y and pos.y <= self.features[
+                "p4"].y):
                 res = True
         elif self.type == "circle":
             dist = (pos.x - self.features["center"].x) ** 2
@@ -87,4 +98,30 @@ class Obstacle:
         else:
             pass
         return res
-    
+
+
+def design_u_obstacle(grid_size: int):
+    edge1 = Obstacle(
+        type="square",
+        features={"p1": Position(grid_size / 2 - 1, grid_size / 2 - 1),
+                  "p2": Position(grid_size / 2 + 1, grid_size / 2 - 1),
+                  "p3": Position(grid_size / 2 + 1, grid_size / 2 - .5),
+                  "p4": Position(grid_size / 2 - 1, grid_size / 2 - .5)}
+    )
+
+    edge2 = Obstacle(
+        type="square",
+        features={"p1": Position(grid_size / 2 - 1, grid_size / 2 - 1),
+                  "p2": Position(grid_size / 2 - .5, grid_size / 2 - 1),
+                  "p3": Position(grid_size / 2 - .5, grid_size / 2 + 1),
+                  "p4": Position(grid_size / 2 - 1, grid_size / 2 + 1)}
+    )
+
+    edge3 = Obstacle(
+        type="square",
+        features={"p1": Position(grid_size / 2 + .5, grid_size / 2 - 1),
+                  "p2": Position(grid_size / 2 + 1, grid_size / 2 - 1),
+                  "p3": Position(grid_size / 2 + 1, grid_size / 2 + 1),
+                  "p4": Position(grid_size / 2 + .5, grid_size / 2 + 1)}
+    )
+    return [edge1, edge2, edge3]

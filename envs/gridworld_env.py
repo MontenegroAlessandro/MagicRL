@@ -3,7 +3,7 @@ Summary: Python Script implementing the GridWorldMDP with goal in the center
 Author: @MontenegroAlessandro
 Date: 12/7/2023
 """
-
+# todo -> make the discrete environment in line with the continuous one
 # Libraries
 import numpy as np
 from envs.base_env import BaseEnv
@@ -27,8 +27,8 @@ class GridWorldState:
     def __init__(self, x: int = 0, y: int = 0) -> None:
         """Summary: Initialization
         Args:
-            x (int): x axis coordinate of the agent (default 0)
-            y (int): y axis coordinate of the agent (default 0)
+            x (int): x-axis coordinate of the agent (default 0)
+            y (int): y-axis coordinate of the agent (default 0)
         """
         self.agent_pos = Position(x=x, y=y)
 
@@ -43,7 +43,7 @@ class GridWorldEnvDisc(BaseEnv):
             render: bool = False, dir: str = None
     ) -> None:
         """
-        Summary: Initializaiton function
+        Summary: Initialization function
         Args: 
             horizon (int): look BaseEnv.
             
@@ -78,7 +78,7 @@ class GridWorldEnvDisc(BaseEnv):
         self.goal_pos = Position(x=int(self.grid_size / 2),
                                  y=int(self.grid_size / 2))
 
-        # Update the map with the specidfied configuration
+        # Update the map with the specified configuration
         self.forbidden_coordinates = []
         assert env_type in LEGAL_ENV_CONFIG, "[ERROR] Illegal environment configuration."
         self._load_env_config(env_type=env_type)
@@ -347,7 +347,8 @@ class GridWorldEnvCont(BaseEnv):
             reward_type: str = "linear",
             render: bool = False, dir: str = None, init_state: list = None,
             obstacles: list = None, verbose: bool = False, pacman: bool = False,
-            goal_tol: float = 0, obstacles_strict_flag: bool = False
+            goal_tol: float = 0, obstacles_strict_flag: bool = False,
+            use_costs: bool = False
     ) -> None:
         """
         Summary: Initialization function
@@ -388,6 +389,11 @@ class GridWorldEnvCont(BaseEnv):
             allow to enter the zones of the obstacles. Elsewhere, if its value
             is "False", then just a negative reward will be assigned when the
             agent is in a forbidden zone. Default to "False".
+
+            use_costs (bool): a flag telling to use cost function. In the case
+            in which the user decides to use costs, then the step function will
+            return as additional output the list of cost values. Default to
+            "False".
         """
         # Super class initialization
         super().__init__(horizon=horizon, gamma=gamma,
@@ -416,6 +422,8 @@ class GridWorldEnvCont(BaseEnv):
         # Obstacles
         self.obstacles = obstacles
         self.obstacles_strict_flag = obstacles_strict_flag
+        self.use_costs = use_costs
+        self.n_costs = 2    # todo -> change this
 
         # Saving parameters
         self.render = render
@@ -433,19 +441,47 @@ class GridWorldEnvCont(BaseEnv):
         if self.render:
             self.save_single_image()
 
-    def sample_random_state(self):
-        # FIXME: remove the int()
-        space = np.linspace(start=0, stop=self.grid_size, num=100)
-        return GridWorldState(x=int(np.random.choice(space)),
-                              y=int(np.random.choice(space)))
+    def sample_random_state(self, n_samples: int = 1):
+        """
+        Summary:
+            this function samples a desired number of initial states and return
+            them as a list.
+        Args:
+            n_samples: how many initial states are to be drawn.
 
-    def step(self, action: GWContMove = None):
+        Returns:
+            single initial state if n_samples == 1
+            OR
+            list of initial states if n_samples > 1
+        """
+        space = np.linspace(start=0, stop=self.grid_size, num=100)
+
+        if n_samples <= 1:
+            """Just one initial state"""
+            state = GridWorldState(x=np.random.choice(space),
+                                   y=np.random.choice(space))
+            return state
+        else:
+            """More initial states"""
+            x_coordinates = np.random.choice(a=space, size=n_samples,
+                                             replace=False)
+            y_coordinates = np.random.choice(a=space, size=n_samples,
+                                             replace=False)
+            states = []
+            for i in range(n_samples):
+                states.append(GridWorldState(x=x_coordinates[i],
+                                             y=y_coordinates[i]))
+            return states
+
+    def step(self, action: GWContMove = None) -> tuple:
         """
         Summary: function implementing a step of the environment.
         Args:
             action (GWContMove): the action to apply to the environment.
         Returns:
             new position, reward and absorbing flag.
+            (Occasionally, when self.use_costs, it returns also the np.array of
+            costs).
         """
         # Update of self.time
         self.time += 1
@@ -495,10 +531,24 @@ class GridWorldEnvCont(BaseEnv):
         if self.render:
             self.save_single_image()
 
-        if isNewAbs:
-            return new_pos, (self.horizon - self.time) * reward, True
+        # Costs computation
+        if self.use_costs:
+            cost_values = np.array(
+                [self.cost_obstacle(forbidden=forbidden),
+                 self.cost_boundary()],
+                dtype=float
+            )
+
+            if isNewAbs:
+                return new_pos, (self.horizon - self.time) * reward, True, cost_values
+            else:
+                return new_pos, reward, isNewAbs, cost_values
+        # No costs have to be included
         else:
-            return new_pos, reward, isNewAbs
+            if isNewAbs:
+                return new_pos, (self.horizon - self.time) * reward, True
+            else:
+                return new_pos, reward, isNewAbs
 
     def reset(self) -> None:
         # self.time init
@@ -529,7 +579,7 @@ class GridWorldEnvCont(BaseEnv):
             self.save_single_image()
 
     def reward(self, outside=False, forbidden=False):
-        if forbidden:
+        if forbidden and not self.use_costs:
             # If the agent is in a forbidden zone, punish it with a super
             # negative reward
             return -(self.grid_size ** 2)
@@ -540,7 +590,7 @@ class GridWorldEnvCont(BaseEnv):
             dist = np.sqrt(dist)
 
             # Penalization if the policy said to go outside
-            dist += 10 if outside else 0
+            dist += self.grid_size if outside else 0
 
             # Give reward
             if dist <= self.epsilon:
@@ -633,3 +683,22 @@ class GridWorldEnvCont(BaseEnv):
             f"{self.dir}/GridWorldContGif_{self.episode_counter}.gif",
             format="GIF", append_images=frames, save_all=True, duration=150,
             loop=0)
+
+    def cost_obstacle(self, forbidden=False):
+        """When the agent is in a forbidden zone, it has a cost."""
+        if forbidden:
+            return self.grid_size ** 2
+        else:
+            return 0
+
+    def cost_boundary(self):
+        """When the agent is near to the boundary, it has a cost."""
+        threshold = 0.5
+        cond_near_x = (self.state.agent_pos.x <= threshold) or (
+                self.state.agent_pos.x - self.grid_size <= threshold)
+        cond_near_y = (self.state.agent_pos.y <= threshold) or (
+                self.state.agent_pos.y - self.grid_size <= threshold)
+        if cond_near_x or cond_near_y:
+            return self.grid_size / 2
+        else:
+            return 0

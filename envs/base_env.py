@@ -22,5 +22,5 @@ class BaseEnv(ABC):
         self.time = 0
 
     @abstractmethod
-    def sample_random_state(self):
+    def sample_random_state(self, n_samples):
         pass

@@ -13,4 +13,4 @@ class RhoElem:
 class LearnRates:
     RHO = 0
     LAMBDA = 1
-    NU = 2
+    ETA = 2

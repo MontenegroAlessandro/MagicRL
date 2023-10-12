@@ -3,6 +3,7 @@ Summary: Test for PGPE on continuous grid world environment
 Author: @MontenegroAlessandro
 Date 20/7/2023
 """
+import envs.utils
 # Libraries
 from envs import *
 from policies import GWPolicy
@@ -17,7 +18,7 @@ gamma = 1
 grid_size = 10
 num_basis = 4
 dim_state = 2
-dir = "../results/cpgpe_exp/test_obs"
+dir = "../../../results/cpgpe_exp/pgpe_test_obs"
 RENDER = False
 DEBUG = False
 
@@ -31,31 +32,7 @@ square = Obstacle(
 )
 
 # Design a U near the goal
-edge1 = Obstacle(
-    type="square",
-    features={"p1": Position(grid_size/2 - 1, grid_size/2 - 1),
-              "p2": Position(grid_size/2 + 1, grid_size/2 - 1),
-              "p3": Position(grid_size/2 + 1, grid_size/2 - .5),
-              "p4": Position(grid_size/2 - 1, grid_size/2 - .5)}
-)
-
-edge2 = Obstacle(
-    type="square",
-    features={"p1": Position(grid_size/2 - 1, grid_size/2 - 1),
-              "p2": Position(grid_size/2 - .5, grid_size/2 - 1),
-              "p3": Position(grid_size/2 - .5, grid_size/2 + 1),
-              "p4": Position(grid_size/2 - 1, grid_size/2 + 1)}
-)
-
-edge3 = Obstacle(
-    type="square",
-    features={"p1": Position(grid_size/2 + .5, grid_size/2 - 1),
-              "p2": Position(grid_size/2 + 1, grid_size/2 - 1),
-              "p3": Position(grid_size/2 + 1, grid_size/2 + 1),
-              "p4": Position(grid_size/2 + .5, grid_size/2 + 1)}
-)
-
-U_object = [edge1, edge2, edge3]
+U_obstacle = envs.utils.design_u_obstacle(grid_size=grid_size)
 
 # Environment
 env = GridWorldEnvCont(
@@ -65,7 +42,7 @@ env = GridWorldEnvCont(
     reward_type="linear",
     render=RENDER,
     dir=None,
-    obstacles=U_object,
+    obstacles=U_obstacle,
     # init_state=[0, 0],
     pacman=False,
     goal_tol=0.5
