@@ -88,13 +88,13 @@ class CPGPE(PGPE):
             dtype=float
         )
         self.costs_idx_theta = copy.deepcopy(self.cvar_idx_theta)
-        self.lagrangian = np.zeros(ite, dtype=bool)
+        self.lagrangian = np.zeros(ite, dtype=float)
         return
 
     def learn(self) -> None:
         """Learning function"""
         for i in tqdm(range(self.ite)):
-            starting_state = self.env.sample_random_state(n_samples=self.episodes_per_theta)
+            #starting_state = self.env.sample_random_state(n_samples=self.episodes_per_theta)
             for j in range(self.batch_size):
                 # Sample theta
                 self.sample_theta(index=j)
@@ -110,7 +110,7 @@ class CPGPE(PGPE):
                     # collect the scores
                     perf_target, perf_costs = self.collect_trajectory(
                         params=self.thetas[j, :],
-                        starting_state=starting_state[z]
+                        #starting_state=starting_state[z]
                     )
                     # update the performance score
                     sample_mean[z] = perf_target
@@ -166,11 +166,11 @@ class CPGPE(PGPE):
             self.time += 1
             if self.verbose:
                 print(f"***************END OF BATCH {i}***************")
-                print(f"Lagrangian: {self.lagrangian}")
-                print(f"rho perf: {self.performance_idx}")
-                print(f"theta perf: {self.performance_idx_theta}")
-                print(f"rho cvar: {self.cvar_idx}")
-                print(f"theta cvar: {self.cvar_idx_theta}")
+                print(f"Lagrangian: {self.lagrangian[i]}\n")
+                print(f"rho perf: {self.performance_idx}\n")
+                print(f"theta perf: {self.performance_idx_theta}\n")
+                print(f"rho cvar: {self.cvar_idx}\n")
+                print(f"theta cvar: {self.cvar_idx_theta}\n")
                 print(f"**********************************************\n")
 
     def collect_trajectory(self, params: np.array,
@@ -215,14 +215,14 @@ class CPGPE(PGPE):
             perf += (self.env.gamma ** t) * rew
             perf_costs += (self.env.gamma ** t) * costs
 
-            if self.verbose:
+            '''if self.verbose:
                 print("******************************************************")
                 print(f"ACTION: {a.radius} - {a.theta}")
                 print(f"FEATURES: {features}")
                 print(f"REWARD: {rew}")
                 print(f"PERFORMANCE: {perf}")
                 print(f"COSTS: {perf_costs}")
-                print("******************************************************")
+                print("******************************************************")'''
 
             if abs:
                 break
@@ -248,15 +248,26 @@ class CPGPE(PGPE):
         sigma_score = ((self.thetas - self.rho[RhoElem.MEAN]) ** 2 - sigma_squared) / sigma_squared
         # remember that we want to update the log(sigma), not the normal sigma
 
+        """build a utility performance vector"""
+        perf = np.ones((self.batch_size, self.dim), dtype=float)
+        for i in range(self.batch_size):
+            perf[i, :] = self.performance_idx_theta[self.time, i] * perf[i, :]
+
         """compute the gradient pieces"""
-        mu_perf_term = - np.mean(mu_score * self.performance_idx_theta[self.time, :])
-        sigma_perf_term = - np.mean(sigma_score * self.performance_idx_theta[self.time, :])
+        mu_perf_term = - np.mean(mu_score * perf)
+        sigma_perf_term = - np.mean(sigma_score * perf)
         mu_cvar_term = np.zeros(self.dim)
         sigma_cvar_term = np.zeros(self.dim)
+
+        # fixme -> vectorize this part
         for u in range(self.n_constraints):
-            # fixme -> vectorize this part
-            mu_cvar_term += self.lambdas[u] * (- np.mean(mu_score * self.cvar_idx_theta[u, self.time, :]))
-            sigma_cvar_term += self.lambdas[u] * (- np.mean(sigma_score * self.cvar_idx_theta[u, self.time, :]))
+            # utility cost vector
+            cost = np.ones((self.batch_size, self.dim), dtype=float)
+            for i in range(self.batch_size):
+                cost[i, :] = self.cvar_idx_theta[u, self.time, i] * cost[i, :]
+
+            mu_cvar_term += self.lambdas[u] * (- np.mean(mu_score * cost))
+            sigma_cvar_term += self.lambdas[u] * (- np.mean(sigma_score * cost))
 
         """compute the gradients"""
         rho_grad_mu = mu_perf_term + mu_cvar_term
@@ -303,7 +314,6 @@ class CPGPE(PGPE):
         function."""
         super().update_best_rho(current_perf=current_perf)
 
-    @override
     def update_best_theta(self, current_perf: float, current_costs: np.array,
                           params: np.array) -> None:
         """
@@ -341,7 +351,7 @@ class CPGPE(PGPE):
             "costs_theta": self.cvar_idx_theta.tolist(),
             "best_theta": self.best_theta.tolist(),
             "best_rho": self.best_rho.tolist(),
-            "lagrangian": self.lagrangian
+            "lagrangian": self.lagrangian.tolist()
         }
 
         # Save the json

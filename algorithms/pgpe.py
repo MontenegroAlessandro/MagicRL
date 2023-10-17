@@ -82,6 +82,12 @@ class PGPE:
         self.data_processor = data_processor
 
         self.directory = directory
+        if not os.path.exists(os.path.dirname(directory+"/")):
+            try:
+                os.makedirs(os.path.dirname(directory+"/"))
+            except OSError as exc:  # Guard against race condition
+                if exc.errno != errno.EEXIST:
+                    raise
         self.verbose = verbose
         self.natural = natural
 
@@ -95,7 +101,7 @@ class PGPE:
         self.performance_idx_theta = np.zeros((ite, batch_size), dtype=float)
 
         # Best saving parameters
-        self.best_theta = np.zeros(dim, dtype=float)
+        self.best_theta = np.zeros(self.dim, dtype=float)
         self.best_rho = self.rho
         self.best_performance_theta = -np.inf
         self.best_performance_rho = -np.inf
@@ -163,7 +169,6 @@ class PGPE:
                             cur_std_vec ** 2)) / (2 * cur_std_vec ** 2 + 1e-24)
 
             grad_m = (log_nu_rho_mean * batch_perf)
-            # grad_s = (log_nu_rho_std * batch_perf)
             grad_s = (log_nu_rho_std * cur_std_vec * batch_perf)
 
             self.rho[RhoElem.MEAN, id] += self.lr * np.mean(grad_m)
@@ -177,7 +182,6 @@ class PGPE:
                     f"GRAD MEANs: {np.mean(grad_m)} - GRAD STDs: {np.mean(grad_s)}")
                 print(
                     f"RHO: mean => {self.rho[RhoElem.MEAN, id]} - std => {self.rho[RhoElem.STD, id]}")
-                # input("Press ENTER to CONTINUE...")
         return
 
     def sample_theta(self, index: int) -> None:

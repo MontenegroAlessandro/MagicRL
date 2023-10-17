@@ -687,7 +687,8 @@ class GridWorldEnvCont(BaseEnv):
     def cost_obstacle(self, forbidden=False):
         """When the agent is in a forbidden zone, it has a cost."""
         if forbidden:
-            return self.grid_size ** 2
+            # return self.grid_size ** 2
+            return -1
         else:
             return 0
 
@@ -699,6 +700,7 @@ class GridWorldEnvCont(BaseEnv):
         cond_near_y = (self.state.agent_pos.y <= threshold) or (
                 self.state.agent_pos.y - self.grid_size <= threshold)
         if cond_near_x or cond_near_y:
-            return self.grid_size / 2
+            # return self.grid_size / 2
+            return -1
         else:
             return 0
