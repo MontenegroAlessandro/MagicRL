@@ -21,7 +21,7 @@ num_basis = 4
 dim_state = 2
 dir = "../../results/cpgpe_exp/cpgpe_test_obs"
 RENDER = False
-DEBUG = True
+DEBUG = False
 
 """Design a U near the goal"""
 U_obstacle = envs.utils.design_u_obstacle(grid_size=grid_size)
@@ -36,7 +36,7 @@ env = GridWorldEnvCont(
     dir=None,
     obstacles=U_obstacle,
     pacman=False,
-    goal_tol=0.5,
+    goal_tol=0.3,
     obstacles_strict_flag=False,
     use_costs=True,
     init_state=[0,0]
@@ -62,9 +62,9 @@ hp[0] = [0.5] * dim_state * num_basis
 hp[1] = [0.001] * dim_state * num_basis
 
 alg = CPGPE(
-    lr=[1e-3, 1e-3, 1e-3],
+    lr=[1e-5, 1e-4, 1e-3],
     initial_rho=hp,
-    ite=100,
+    ite=150,
     batch_size=20,
     episodes_per_theta=30,
     env=env,
@@ -73,8 +73,8 @@ alg = CPGPE(
     directory=dir,
     verbose=DEBUG,
     natural=False,
-    conf_values=[.5, .5],
-    constraints=[-5, -5],
+    conf_values=[.75, .75],
+    constraints=[-1, -1],
     cost_mask=[True, False]
 )
 

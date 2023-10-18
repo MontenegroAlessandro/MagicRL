@@ -594,6 +594,7 @@ class GridWorldEnvCont(BaseEnv):
 
             # Give reward
             if dist <= self.epsilon:
+                # todo -> place 0
                 return 1
             if self.reward_type == "linear":
                 return -dist

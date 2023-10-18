@@ -36,7 +36,7 @@ class CPGPE(PGPE):
 
             conf_values (list): it is a list of confidence values needed to
             compute the CVaR_{alpha} of the costs. Each element of the list
-            must be a float.
+            must be a float. alpha in (0, 1)
 
             constraints (list): it is a list of thresholds for the CVaR_{alpha}
             of the costs, Each element must be a float.
@@ -82,19 +82,21 @@ class CPGPE(PGPE):
         # iteration
         self.cvar_idx = np.zeros((self.n_constraints, ite), dtype=float)
         self.costs_idx = copy.deepcopy(self.cvar_idx)
+        self.cvar_indicator = copy.deepcopy(self.cvar_idx)
         # maintain the cvar and costs value for each theta in each batch (mean)
         self.cvar_idx_theta = np.zeros(
             (self.n_constraints, ite, batch_size),
             dtype=float
         )
         self.costs_idx_theta = copy.deepcopy(self.cvar_idx_theta)
+        self.cvar_indicator_theta = copy.deepcopy(self.cvar_idx_theta)
         self.lagrangian = np.zeros(ite, dtype=float)
         return
 
     def learn(self) -> None:
         """Learning function"""
         for i in tqdm(range(self.ite)):
-            #starting_state = self.env.sample_random_state(n_samples=self.episodes_per_theta)
+            starting_state = self.env.sample_random_state(n_samples=self.episodes_per_theta)
             for j in range(self.batch_size):
                 # Sample theta
                 self.sample_theta(index=j)
@@ -105,12 +107,14 @@ class CPGPE(PGPE):
                                              self.episodes_per_theta),
                                             dtype=float)
                 cost_sample_mean = copy.deepcopy(cvar_sample_mean)
+                cvar_indicator = np.zeros((self.n_constraints, self.episodes_per_theta),
+                                          dtype=float)
 
                 for z in range(self.episodes_per_theta):
                     # collect the scores
                     perf_target, perf_costs = self.collect_trajectory(
                         params=self.thetas[j, :],
-                        #starting_state=starting_state[z]
+                        starting_state=starting_state[z]
                     )
                     # update the performance score
                     sample_mean[z] = perf_target
@@ -118,6 +122,7 @@ class CPGPE(PGPE):
                     k_zeros = np.zeros(self.n_constraints, dtype=float)
                     cvar_sample_mean[:, z] = -np.minimum(k_zeros, perf_costs - self.etas)/self.conf_values
                     cost_sample_mean[:, z] = perf_costs
+                    cvar_indicator[:, z] = np.where(perf_costs <= self.etas, 1, 0) / self.conf_values
 
                 # save mean performances
                 perf = np.mean(sample_mean)
@@ -130,6 +135,7 @@ class CPGPE(PGPE):
                 # save mean of costs (cvar on a trajectory)
                 perf_cvar = np.mean(cvar_sample_mean, axis=1) + self.etas
                 self.cvar_idx_theta[:, i, j] = perf_cvar
+                self.cvar_indicator_theta[:, i, j] = np.mean(cvar_indicator, axis=1)
 
                 # Try to update the best config
                 self.update_best_theta(current_perf=perf,
@@ -141,6 +147,7 @@ class CPGPE(PGPE):
 
             # Update the cvar terms
             self.cvar_idx[:, i] = np.mean(self.cvar_idx_theta[:, i, :], axis=1)
+            self.cvar_indicator[:, i] = np.mean(self.cvar_indicator_theta[:, i, :], axis=1)
 
             # Update the lagrangian
             l_cost_term = np.sum(self.lambdas * (-self.cvar_idx[:, i] + self.thresholds))
@@ -172,6 +179,11 @@ class CPGPE(PGPE):
                 print(f"rho cvar: {self.cvar_idx}\n")
                 print(f"theta cvar: {self.cvar_idx_theta}\n")
                 print(f"**********************************************\n")
+
+        print("==== Learning End ====")
+        print(f"RHO: {self.rho}")
+        print(f"LAMBDA: {self.lambdas}")
+        print(f"ETA: {self.etas}")
 
     def collect_trajectory(self, params: np.array,
                            starting_state=None) -> tuple:
@@ -254,8 +266,8 @@ class CPGPE(PGPE):
             perf[i, :] = self.performance_idx_theta[self.time, i] * perf[i, :]
 
         """compute the gradient pieces"""
-        mu_perf_term = - np.mean(mu_score * perf)
-        sigma_perf_term = - np.mean(sigma_score * perf)
+        mu_perf_term = - np.mean(mu_score * perf, axis=0)
+        sigma_perf_term = - np.mean(sigma_score * perf, axis=0)
         mu_cvar_term = np.zeros(self.dim)
         sigma_cvar_term = np.zeros(self.dim)
 
@@ -264,10 +276,10 @@ class CPGPE(PGPE):
             # utility cost vector
             cost = np.ones((self.batch_size, self.dim), dtype=float)
             for i in range(self.batch_size):
-                cost[i, :] = self.cvar_idx_theta[u, self.time, i] * cost[i, :]
+                cost[i, :] = self.cvar_idx_theta[u, self.time, i] * cost[i, :] - self.etas[u]
 
-            mu_cvar_term += self.lambdas[u] * (- np.mean(mu_score * cost))
-            sigma_cvar_term += self.lambdas[u] * (- np.mean(sigma_score * cost))
+            mu_cvar_term += self.lambdas[u] * (- np.mean(mu_score * cost, axis=0))
+            sigma_cvar_term += self.lambdas[u] * (- np.mean(sigma_score * cost, axis=0))
 
         """compute the gradients"""
         rho_grad_mu = mu_perf_term + mu_cvar_term
@@ -286,11 +298,9 @@ class CPGPE(PGPE):
         """
         # inner structures
         ones = np.ones(self.n_constraints, dtype=float)
-        in_cvar_term = self.costs_idx[:, current_ite] - self.etas
-        cvar_term = np.where(in_cvar_term <= 0, 1, 0)/self.conf_values
 
         # gradient and update
-        eta_grad = - self.lambdas * (cvar_term + ones)
+        eta_grad = - self.lambdas * (self.cvar_indicator[:, current_ite] + ones)
         # self.etas = self.etas - self.lr[LearnRates.ETA] * eta_grad
         return eta_grad
 
@@ -305,7 +315,8 @@ class CPGPE(PGPE):
             The gradient to apply to lambda vector.
         """
         # gradient and update
-        lambda_grad = - self.cvar_idx[:, current_ite] + self.etas + self.thresholds
+        # lambda_grad = - self.cvar_idx[:, current_ite] + self.etas + self.thresholds
+        lambda_grad = - self.cvar_idx[:, current_ite] + self.thresholds
         # self.lambdas = self.lambdas + self.lr[LearnRates.LAMBDA] * lambda_grad
         return lambda_grad
 
@@ -351,7 +362,10 @@ class CPGPE(PGPE):
             "costs_theta": self.cvar_idx_theta.tolist(),
             "best_theta": self.best_theta.tolist(),
             "best_rho": self.best_rho.tolist(),
-            "lagrangian": self.lagrangian.tolist()
+            "lagrangian": self.lagrangian.tolist(),
+            "final_rho": self.rho.tolist(),
+            "final_eta": self.etas.tolist(),
+            "final_lambdas": self.lambdas.tolist()
         }
 
         # Save the json
