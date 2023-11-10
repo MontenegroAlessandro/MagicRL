@@ -1,12 +1,9 @@
 """
-Summary: CPGPE implementation
+Summary: CvarPGPE implementation
 Author: @MontenegroAlessandro
-Date: 8/11/2023
+Date: 4/10/2023
 """
 # todo -> parallelize the sampling process via joblib
-# todo -> adam in PGPE and then inherit
-# todo -> saving; resume and other stuff in PGPE
-# todo -> make CvarPGPE inherit from CPGPE
 # Libraries
 from algorithms.pgpe import PGPE
 import numpy as np
@@ -20,10 +17,9 @@ import copy
 from adam.adam import Adam
 
 
-# class implementation
-class CPGPE(PGPE):
-    """Class implementing CPGPE"""
-
+# Algorithm implementation
+class CvarPGPE(PGPE):
+    """Class implementing CvarPGPE"""
     def __init__(
             self, lr=None,
             initial_rho: np.array = None,
@@ -34,16 +30,29 @@ class CPGPE(PGPE):
             policy: BasePolicy = None,
             data_processor: BaseProcessor = IdentityDataProcessor(),
             directory: str = "", verbose: bool = False, natural: bool = False,
-            constraints: list = None,
+            conf_values: list = None, constraints: list = None,
             cost_mask: np.array = None,
+            init_eta: np.array = None,
             init_lambda: np.array = None,
             learn_std: bool = True,
             lr_strategy: str = None,
+            use_baseline: bool = False, baseline: float = 0,
             checkpoint_freq: int = 1,
             resume_from: str = None
     ) -> None:
         """
-        todo
+        Args:
+            from "lr" to "natural" see PGPE class
+
+            conf_values (list): it is a list of confidence values needed to
+            compute the CVaR_{alpha} of the costs. Each element of the list
+            must be a float. alpha in (0, 1)
+
+            constraints (list): it is a list of thresholds for the CVaR_{alpha}
+            of the costs, Each element must be a float.
+
+            cost_mask (np.array (bool)). a mask of booleans for the selection
+            of the costs to consider. Default to [... True ...].
         """
         # Super class initialization
         super().__init__(lr=lr, initial_rho=initial_rho, ite=ite,
@@ -52,28 +61,33 @@ class CPGPE(PGPE):
                          policy=policy, data_processor=data_processor,
                          directory=directory, verbose=verbose, natural=natural,
                          checkpoint_freq=checkpoint_freq)
+
         # CPGPE arguments
-        # Learning rates
+        """Learning rates"""
         assert lr is not None, "[ERROR] No learning rates provided."
-        assert len(lr) == 2, "[ERROR] Expected 2 learning rates."
+        assert len(lr) == 3, "[ERROR] Expected 3 learning rates."
         self.lr = np.array(lr)
 
         err_msg = "[CPGPE] invalid learning rate update strategy."
         assert lr_strategy in ["constant", "adam"], err_msg
         self.lr_strategy = lr_strategy
         if self.lr_strategy == "adam":
+            self.eta_adam = Adam(step_size=self.lr[LearnRates.ETA], strategy="descent")
             self.lambda_adam = Adam(step_size=self.lr[LearnRates.LAMBDA], strategy="ascent")
 
             self.rho_adam = [None, None]
-            self.rho_adam[RhoElem.MEAN] = Adam(step_size=self.lr[LearnRates.RHO],
-                                               strategy="descent")
+            self.rho_adam[RhoElem.MEAN] = Adam(step_size=self.lr[LearnRates.RHO], strategy="descent")
             self.rho_adam[RhoElem.STD] = Adam(step_size=self.lr[LearnRates.RHO], strategy="descent")
 
-        # Constraint Structures
+        """Constraints Structures"""
+        err_msg = "[ERROR] No confidence values for the constraints provided."
+        assert len(conf_values) > 0, err_msg
+        self.conf_values = np.array(conf_values)
+        self.n_constraints = len(conf_values)
+
         err_msg = "[ERROR] Number of thresholds != Number of constraints."
-        assert len(constraints) > 0, err_msg
+        assert len(constraints) == self.n_constraints, err_msg
         self.thresholds = np.array(constraints)
-        self.n_constraints = len(self.thresholds)
 
         if cost_mask is None:
             cost_mask = np.ones(self.n_constraints, dtype=bool)
@@ -81,8 +95,14 @@ class CPGPE(PGPE):
         assert len(cost_mask) == self.n_constraints, err_msg
         self.cost_mask = np.array(cost_mask)
 
-        # Learning Targets
+        """Learning Targets"""
         self.learn_std = learn_std
+        if init_eta is None:
+            self.etas = copy.deepcopy(self.thresholds) * self.cost_mask
+        else:
+            err_msg = f"[CPGPE] init_eta does not match {self.n_constraints}"
+            assert len(init_eta) == self.n_constraints, err_msg
+            self.etas = copy.deepcopy(init_eta) * self.cost_mask
         if init_lambda is None:
             self.lambdas = np.ones(self.n_constraints, dtype=float) * self.cost_mask
         else:
@@ -90,19 +110,35 @@ class CPGPE(PGPE):
             assert len(init_lambda) == self.n_constraints, err_msg
             self.lambdas = copy.deepcopy(init_lambda) * self.cost_mask
 
-        # useful structures
-        self.costs_idx = np.zeros((self.n_constraints, self.ite), dtype=float)
-        self.costs_idx_theta = np.zeros((self.n_constraints, self.ite, self.batch_size))
-        self.lagrangian = np.zeros(self.ite, dtype=float)
-        self.lambda_history = np.zeros((self.ite, self.n_constraints), dtype=float)
-        self.constraints_history = np.zeros((self.ite, self.n_constraints), dtype=float)
+        """Baseline"""
+        self.use_baseline = use_baseline
+        self.baseline = baseline
 
-        # Resume a previous learning
+        """Useful Structures"""
+        # maintain cvar values and costs for each constraint, mean over the
+        # iteration
+        self.cvar_idx = np.zeros((self.n_constraints, ite), dtype=float)
+        self.costs_idx = copy.deepcopy(self.cvar_idx)
+        self.cvar_indicator = copy.deepcopy(self.cvar_idx)
+        # maintain the cvar and costs value for each theta in each batch (mean)
+        self.cvar_idx_theta = np.zeros(
+            (self.n_constraints, ite, batch_size),
+            dtype=float
+        )
+        self.costs_idx_theta = copy.deepcopy(self.cvar_idx_theta)
+        self.cvar_indicator_theta = copy.deepcopy(self.cvar_idx_theta)
+        self.lagrangian = np.zeros(ite, dtype=float)
+        self.lambda_history = np.zeros((ite, self.n_constraints), dtype=float)
+        self.eta_history = np.zeros((ite, self.n_constraints), dtype=float)
+        self.constraints_history = np.zeros((ite, self.n_constraints), dtype=float)
+
         if resume_from is not None:
             file = open(resume_from)
             data = json.load(file)
             self.rho = np.array(data["final_rho"])
+            self.etas = np.array(data["final_eta"])
             self.lambdas = np.array(data["final_lambdas"])
+
         return
 
     def learn(self) -> None:
@@ -110,8 +146,8 @@ class CPGPE(PGPE):
             strategy="sphere",
             args=dict(
                 n_samples=self.episodes_per_theta,
-                density=3,
-                radius=2,
+                density=100,
+                radius=3,
                 noise=0.1,
                 left_lim=0,
                 right_lim=np.pi
@@ -126,7 +162,12 @@ class CPGPE(PGPE):
 
                 # Collect Trajectories
                 sample_mean = np.zeros(self.episodes_per_theta, dtype=float)
-                cost_sample_mean = np.zeros((self.n_constraints, self.episodes_per_theta), dtype=float)
+                cvar_sample_mean = np.zeros((self.n_constraints,
+                                             self.episodes_per_theta),
+                                            dtype=float)
+                cost_sample_mean = copy.deepcopy(cvar_sample_mean)
+                cvar_indicator = np.zeros((self.n_constraints, self.episodes_per_theta),
+                                          dtype=float)
 
                 for z in range(self.episodes_per_theta):
                     # collect the scores
@@ -137,7 +178,10 @@ class CPGPE(PGPE):
                     # update the performance score
                     sample_mean[z] = perf_target
                     # update the inner cvar score
+                    k_zeros = np.zeros(self.n_constraints, dtype=float)
+                    cvar_sample_mean[:, z] = np.maximum(k_zeros, perf_costs - self.etas)
                     cost_sample_mean[:, z] = perf_costs
+                    cvar_indicator[:, z] = np.where(perf_costs >= self.etas, 1, 0)
 
                 # save mean performances
                 perf = np.mean(sample_mean)
@@ -147,17 +191,26 @@ class CPGPE(PGPE):
                 perf_costs = np.mean(cost_sample_mean, axis=1)
                 self.costs_idx_theta[:, i, j] = perf_costs
 
+                # save mean of costs (cvar on a trajectory)
+                perf_cvar = np.mean(cvar_sample_mean, axis=1)
+                self.cvar_idx_theta[:, i, j] = perf_cvar
+                self.cvar_indicator_theta[:, i, j] = np.mean(cvar_indicator, axis=1)
+
                 # Try to update the best config
-                self.update_best_theta(current_perf=perf, current_costs=perf_costs, params=self.thetas[j, :])
+                self.update_best_theta(current_perf=perf,
+                                       current_costs=self.etas + perf_cvar/(1-self.conf_values),
+                                       params=self.thetas[j, :])
 
             # Update performance J(rho)
             self.performance_idx[i] = np.mean(self.performance_idx_theta[i, :])
 
-            # Update the cost idx
+            # Update the cvar terms
+            self.cvar_idx[:, i] = np.mean(self.cvar_idx_theta[:, i, :], axis=1)
+            self.cvar_indicator[:, i] = np.mean(self.cvar_indicator_theta[:, i, :], axis=1)
             self.costs_idx[:, i] = np.mean(self.costs_idx_theta[:, i, :], axis=1)
 
-            # Update the lagrangian
-            l_cost_term = np.sum(self.lambdas * (self.costs_idx[:, i] - self.thresholds))
+            # Update the lagrangian #fixme (check correctness)
+            l_cost_term = np.sum(self.lambdas * (-self.cvar_idx[:, i] + self.thresholds))
             self.lagrangian[i] = -self.performance_idx[i] + l_cost_term
 
             # Update best rho
@@ -165,14 +218,22 @@ class CPGPE(PGPE):
 
             """Update history"""
             self.lambda_history[self.time, :] = self.lambdas
-            self.constraints_history[self.time, :] = self.costs_idx[:, self.time] - self.thresholds
+            self.eta_history[self.time, :] = self.etas
+            self.constraints_history[self.time, :] = self.etas - self.thresholds + self.cvar_idx[:,self.time] / (1 - self.conf_values)
 
             """Update parameters"""
             # compute gradients
+            eta_grad = self.update_eta(current_ite=i) * self.cost_mask
             lambda_grad = self.update_lambda(current_ite=i) * self.cost_mask
             rho_grad_mean, rho_grad_std = self.update_rho()
 
+            if self.use_baseline:
+                # todo implement
+                pass
+
             if self.lr_strategy == "constant":
+                # update eta
+                self.etas = self.etas - self.lr[LearnRates.ETA] * eta_grad
                 # update lambda
                 self.lambdas = self.lambdas + self.lr[LearnRates.LAMBDA] * lambda_grad
                 self.lambdas = np.where(self.lambdas >= 0, self.lambdas, 0)
@@ -182,16 +243,16 @@ class CPGPE(PGPE):
                 self.rho[RhoElem.STD] = self.rho[RhoElem.STD] - self.lr[
                     LearnRates.RHO] * rho_grad_std
             elif self.lr_strategy == "adam":
+                self.etas = self.etas - self.eta_adam.compute_gradient(eta_grad)
                 self.lambdas = self.lambdas + self.lambda_adam.compute_gradient(lambda_grad)
                 self.lambdas = np.where(self.lambdas >= 0, self.lambdas, 0)
-                self.rho[RhoElem.MEAN] = self.rho[RhoElem.MEAN] - self.rho_adam[
-                    RhoElem.MEAN].compute_gradient(rho_grad_mean)
-                self.rho[RhoElem.STD] = self.rho[RhoElem.STD] - self.rho_adam[
-                    RhoElem.STD].compute_gradient(rho_grad_std)
+                self.rho[RhoElem.MEAN] = self.rho[RhoElem.MEAN] - self.rho_adam[RhoElem.MEAN].compute_gradient(rho_grad_mean)
+                self.rho[RhoElem.STD] = self.rho[RhoElem.STD] - self.rho_adam[RhoElem.STD].compute_gradient(rho_grad_std)
             else:
                 raise NotImplementedError(f"[CPGPE] {self.lr_strategy} not implemented.")
 
             print(f"******* BATCH {i} *******")
+            print(f"ETAS: {self.eta_history[self.time, :]}")
             print(f"LAMBDAs: {self.lambda_history[self.time, :]}")
             print(f"RHO: {self.rho}")
             print(f"CONSTRAINTS: {self.constraints_history[self.time, :]}")
@@ -208,14 +269,14 @@ class CPGPE(PGPE):
                 print(f"Lagrangian: {self.lagrangian[i]}\n")
                 print(f"rho perf: {self.performance_idx}\n")
                 print(f"theta perf: {self.performance_idx_theta}\n")
-                print(f"rho cvar: {self.costs_idx}\n")
-                print(f"theta cvar: {self.costs_idx_theta}\n")
+                print(f"rho cvar: {self.cvar_idx}\n")
+                print(f"theta cvar: {self.cvar_idx_theta}\n")
                 print(f"**********************************************\n")
 
         print("==== Learning End ====")
         print(f"RHO: {self.rho}")
         print(f"LAMBDA: {self.lambdas}")
-        return
+        print(f"ETA: {self.etas}")
 
     def collect_trajectory(self, params: np.array,
                            starting_state=None) -> tuple:
@@ -301,26 +362,44 @@ class CPGPE(PGPE):
         """compute the gradient pieces"""
         mu_perf_term = - np.mean(mu_score * perf, axis=0)
         sigma_perf_term = - np.mean(sigma_score * perf, axis=0)
-        mu_cost_term = np.zeros(self.dim)
-        sigma_cost_term = np.zeros(self.dim)
+        mu_cvar_term = np.zeros(self.dim)
+        sigma_cvar_term = np.zeros(self.dim)
 
         # fixme -> vectorize this part
         for u in range(self.n_constraints):
             # utility cost vector
             cost = np.ones((self.batch_size, self.dim), dtype=float)
             for i in range(self.batch_size):
-                cost[i, :] = self.costs_idx_theta[u, self.time, i] * cost[i, :]
+                cost[i, :] = self.cvar_idx_theta[u, self.time, i] * cost[i, :]
 
-            mu_cost_term += self.lambdas[u] * np.mean(mu_score * cost, axis=0)
-            sigma_cost_term += self.lambdas[u] * np.mean(sigma_score * cost, axis=0)
+            mu_cvar_term += self.lambdas[u] * np.mean(mu_score * cost, axis=0) / (1 - self.conf_values[u])
+            sigma_cvar_term += self.lambdas[u] * np.mean(sigma_score * cost, axis=0) / (1 - self.conf_values[u])
 
         """compute the gradients"""
-        rho_grad_mu = mu_perf_term + mu_cost_term
+        rho_grad_mu = mu_perf_term + mu_cvar_term
         if self.learn_std:
-            rho_grad_std = sigma_perf_term + sigma_cost_term
+            rho_grad_std = sigma_perf_term + sigma_cvar_term
         else:
             rho_grad_std = 0
         return rho_grad_mu, rho_grad_std
+
+    def update_eta(self, current_ite: int) -> np.array:
+        """
+        Summary:
+            this function updates the eta vector via gradient descent
+        Args:
+            current_ite (int): index of the current iteration of the algorithm.
+            It is useful to access rapidly the recording structures.
+        Returns:
+            The gradient to apply to eta vector.
+        """
+        # inner structures
+        ones = np.ones(self.n_constraints, dtype=float)
+
+        # gradient and update
+        eta_grad = self.lambdas * (ones - self.cvar_indicator[:, current_ite]/(1 - self.conf_values))
+        # self.etas = self.etas - self.lr[LearnRates.ETA] * eta_grad
+        return eta_grad
 
     def update_lambda(self, current_ite: int) -> np.array:
         """
@@ -333,7 +412,9 @@ class CPGPE(PGPE):
             The gradient to apply to lambda vector.
         """
         # gradient and update
-        lambda_grad = self.costs_idx[:, current_ite] - self.thresholds
+        lambda_grad = self.cvar_idx[:, current_ite]/(1 - self.conf_values) + self.etas - self.thresholds
+        # lambda_grad = - self.cvar_idx[:, current_ite] + self.thresholds
+        # self.lambdas = self.lambdas + self.lr[LearnRates.LAMBDA] * lambda_grad
         return lambda_grad
 
     def update_best_rho(self, current_perf: float):
@@ -374,14 +455,16 @@ class CPGPE(PGPE):
         results = {
             "performance_rho": self.performance_idx.tolist(),
             "performance_thetas_per_rho": self.performance_idx_theta.tolist(),
-            "costs_rho": self.costs_idx.tolist(),
-            "costs_theta": self.costs_idx_theta.tolist(),
+            "costs_rho": self.cvar_idx.tolist(),
+            "costs_theta": self.cvar_idx_theta.tolist(),
             "best_theta": self.best_theta.tolist(),
             "best_rho": self.best_rho.tolist(),
             "lagrangian": self.lagrangian.tolist(),
             "final_rho": self.rho.tolist(),
+            "final_eta": self.etas.tolist(),
             "final_lambdas": self.lambdas.tolist(),
             "lambda_history": self.lambda_history.tolist(),
+            "eta_history": self.eta_history.tolist(),
             "constraint_history": self.constraints_history.tolist()
         }
 

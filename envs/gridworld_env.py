@@ -3,6 +3,8 @@ Summary: Python Script implementing the GridWorldMDP with goal in the center
 Author: @MontenegroAlessandro
 Date: 12/7/2023
 """
+import copy
+
 # todo -> make the discrete environment in line with the continuous one
 # Libraries
 import numpy as np
@@ -24,7 +26,7 @@ LEGAL_ENV_CONFIG = ["empty", "walls", "rooms"]
 class GridWorldState:
     """State for the GridWorld Environment", the position of the agent."""
 
-    def __init__(self, x: int = 0, y: int = 0) -> None:
+    def __init__(self, x: float = 0, y: float = 0) -> None:
         """Summary: Initialization
         Args:
             x (int): x-axis coordinate of the agent (default 0)
@@ -187,7 +189,7 @@ class GridWorldEnvDisc(BaseEnv):
         if self.render:
             self.save_single_image()
 
-    def sample_random_state(self):
+    def sample_state(self):
         pass
 
     def save_history(self) -> None:
@@ -348,7 +350,7 @@ class GridWorldEnvCont(BaseEnv):
             render: bool = False, dir: str = None, init_state: list = None,
             obstacles: list = None, verbose: bool = False, pacman: bool = False,
             goal_tol: float = 0, obstacles_strict_flag: bool = False,
-            use_costs: bool = False
+            use_costs: bool = False, sampling_strategy: str = "random", sampling_args: dict = None
     ) -> None:
         """
         Summary: Initialization function
@@ -394,6 +396,12 @@ class GridWorldEnvCont(BaseEnv):
             in which the user decides to use costs, then the step function will
             return as additional output the list of cost values. Default to
             "False".
+
+            sampling_strategy (str): the strategy used to sample states.
+            Default to "random".
+
+            sampling_args (dict): dictionary containing the arguments to sample
+            the states.
         """
         # Super class initialization
         super().__init__(horizon=horizon, gamma=gamma,
@@ -409,11 +417,17 @@ class GridWorldEnvCont(BaseEnv):
         self.epsilon = goal_tol
 
         # State initialization
+        err_msg = f"[GridWorld] the strategy {sampling_strategy} is not implemented."
+        assert sampling_strategy in ["random", "sphere"], err_msg
+        self.sampling_strategy = sampling_strategy
+        self.sampling_args = sampling_args
+        print(self.sampling_args)
         self.init_state = init_state
         if init_state is not None:
             self.state = GridWorldState(x=init_state[0], y=init_state[1])
         else:
-            self.state = self.sample_random_state()
+            self.state = self.sample_state(strategy=self.sampling_strategy,
+                                           args=copy.deepcopy(self.sampling_args))[0]
 
         # Reward
         assert reward_type in LEGAL_REWARDS, "[ERROR] Illegal reward type."
@@ -423,7 +437,7 @@ class GridWorldEnvCont(BaseEnv):
         self.obstacles = obstacles
         self.obstacles_strict_flag = obstacles_strict_flag
         self.use_costs = use_costs
-        self.n_costs = 2    # todo -> change this
+        self.n_costs = 2  # todo -> change this
 
         # Saving parameters
         self.render = render
@@ -441,6 +455,75 @@ class GridWorldEnvCont(BaseEnv):
         if self.render:
             self.save_single_image()
 
+    def sample_state(self, strategy: str = "random", args=None):
+        if args is None:
+            args = {}
+        if strategy == "random":
+            return self.sample_random_state(**args)
+        elif strategy == "sphere":
+            return self.sample_state_from_sphere(**args)
+        else:
+            err_msg = f"[GridWorld] strategy {strategy} is not implemented to sample states!"
+            raise NotImplementedError(err_msg)
+
+    def sample_state_from_sphere(
+            self, n_samples: int = 1,
+            radius: float = 0,
+            noise: float = 0,
+            left_lim: float = 0,
+            right_lim: float = 2*np.pi,
+            density: int = 100
+    ) -> list:
+        """
+        Summary:
+            function to sample states over a circle centered in the goal
+        Args:
+             n_samples (int): how many points are required.
+             Default to 1.
+
+             radius (float): radius of the circle centered in the goal from
+             which it is requested a sampling.
+             Default to 0.
+
+             noise (float): noise to apply over the radius when sampling.
+             Default to 0.
+
+             left_lim (float): lower limit of the angle space in radians.
+             Default to 0.
+
+             right_lim (float): upper limit of the angle space in radians.
+             Default to 2π.
+
+             density (int): density of the point cloud from which sampling.
+             Default to 100.
+        Returns:
+            list of sampled states
+        """
+        # checks
+        radius = max(radius, 0)
+        noise = max(noise, 0)
+        density = max(density, 1)
+        left_lim = max(left_lim, 0)
+        right_lim = min(right_lim, 2*np.pi)
+
+        # sample noises
+        noises = np.random.normal(0, noise, n_samples)
+
+        # adjust radii
+        radii = radius * np.ones(n_samples) + noises
+
+        # angles
+        angles_space = np.linspace(left_lim, right_lim, density, endpoint=False)
+        angles = angles_space[np.random.choice(range(density), n_samples, replace=False)]
+
+        # compute coordinates
+        x_coordinates = radii * np.cos(angles) + self.goal_pos.x * np.ones(n_samples)
+        y_coordinates = radii * np.sin(angles) + self.goal_pos.y * np.ones(n_samples)
+        res = []
+        for i in range(n_samples):
+            res.append(GridWorldState(x=x_coordinates[i], y=y_coordinates[i]))
+        return res
+
     def sample_random_state(self, n_samples: int = 1):
         """
         Summary:
@@ -450,9 +533,7 @@ class GridWorldEnvCont(BaseEnv):
             n_samples: how many initial states are to be drawn.
 
         Returns:
-            single initial state if n_samples == 1
-            OR
-            list of initial states if n_samples > 1
+            list of initial states
         """
         space = np.linspace(start=0, stop=self.grid_size, num=100)
 
@@ -460,7 +541,7 @@ class GridWorldEnvCont(BaseEnv):
             """Just one initial state"""
             state = GridWorldState(x=np.random.choice(space),
                                    y=np.random.choice(space))
-            return state
+            return [state]
         else:
             """More initial states"""
             x_coordinates = np.random.choice(a=space, size=n_samples,
@@ -506,10 +587,10 @@ class GridWorldEnvCont(BaseEnv):
 
         # Check if the new position is forbidden
         isAbs = self.is_absorbing(self.state.agent_pos)
-        forbidden = False
+        forbidden = 0
         for obs in self.obstacles:
             if obs.is_in(pos=new_pos):
-                forbidden = True
+                forbidden += 1
                 break
         if (not forbidden and not isAbs) or \
                 (forbidden and not self.obstacles_strict_flag):
@@ -559,7 +640,8 @@ class GridWorldEnvCont(BaseEnv):
             self.state = GridWorldState(x=self.init_state[0],
                                         y=self.init_state[1])
         else:
-            self.state = self.sample_random_state()
+            self.state = self.sample_state(strategy=self.sampling_strategy,
+                                           args=copy.deepcopy(self.sampling_args))[0]
 
         # Save results
         if self.dir is not None:
@@ -578,11 +660,11 @@ class GridWorldEnvCont(BaseEnv):
         if self.render:
             self.save_single_image()
 
-    def reward(self, outside=False, forbidden=False):
+    def reward(self, outside=False, forbidden=0):
         if forbidden and not self.use_costs:
             # If the agent is in a forbidden zone, punish it with a super
             # negative reward
-            return -(self.grid_size ** 2)
+            return -(self.grid_size ** 2) * forbidden
         else:
             # Distance computation
             dist = (self.state.agent_pos.x - self.goal_pos.x) ** 2
@@ -594,8 +676,8 @@ class GridWorldEnvCont(BaseEnv):
 
             # Give reward
             if dist <= self.epsilon:
-                # todo -> place 0
-                return 1
+                # todo -> place 1
+                return 0
             if self.reward_type == "linear":
                 return -dist
             elif self.reward_type == "sparse":
@@ -605,7 +687,7 @@ class GridWorldEnvCont(BaseEnv):
 
     def is_absorbing(self, position: Position):
         dist = np.sqrt((self.goal_pos.x - position.x) ** 2 + (
-                    self.goal_pos.y - position.y) ** 2)
+                self.goal_pos.y - position.y) ** 2)
         # return position.x == self.goal_pos.x and position.y == self.goal_pos.y
         return dist <= self.epsilon
 
@@ -663,6 +745,8 @@ class GridWorldEnvCont(BaseEnv):
         plt.title(f"GridWorld EPISODE{self.episode_counter} FRAME {self.time}")
 
         if self.time < 10:
+            name = self.dir + f"/frames_{self.episode_counter}" + f"/GridWorldFrame_{self.episode_counter}_00{self.time}.jpeg"
+        elif self.time < 100:
             name = self.dir + f"/frames_{self.episode_counter}" + f"/GridWorldFrame_{self.episode_counter}_0{self.time}.jpeg"
         else:
             name = self.dir + f"/frames_{self.episode_counter}" + f"/GridWorldFrame_{self.episode_counter}_{self.time}.jpeg"
@@ -685,13 +769,9 @@ class GridWorldEnvCont(BaseEnv):
             format="GIF", append_images=frames, save_all=True, duration=150,
             loop=0)
 
-    def cost_obstacle(self, forbidden=False):
+    def cost_obstacle(self, forbidden: int = 0):
         """When the agent is in a forbidden zone, it has a cost."""
-        if forbidden:
-            # return self.grid_size ** 2
-            return -1
-        else:
-            return 0
+        return forbidden
 
     def cost_boundary(self):
         """When the agent is near to the boundary, it has a cost."""
@@ -702,6 +782,6 @@ class GridWorldEnvCont(BaseEnv):
                 self.state.agent_pos.y - self.grid_size <= threshold)
         if cond_near_x or cond_near_y:
             # return self.grid_size / 2
-            return -1
+            return 1
         else:
             return 0

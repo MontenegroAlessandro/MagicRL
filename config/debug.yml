@@ -1,0 +1,5 @@
+horizon: 100
+gamma: 1
+grid_size: 10
+num_basis: 4
+dim_state: 2

@@ -84,10 +84,7 @@ class Obstacle:
         """
         res = False
         if self.type == "square":
-            if (pos.x >= self.features["p1"].x and pos.x <= self.features[
-                "p2"].x) and (
-                    pos.y >= self.features["p1"].y and pos.y <= self.features[
-                "p4"].y):
+            if (self.features["p1"].x <= pos.x <= self.features["p2"].x) and (self.features["p1"].y <= pos.y <= self.features["p4"].y):
                 res = True
         elif self.type == "circle":
             dist = (pos.x - self.features["center"].x) ** 2

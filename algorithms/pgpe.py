@@ -29,7 +29,8 @@ class PGPE:
             env: BaseEnv = None,
             policy: BasePolicy = None,
             data_processor: BaseProcessor = IdentityDataProcessor(),
-            directory: str = "", verbose: bool = False, natural: bool = False
+            directory: str = "", verbose: bool = False, natural: bool = False,
+            checkpoint_freq: int = 1
     ) -> None:
         """
         Args:
@@ -105,6 +106,7 @@ class PGPE:
         self.best_rho = self.rho
         self.best_performance_theta = -np.inf
         self.best_performance_rho = -np.inf
+        self.checkpoint_freq = checkpoint_freq
         return
 
     def learn(self) -> None:
@@ -143,6 +145,8 @@ class PGPE:
             if self.verbose:
                 print(f"rho perf: {self.performance_idx}")
                 print(f"theta perf: {self.performance_idx_theta}")
+            if self.time % self.checkpoint_freq == 0:
+                self.save_results()
         return
 
     def update_rho(self) -> None:  # FIXME
