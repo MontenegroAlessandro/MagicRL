@@ -1,2 +1,2 @@
-# ConstrainedPolicyGradientExploration
-Repository implementing CPGPE!
+# MagicRL
+Magic as the AS ROMA!
