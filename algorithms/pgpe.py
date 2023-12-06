@@ -13,6 +13,7 @@ from algorithms.utils import RhoElem, LearnRates
 import json, io, os, errno
 from tqdm import tqdm
 import copy
+from adam.adam import Adam
 
 
 # from adam import Adam
@@ -24,13 +25,21 @@ class PGPE:
     """Class implementing PGPE"""
 
     def __init__(
-            self, lr: list = None, initial_rho: np.array = None, ite: int = 0,
-            batch_size: int = 10, episodes_per_theta: int = 10,
+            self,
+            lr: list = None,
+            initial_rho: np.array = None,
+            ite: int = 0,
+            batch_size: int = 10,
+            episodes_per_theta: int = 10,
             env: BaseEnv = None,
             policy: BasePolicy = None,
             data_processor: BaseProcessor = IdentityDataProcessor(),
-            directory: str = "", verbose: bool = False, natural: bool = False,
-            checkpoint_freq: int = 1
+            directory: str = "",
+            verbose: bool = False,
+            natural: bool = False,
+            checkpoint_freq: int = 1,
+            lr_strategy: str = "constant",
+            learn_std: bool = False
     ) -> None:
         """
         Args:
@@ -91,6 +100,17 @@ class PGPE:
                     raise
         self.verbose = verbose
         self.natural = natural
+        self.learn_std = learn_std
+
+        err_msg = "[PGPE] The lr_strategy is not valid."
+        assert lr_strategy in ["constant", "adam"], err_msg
+        self.lr_strategy = lr_strategy
+        if self.lr_strategy == "adam":
+            self.rho_adam = [None, None]
+            self.rho_adam[RhoElem.MEAN] = Adam(step_size=self.lr,
+                                               strategy="ascent")
+            self.rho_adam[RhoElem.STD] = Adam(step_size=self.lr,
+                                              strategy="ascent")
 
         # Other parameters
         self.dim = len(self.rho[RhoElem.MEAN])
@@ -166,17 +186,23 @@ class PGPE:
                 log_nu_rho_mean = (self.thetas[:, id] - cur_mean_vec) / (
                             cur_std_vec ** 2)
                 log_nu_rho_std = (((self.thetas[:, id] - cur_mean_vec) ** 2) - (
-                            cur_std_vec ** 2)) / (cur_std_vec ** 3)
+                            cur_std_vec ** 2)) / (cur_std_vec ** 2)
             else:
                 log_nu_rho_mean = self.thetas[:, id] - cur_mean_vec
                 log_nu_rho_std = (((self.thetas[:, id] - cur_mean_vec) ** 2) - (
-                            cur_std_vec ** 2)) / (2 * cur_std_vec ** 2 + 1e-24)
+                            cur_std_vec ** 2)) / (2 * cur_std_vec ** 2)
 
             grad_m = (log_nu_rho_mean * batch_perf)
             grad_s = (log_nu_rho_std * cur_std_vec * batch_perf)
 
-            self.rho[RhoElem.MEAN, id] += self.lr * np.mean(grad_m)
-            self.rho[RhoElem.STD, id] += self.lr * np.mean(grad_s)
+            if self.lr_strategy == "constant":
+                self.rho[RhoElem.MEAN, id] += self.lr * np.mean(grad_m)
+                if self.learn_std:
+                    self.rho[RhoElem.STD, id] += self.lr * np.mean(grad_s)
+            elif self.lr_strategy == "adam":
+                self.rho[RhoElem.MEAN, id] += self.rho_adam[RhoElem.MEAN].compute_gradient(grad_m)
+                if self.learn_std:
+                    self.rho[RhoElem.STD] += self.rho_adam[RhoElem.STD].compute_gradient(grad_s)
 
             if self.verbose:
                 print(f"MEANs: {cur_mean_vec[0]} - STD: {cur_std_vec[0]}")
