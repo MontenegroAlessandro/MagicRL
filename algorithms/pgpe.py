@@ -3,7 +3,8 @@ Summary: PGPE implementation
 Author: @MontenegroAlessandro
 Date: 14/7/2023
 """
-# todo -> parallelize the sampling process via joblib
+# todo: parallelize the sampling process via joblib
+# todo: ...
 # Libraries
 import numpy as np
 from envs.base_env import BaseEnv
@@ -15,10 +16,6 @@ from tqdm import tqdm
 import copy
 from adam.adam import Adam
 
-
-# from adam import Adam
-# TODO: implement adam please
-# TODO: implement a parallel sampler
 
 # Objects
 class PGPE:
@@ -341,11 +338,13 @@ class PGPE:
     def save_results(self) -> None:
         """Function saving the results of the training procedure"""
         # Create the dictionary with the useful info
+        # fixme -> some histories as the one of rho...
         results = {
             "performance_rho": self.performance_idx.tolist(),
             "performance_thetas_per_rho": self.performance_idx_theta.tolist(),
             "best_theta": self.best_theta.tolist(),
-            "best_rho": self.best_rho.tolist()
+            "best_rho": self.best_rho.tolist(),
+            "thetas_history": self.thetas.tolist()
         }
 
         # Save the json
