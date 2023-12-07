@@ -89,6 +89,12 @@ class PolicyGradient:
 
         # init the theta history
         self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
+
+        # create the adam optimizers
+        if self.lr_strategy == "adam":
+            self.adam_optimizers = []
+            for i in range(self.dim):
+                self.adam_optimizers.append(Adam(self.lr[i], strategy="ascent"))
         return
 
     def learn(self) -> None:
@@ -130,11 +136,15 @@ class PolicyGradient:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
                 raise NotImplementedError(err_msg)
 
-            # Update parameter
+            # Update parameters
             if self.lr_strategy == "constant":
-                self.thetas = self.thetas + self.lr * estimated_gradient
+                self.thetas += self.lr * estimated_gradient
             elif self.lr_strategy == "adam":
-                pass
+                adaptive_lr = []
+                for j in range(self.dim):
+                    adaptive_lr.append(self.adam_optimizers[j].compute_gradient(estimated_gradient[i]))
+                adaptive_lr = np.array(adaptive_lr)
+                self.thetas += adaptive_lr
             else:
                 err_msg = f"[PG] {self.lr_strategy} not implemented yet!"
                 raise NotImplementedError(err_msg)
