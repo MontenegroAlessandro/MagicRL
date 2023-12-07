@@ -20,7 +20,11 @@ class ContCartPole(gym.Env):
         'video.frames_per_second': 50
     }
 
-    def __init__(self):
+    def __init__(self, horizon, gamma):
+        # todo do better
+        self.horizon = horizon
+        self.gamma = gamma
+
         self.gravity = 9.8
         self.masscart = 1.0
         self.masspole = 0.1
@@ -64,7 +68,7 @@ class ContCartPole(gym.Env):
 
     def step(self, action):
         action = np.ravel(action)
-        assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
+        assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
         state = self.state
         x, x_dot, theta, theta_dot = state
         force = np.clip(action,-self.force_mag,self.force_mag)
@@ -77,7 +81,7 @@ class ContCartPole(gym.Env):
         x_dot = x_dot + self.tau * xacc
         theta = theta + self.tau * theta_dot
         theta_dot = theta_dot + self.tau * thetaacc
-        self.state = (x, x_dot, theta, theta_dot)
+        self.state = (x, x_dot[0], theta, theta_dot[0]) # fixme
         done = (x < -self.x_threshold or x > self.x_threshold
                 or theta < -self.theta_threshold_radians or theta > self.theta_threshold_radians)
         done = bool(done)
@@ -95,7 +99,6 @@ class ContCartPole(gym.Env):
                                "receive 'done = True' -- any further steps are undefined behavior.")
             self.steps_beyond_done += 1
             reward = 0.0
-
         return np.array(self.state), reward, done, {}
 
     def reset(self,initial=None):

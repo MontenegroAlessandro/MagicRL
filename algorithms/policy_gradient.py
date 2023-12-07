@@ -2,6 +2,8 @@
 Summary: Policy Gradient Implementation
 Author: @MontenegroAlessandro
 Date: 6/12/2023
+# todo natural
+# todo baseline
 """
 # Libraries
 import numpy as np
@@ -37,8 +39,8 @@ class PolicyGradient:
             parallel_computation: bool = False
     ) -> None:
         # Class' parameter with checks
-        err_msg = "[PG] lr value cannot be negative!"
-        assert len(lr) != len(initial_theta), err_msg
+        err_msg = "[PG] lr size is different wrt the one of parameters!"
+        assert len(lr) == len(initial_theta), err_msg
         self.lr = lr
 
         err_msg = "[PG] lr_strategy not valid!"
@@ -114,10 +116,10 @@ class PolicyGradient:
             # Update performance
             perf_vector = np.zeros(self.batch_size, dtype=float)
             score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=float)
-            reward_vector = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=float)
+            reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=float)
             for j in range(self.batch_size):
                 perf_vector[j] = res[j][TrajectoryResults.PERF]
-                reward_vector[j, :, :] = res[j][TrajectoryResults.RewList]
+                reward_vector[j, :] = res[j][TrajectoryResults.RewList]
                 score_vector[j, :, :] = res[j][TrajectoryResults.ScoreList]
             self.performance_idx[i] = np.mean(perf_vector)
 

@@ -50,7 +50,7 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         mean = self.parameters @ state
         action = np.random.normal(mean, self.std_dev)
         if self.action_bounds is not None:
-            action = np.clip(action, self.action_bounds[0], self.action_bounds[1], dtype=float)
+            action = np.clip(action, self.action_bounds[0], self.action_bounds[1], dtype=np.float32)
         return action
 
     def set_parameters(self, thetas) -> None:
