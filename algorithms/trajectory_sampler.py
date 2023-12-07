@@ -11,7 +11,7 @@ import numpy as np
 import copy
 
 
-class TrajectorySampler:
+class PGTrajectorySampler:
     def __init__(
             self, env: BaseEnv = None,
             pol: BasePolicy = None,
@@ -33,7 +33,7 @@ class TrajectorySampler:
 
     def collect_trajectory(
             self, params: np.array = None, starting_state=None
-    ) -> float:
+    ) -> tuple:
         """
         Summary:
             Function collecting a trajectory reward for a particular theta
@@ -43,6 +43,8 @@ class TrajectorySampler:
             starting_state (any): teh starting state for the iterations
         Returns:
             float: the discounted reward of the trajectory
+            np.array: vector of all the rewards
+            np.array: vector of all the scores
         """
         # reset the environment
         self.env.reset()
@@ -51,6 +53,8 @@ class TrajectorySampler:
 
         # initialize parameters
         perf = 0
+        rewards = np.zeros(self.env.horizon, dtype=float)
+        scores = np.zeros(self.env.horizon, dtype=float)
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
@@ -64,6 +68,7 @@ class TrajectorySampler:
 
             # select the action
             a = self.pol.draw_action(state=features)
+            score = self.pol.compute_score(state=features, action=a)
 
             # play the action
             _, rew, abs = self.env.step(action=a)
@@ -71,7 +76,14 @@ class TrajectorySampler:
             # update the performance index
             perf += (self.env.gamma ** t) * rew
 
+            # update the vectors of rewards and scores
+            rewards[t] = rew
+            scores[t] = score
+
             if abs:
+                if t < self.env.horizon - 1:
+                    rewards[t+1:] = rew
+                    scores[t+1:] = score
                 break
 
-        return perf
+        return perf, rewards, scores

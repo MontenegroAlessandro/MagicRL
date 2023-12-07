@@ -18,3 +18,6 @@ class BasePolicy(ABC):
     @abstractmethod
     def set_parameters(self, thetas):
         pass
+    @abstractmethod
+    def compute_score(self, state, action):
+        pass

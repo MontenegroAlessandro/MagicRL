@@ -8,8 +8,8 @@ import numpy as np
 from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
-from algorithms.utils import RhoElem, LearnRates, check_directory_and_create
-from algorithms.trajectory_sampler import TrajectorySampler
+from algorithms.utils import TrajectoryResults, LearnRates, check_directory_and_create
+from algorithms.trajectory_sampler import PGTrajectorySampler
 from joblib import Parallel, delayed
 import json, io, os, errno
 from tqdm import tqdm
@@ -83,9 +83,9 @@ class PolicyGradient:
         self.performance_idx = np.zeros(ite, dtype=float)
         self.best_theta = np.zeros(self.dim, dtype=float)
         self.best_performance_theta = -np.inf
-        self.sampler = TrajectorySampler(env=self.env,
-                                         pol=self.policy,
-                                         data_processor=self.data_processor)
+        self.sampler = PGTrajectorySampler(env=self.env,
+                                           pol=self.policy,
+                                           data_processor=self.data_processor)
 
         # init the theta history
         self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
@@ -101,6 +101,7 @@ class PolicyGradient:
             else:
                 res = []
                 for j in range(self.batch_size):
+                    perf, rew_list, score_list = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas))
                     res.append(self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas)))
 
             # Update performance

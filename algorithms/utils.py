@@ -18,6 +18,12 @@ class LearnRates:
     ETA = 2
 
 
+class TrajectoryResults:
+    PERF = 0
+    RewList = 1
+    ScoreList = 2
+
+
 def check_directory_and_create(dir_name: str = None) -> None:
     """
     Summary:
