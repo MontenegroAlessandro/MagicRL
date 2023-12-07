@@ -42,7 +42,8 @@ class ContCartPole(gym.Env):
             self.theta_threshold_radians * 2,
             np.finfo(np.float32).max])
 
-        self.action_space = spaces.Box(low=-self.force_mag,high=self.force_mag,shape=(1,), dtype=np.float32)
+        self.action_space = spaces.Box(low=-self.force_mag, high=self.force_mag,shape=(1,),
+                                       dtype=np.float32)
         self.observation_space = spaces.Box(-high, high, dtype=np.float32)
 
         self.seed()

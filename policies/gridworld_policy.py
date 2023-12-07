@@ -8,6 +8,7 @@ Date: 19/7/2023
 from policies.base_policy import BasePolicy
 import numpy as np
 
+
 # Action class
 class GWContAction:
     def __init__(self, radius: float = 0, theta: float = 0) -> None:
@@ -19,12 +20,14 @@ class GWContAction:
         self.radius = radius
         self.theta = theta
 
+
 # Policy Implementation
 class GWPolicy(BasePolicy):
     """
     Grid World parametric policy for GridWorldEnvCont.
     The policy controls both the radius and the angle of the next move.
     """
+
     def __init__(self, thetas: list, dim_state: int) -> None:
         """
         Args:
@@ -36,7 +39,7 @@ class GWPolicy(BasePolicy):
         # self.thetas = np.array(thetas[:dim_state])
         # self.omegas = np.array(thetas[dim_state:])
         self.thetas = np.array(thetas)
-    
+
     def draw_action(self, state: list):
         """
         Summary:
@@ -54,7 +57,7 @@ class GWPolicy(BasePolicy):
         radius = 0.1
         theta = np.rad2deg(np.pi * np.tanh(self.thetas.T @ state))
         return GWContAction(radius=radius, theta=theta)
-    
+
     def set_parameters(self, thetas: list):
         """
         Summary:

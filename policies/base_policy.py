@@ -6,6 +6,7 @@ Date: 19/7/2023
 # Libraries
 from abc import ABC, abstractmethod
 
+
 # Class
 class BasePolicy(ABC):
     def __init__(self) -> None:
@@ -18,6 +19,7 @@ class BasePolicy(ABC):
     @abstractmethod
     def set_parameters(self, thetas):
         pass
+
     @abstractmethod
     def compute_score(self, state, action):
         pass
