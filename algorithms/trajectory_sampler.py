@@ -72,7 +72,7 @@ class PGTrajectorySampler:
             score = self.pol.compute_score(state=features, action=a)
 
             # play the action
-            _, rew, abs = self.env.step(action=a)
+            _, rew, abs, _ = self.env.step(action=a)
 
             # update the performance index
             perf += (self.env.gamma ** t) * rew
