@@ -128,10 +128,7 @@ class PolicyGradient:
             if self.estimator_type == "REINFORCE":
                 estimated_gradient = np.mean(perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=1)
             elif self.estimator_type == "GPOMDP":
-                self.update_g(perf_trajectory=perf_vector,
-                              reward_trajectory=reward_vector,
-                              score_trajectory=score_vector)
-                estimated_gradient = 0
+                estimated_gradient = self.update_g(reward_trajectory=reward_vector, score_trajectory=score_vector)
             else:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
                 raise NotImplementedError(err_msg)
@@ -168,11 +165,19 @@ class PolicyGradient:
         return
 
     def update_g(
-            self, perf_trajectory: np.array,
-            reward_trajectory: np.array,
+            self, reward_trajectory: np.array,
             score_trajectory: np.array
-    ) -> None:
-        pass
+    ) -> np.array:
+        gamma = self.env.gamma
+        horizon = self.env.horizon
+        gamma_seq = (gamma * np.ones(horizon, dtype=float)) ** (np.arange(horizon))
+        rolling_scores = np.zeros((self.batch_size, horizon, self.dim), dtype=float)
+        for t in range(horizon):
+            rolling_scores[:, t, :] = np.sum(score_trajectory[:, :t, :], axis=1)
+        reward_trajectory = reward_trajectory * rolling_scores
+        # fixme: maybe bug
+        estimated_gradient = np.mean(np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1), axis=1)
+        return estimated_gradient
 
     def update_best_theta(self, current_perf: float) -> None:
         if self.best_theta is None or self.best_performance_theta <= current_perf:
