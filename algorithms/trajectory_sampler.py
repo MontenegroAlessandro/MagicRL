@@ -33,7 +33,7 @@ class PGTrajectorySampler:
 
     def collect_trajectory(
             self, params: np.array = None, starting_state=None
-    ) -> tuple:
+    ) -> list:
         """
         Summary:
             Function collecting a trajectory reward for a particular theta
@@ -42,9 +42,10 @@ class PGTrajectorySampler:
             params (np.array): the current sampling of theta values
             starting_state (any): teh starting state for the iterations
         Returns:
-            float: the discounted reward of the trajectory
-            np.array: vector of all the rewards
-            np.array: vector of all the scores
+            list of:
+                float: the discounted reward of the trajectory
+                np.array: vector of all the rewards
+                np.array: vector of all the scores
         """
         # reset the environment
         self.env.reset()
@@ -86,4 +87,4 @@ class PGTrajectorySampler:
                     scores[t+1:] = score
                 break
 
-        return perf, rewards, scores
+        return [perf, rewards, scores]

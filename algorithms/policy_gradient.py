@@ -21,7 +21,7 @@ from adam.adam import Adam
 class PolicyGradient:
     """This Class implements Policy Gradient Algorithms via REINFORCE or GPOMDP."""
     def __init__(
-            self, lr: float = 1e-3,
+            self, lr: np.array = None,
             lr_strategy: str = "constant",
             estimator_type: str = "REINFORCE",
             initial_theta: np.array = None,
@@ -38,7 +38,7 @@ class PolicyGradient:
     ) -> None:
         # Class' parameter with checks
         err_msg = "[PG] lr value cannot be negative!"
-        assert lr > 0, err_msg
+        assert len(lr) != len(initial_theta), err_msg
         self.lr = lr
 
         err_msg = "[PG] lr_strategy not valid!"
@@ -101,27 +101,55 @@ class PolicyGradient:
             else:
                 res = []
                 for j in range(self.batch_size):
-                    perf, rew_list, score_list = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas))
-                    res.append(self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas)))
+                    tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas))
+                    res.append(tmp_res)
+                res = tuple(res)
 
             # Update performance
-            self.performance_idx[i] = np.mean(res)
+            perf_vector = np.zeros(self.batch_size, dtype=float)
+            score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=float)
+            reward_vector = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=float)
+            for j in range(self.batch_size):
+                perf_vector[j] = res[j][TrajectoryResults.PERF]
+                reward_vector[j, :, :] = res[j][TrajectoryResults.RewList]
+                score_vector[j, :, :] = res[j][TrajectoryResults.ScoreList]
+            self.performance_idx[i] = np.mean(perf_vector)
 
             # Update best rho
             self.update_best_theta(current_perf=self.performance_idx[i])
 
-            # Update parameters
+            # Compute the estimated gradient
             if self.estimator_type == "REINFORCE":
-                self.update_r()
+                estimated_gradient = np.mean(perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=1)
             elif self.estimator_type == "GPOMDP":
-                self.update_g()
+                self.update_g(perf_trajectory=perf_vector,
+                              reward_trajectory=reward_vector,
+                              score_trajectory=score_vector)
+                estimated_gradient = 0
             else:
-                raise NotImplementedError(f"{self.estimator_type} has not been implemented yet!")
+                err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
+                raise NotImplementedError(err_msg)
+
+            # Update parameter
+            if self.lr_strategy == "constant":
+                self.thetas = self.thetas + self.lr * estimated_gradient
+            elif self.lr_strategy == "adam":
+                pass
+            else:
+                err_msg = f"[PG] {self.lr_strategy} not implemented yet!"
+                raise NotImplementedError(err_msg)
 
             # Update time counter
             self.time += 1
             if self.verbose:
-                pass
+                print("*" * 30)
+                print(f"Step: {self.time}")
+                print(f"Mean Performance: {self.performance_idx[self.time - 1]}")
+                print(f"Estimated gradient: {estimated_gradient}")
+                print(f"Parameter (new) values: {self.thetas}")
+                print(f"Best performance so far: {self.best_performance_theta}")
+                print(f"Best configuration so far: {self.best_theta}")
+                print("*" * 30)
             if self.time % self.checkpoint_freq == 0:
                 self.save_results()
 
@@ -129,10 +157,11 @@ class PolicyGradient:
             self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
         return
 
-    def update_r(self) -> None:
-        pass
-
-    def update_g(self) -> None:
+    def update_g(
+            self, perf_trajectory: np.array,
+            reward_trajectory: np.array,
+            score_trajectory: np.array
+    ) -> None:
         pass
 
     def update_best_theta(self, current_perf: float) -> None:
