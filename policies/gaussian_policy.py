@@ -57,6 +57,7 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         self.parameters = copy.deepcopy(thetas)
 
     def compute_score(self, state, action) -> np.array:
-        scores = np.zeros(self.dim, dtype=float)
-        scores[:] = (action - self.parameters @ state) / (self.std_dev ** 2)
+        state = np.ravel(state)
+        action_deviation = action - (self.parameters @ state)
+        scores = (action_deviation * state) / (self.std_dev ** 2)
         return scores

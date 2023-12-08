@@ -83,8 +83,8 @@ class PGTrajectorySampler:
 
             if abs:
                 if t < self.env.horizon - 1:
-                    rewards[t+1:] = rew
-                    scores[t+1:] = score
+                    rewards[t+1:] = 0
+                    scores[t+1:] = 0
                 break
 
         return [perf, rewards, scores]

@@ -128,16 +128,18 @@ class PolicyGradient:
 
             # Compute the estimated gradient
             if self.estimator_type == "REINFORCE":
-                estimated_gradient = np.mean(perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=1)
+                estimated_gradient = np.mean(
+                    perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=0)
             elif self.estimator_type == "GPOMDP":
-                estimated_gradient = self.update_g(reward_trajectory=reward_vector, score_trajectory=score_vector)
+                estimated_gradient = self.update_g(reward_trajectory=reward_vector,
+                                                   score_trajectory=score_vector)
             else:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
                 raise NotImplementedError(err_msg)
 
             # Update parameters
             if self.lr_strategy == "constant":
-                self.thetas += self.lr * estimated_gradient
+                self.thetas = self.thetas + self.lr * estimated_gradient
             elif self.lr_strategy == "adam":
                 adaptive_lr = []
                 for j in range(self.dim):
@@ -148,8 +150,7 @@ class PolicyGradient:
                 err_msg = f"[PG] {self.lr_strategy} not implemented yet!"
                 raise NotImplementedError(err_msg)
 
-            # Update time counter
-            self.time += 1
+            # Log
             if self.verbose:
                 print("*" * 30)
                 print(f"Step: {self.time}")
@@ -159,11 +160,16 @@ class PolicyGradient:
                 print(f"Best performance so far: {self.best_performance_theta}")
                 print(f"Best configuration so far: {self.best_theta}")
                 print("*" * 30)
+
+            # Checkpoint
             if self.time % self.checkpoint_freq == 0:
                 self.save_results()
 
             # save theta history
             self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
+
+            # time update
+            self.time += 1
         return
 
     def update_g(

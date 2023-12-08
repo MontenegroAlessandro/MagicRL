@@ -15,7 +15,7 @@ import copy
 
 """Global Vars"""
 # general
-dir = "../../results/pg/pg_test"
+dir = "/Users/ale/results/pg/pg_test"
 
 # environment
 horizon = 100
@@ -39,7 +39,7 @@ dp = IdentityDataProcessor()
 """Policy"""
 pol = LinearGaussianPolicy(
     parameters=[1] * 4,
-    std_dev=0.1,
+    std_dev=0.3,
     action_bounds=[-10, 10]
 )
 
