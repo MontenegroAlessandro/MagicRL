@@ -15,7 +15,7 @@ import copy
 
 """Global Vars"""
 # general
-dir = "/Users/ale/results/pg/pg_test"
+dir = "/Users/ale/results/pg/pg_test_reinforce"
 
 # environment
 horizon = 100
@@ -26,8 +26,8 @@ DEBUG = False
 NATURAL = False
 LR_STRATEGY = "adam"
 PARALLEL_FLAG = True
-ESTIMATOR = "GPOMDP"
-ITE = 500
+ESTIMATOR = "REINFORCE"
+ITE = 1000
 
 # test
 test_ite = 10
