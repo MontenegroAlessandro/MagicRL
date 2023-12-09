@@ -26,6 +26,8 @@ DEBUG = False
 NATURAL = False
 LR_STRATEGY = "adam"
 PARALLEL_FLAG = True
+ESTIMATOR = "GPOMDP"
+ITE = 500
 
 # test
 test_ite = 10
@@ -47,10 +49,10 @@ pol = LinearGaussianPolicy(
 alg_parameters = dict(
     lr=[1e-1] * 4,
     lr_strategy=LR_STRATEGY,
-    estimator_type="REINFORCE",
+    estimator_type=ESTIMATOR,
     initial_theta=[1] * 4,
-    ite=1000,
-    batch_size=5,
+    ite=ITE,
+    batch_size=10,
     env=env,
     policy=pol,
     data_processor=dp,
@@ -58,7 +60,8 @@ alg_parameters = dict(
     verbose=DEBUG,
     natural=NATURAL,
     checkpoint_freq=100,
-    parallel_computation=PARALLEL_FLAG
+    parallel_computation=PARALLEL_FLAG,
+    n_jobs=6
 )
 
 alg = PolicyGradient(**alg_parameters)

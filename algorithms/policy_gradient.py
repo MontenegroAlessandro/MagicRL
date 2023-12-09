@@ -4,7 +4,6 @@ Author: @MontenegroAlessandro
 Date: 6/12/2023
 # todo natural
 # todo baseline
-# todo check parallel
 # todo check gpomdp
 """
 # Libraries
@@ -12,10 +11,10 @@ import numpy as np
 from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
-from algorithms.utils import TrajectoryResults, LearnRates, check_directory_and_create
-from algorithms.trajectory_sampler import PGTrajectorySampler
+from algorithms.utils import TrajectoryResults, check_directory_and_create
+from algorithms.trajectory_sampler import PGTrajectorySampler, pg_sampling_worker
 from joblib import Parallel, delayed
-import json, io, os, errno
+import json, io
 from tqdm import tqdm
 import copy
 from adam.adam import Adam
@@ -38,7 +37,8 @@ class PolicyGradient:
             verbose: bool = False,
             natural: bool = False,
             checkpoint_freq: int = 1,
-            parallel_computation: bool = False
+            parallel_computation: bool = False,
+            n_jobs: int = 1
     ) -> None:
         # Class' parameter with checks
         err_msg = "[PG] lr size is different wrt the one of parameters!"
@@ -80,6 +80,7 @@ class PolicyGradient:
         self.natural = natural
         self.checkpoint_freq = checkpoint_freq
         self.parallel_computation = parallel_computation
+        self.n_jobs = n_jobs
 
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float128)
@@ -105,15 +106,28 @@ class PolicyGradient:
         """Learning function"""
         for i in tqdm(range(self.ite)):
             if self.parallel_computation:
-                delayed_functions = delayed(self.sampler.collect_trajectory)(copy.deepcopy(self.thetas))
-                r = Parallel(n_jobs=self.batch_size, backend="loky")(delayed_functions)
-                res, _ = zip(*r)
+                # prepare the parameters
+                worker_dict = dict(
+                    env=copy.deepcopy(self.env),
+                    pol=copy.deepcopy(self.policy),
+                    dp=copy.deepcopy(self.data_processor),
+                    params=copy.deepcopy(self.thetas),
+                    starting_state=None
+                )
+
+                # build the parallel functions
+                delayed_functions = delayed(pg_sampling_worker)
+
+                # parallel computation
+                res = Parallel(n_jobs=self.n_jobs, backend="loky")(
+                    delayed_functions(**worker_dict) for _ in range(self.batch_size)
+                )
+
             else:
                 res = []
                 for j in range(self.batch_size):
                     tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas))
                     res.append(tmp_res)
-                res = tuple(res)
 
             # Update performance
             perf_vector = np.zeros(self.batch_size, dtype=np.float128)
@@ -184,8 +198,7 @@ class PolicyGradient:
         rolling_scores = np.zeros((self.batch_size, horizon, self.dim), dtype=np.float128)
         for t in range(horizon):
             rolling_scores[:, t, :] = np.sum(score_trajectory[:, :t, :], axis=1)
-        reward_trajectory = reward_trajectory * rolling_scores
-        # fixme: maybe bug
+        reward_trajectory = reward_trajectory[:, :, np.newaxis] * rolling_scores
         estimated_gradient = np.mean(np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1), axis=0)
         return estimated_gradient
 

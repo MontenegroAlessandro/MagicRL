@@ -11,6 +11,18 @@ import numpy as np
 import copy
 
 
+def pg_sampling_worker(
+        env=None,
+        pol=None,
+        dp=None,
+        params: np.array = None,
+        starting_state=None
+) -> list:
+    trajectory_sampler = PGTrajectorySampler(env=env, pol=pol, data_processor=dp)
+    res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state)
+    return res
+
+
 class PGTrajectorySampler:
     def __init__(
             self, env: BaseEnv = None,
