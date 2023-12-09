@@ -4,6 +4,8 @@ Author: @MontenegroAlessandro
 Date: 6/12/2023
 # todo natural
 # todo baseline
+# todo check parallel
+# todo check gpomdp
 """
 # Libraries
 import numpy as np
@@ -80,10 +82,10 @@ class PolicyGradient:
         self.parallel_computation = parallel_computation
 
         # Useful structures
-        self.theta_history = np.zeros((self.ite, self.dim), dtype=float)
+        self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float128)
         self.time = 0
-        self.performance_idx = np.zeros(ite, dtype=float)
-        self.best_theta = np.zeros(self.dim, dtype=float)
+        self.performance_idx = np.zeros(ite, dtype=np.float128)
+        self.best_theta = np.zeros(self.dim, dtype=np.float128)
         self.best_performance_theta = -np.inf
         self.sampler = PGTrajectorySampler(env=self.env,
                                            pol=self.policy,
@@ -114,9 +116,9 @@ class PolicyGradient:
                 res = tuple(res)
 
             # Update performance
-            perf_vector = np.zeros(self.batch_size, dtype=float)
-            score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=float)
-            reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=float)
+            perf_vector = np.zeros(self.batch_size, dtype=np.float128)
+            score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=np.float128)
+            reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float128)
             for j in range(self.batch_size):
                 perf_vector[j] = res[j][TrajectoryResults.PERF]
                 reward_vector[j, :] = res[j][TrajectoryResults.RewList]
@@ -143,9 +145,9 @@ class PolicyGradient:
             elif self.lr_strategy == "adam":
                 adaptive_lr = []
                 for j in range(self.dim):
-                    adaptive_lr.append(self.adam_optimizers[j].compute_gradient(estimated_gradient[i]))
+                    adaptive_lr.append(self.adam_optimizers[j].compute_gradient(estimated_gradient[j]))
                 adaptive_lr = np.array(adaptive_lr)
-                self.thetas += adaptive_lr
+                self.thetas = self.thetas + adaptive_lr
             else:
                 err_msg = f"[PG] {self.lr_strategy} not implemented yet!"
                 raise NotImplementedError(err_msg)
@@ -178,16 +180,16 @@ class PolicyGradient:
     ) -> np.array:
         gamma = self.env.gamma
         horizon = self.env.horizon
-        gamma_seq = (gamma * np.ones(horizon, dtype=float)) ** (np.arange(horizon))
-        rolling_scores = np.zeros((self.batch_size, horizon, self.dim), dtype=float)
+        gamma_seq = (gamma * np.ones(horizon, dtype=np.float128)) ** (np.arange(horizon))
+        rolling_scores = np.zeros((self.batch_size, horizon, self.dim), dtype=np.float128)
         for t in range(horizon):
             rolling_scores[:, t, :] = np.sum(score_trajectory[:, :t, :], axis=1)
         reward_trajectory = reward_trajectory * rolling_scores
         # fixme: maybe bug
-        estimated_gradient = np.mean(np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1), axis=1)
+        estimated_gradient = np.mean(np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1), axis=0)
         return estimated_gradient
 
-    def update_best_theta(self, current_perf: float) -> None:
+    def update_best_theta(self, current_perf: np.float128) -> None:
         if self.best_theta is None or self.best_performance_theta <= current_perf:
             self.best_performance_theta = current_perf
             self.best_theta = copy.deepcopy(self.thetas)
@@ -202,11 +204,11 @@ class PolicyGradient:
 
     def save_results(self) -> None:
         results = {
-            "performance": self.performance_idx.tolist(),
-            "best_theta": self.best_theta.tolist(),
-            "thetas_history": self.theta_history.tolist(),
-            "last_theta": self.thetas.tolist(),
-            "best_perf": self.best_performance_theta
+            "performance": np.array(self.performance_idx, dtype=float).tolist(),
+            "best_theta": np.array(self.best_theta, dtype=float).tolist(),
+            "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
+            "last_theta": np.array(self.thetas, dtype=float).tolist(),
+            "best_perf": float(self.best_performance_theta)
         }
 
         # Save the json

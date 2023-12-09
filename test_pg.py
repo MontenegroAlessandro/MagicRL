@@ -22,10 +22,10 @@ horizon = 100
 gamma = 1
 
 # algorithm
-DEBUG = True
+DEBUG = False
 NATURAL = False
-LR_STRATEGY = "constant"
-PARALLEL_FLAG = False
+LR_STRATEGY = "adam"
+PARALLEL_FLAG = True
 
 # test
 test_ite = 10
@@ -49,7 +49,7 @@ alg_parameters = dict(
     lr_strategy=LR_STRATEGY,
     estimator_type="REINFORCE",
     initial_theta=[1] * 4,
-    ite=100,
+    ite=1000,
     batch_size=5,
     env=env,
     policy=pol,

@@ -54,8 +54,8 @@ class PGTrajectorySampler:
 
         # initialize parameters
         perf = 0
-        rewards = np.zeros(self.env.horizon, dtype=float)
-        scores = np.zeros((self.env.horizon, self.pol.dim), dtype=float)
+        rewards = np.zeros(self.env.horizon, dtype=np.float128)
+        scores = np.zeros((self.env.horizon, self.pol.dim), dtype=np.float128)
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
