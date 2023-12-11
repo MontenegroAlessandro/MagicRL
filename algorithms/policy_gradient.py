@@ -4,7 +4,6 @@ Author: @MontenegroAlessandro
 Date: 6/12/2023
 # todo natural
 # todo baseline
-# todo check gpomdp
 """
 # Libraries
 import numpy as np
@@ -12,7 +11,7 @@ from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
 from algorithms.utils import TrajectoryResults, check_directory_and_create
-from algorithms.trajectory_sampler import PGTrajectorySampler, pg_sampling_worker
+from algorithms.trajectory_sampler import TrajectorySampler, pg_sampling_worker
 from joblib import Parallel, delayed
 import json, io
 from tqdm import tqdm
@@ -88,9 +87,9 @@ class PolicyGradient:
         self.performance_idx = np.zeros(ite, dtype=np.float128)
         self.best_theta = np.zeros(self.dim, dtype=np.float128)
         self.best_performance_theta = -np.inf
-        self.sampler = PGTrajectorySampler(env=self.env,
-                                           pol=self.policy,
-                                           data_processor=self.data_processor)
+        self.sampler = TrajectorySampler(env=self.env,
+                                         pol=self.policy,
+                                         data_processor=self.data_processor)
 
         # init the theta history
         self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
@@ -131,7 +130,8 @@ class PolicyGradient:
 
             # Update performance
             perf_vector = np.zeros(self.batch_size, dtype=np.float128)
-            score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim), dtype=np.float128)
+            score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim),
+                                    dtype=np.float128)
             reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float128)
             for j in range(self.batch_size):
                 perf_vector[j] = res[j][TrajectoryResults.PERF]
@@ -186,6 +186,7 @@ class PolicyGradient:
 
             # time update
             self.time += 1
+            self.policy.std_dev = np.clip(self.policy.std_dev - 1e-3, 1e-4, np.inf)
         return
 
     def update_g(
@@ -195,11 +196,10 @@ class PolicyGradient:
         gamma = self.env.gamma
         horizon = self.env.horizon
         gamma_seq = (gamma * np.ones(horizon, dtype=np.float128)) ** (np.arange(horizon))
-        rolling_scores = np.zeros((self.batch_size, horizon, self.dim), dtype=np.float128)
-        for t in range(horizon):
-            rolling_scores[:, t, :] = np.sum(score_trajectory[:, :t, :], axis=1)
+        rolling_scores = np.cumsum(score_trajectory, axis=1)
         reward_trajectory = reward_trajectory[:, :, np.newaxis] * rolling_scores
-        estimated_gradient = np.mean(np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1), axis=0)
+        estimated_gradient = np.mean(np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
+                                     axis=0)
         return estimated_gradient
 
     def update_best_theta(self, current_perf: np.float128) -> None:

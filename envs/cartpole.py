@@ -71,7 +71,7 @@ class ContCartPole(gym.Env):
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
         state = self.state
         x, x_dot, theta, theta_dot = state
-        force = np.clip(action,-self.force_mag,self.force_mag)
+        force = np.clip(action, -self.force_mag, self.force_mag)
         costheta = math.cos(theta)
         sintheta = math.sin(theta)
         temp = (force + self.polemass_length * theta_dot * theta_dot * sintheta) / self.total_mass
@@ -81,7 +81,7 @@ class ContCartPole(gym.Env):
         x_dot = x_dot + self.tau * xacc
         theta = theta + self.tau * theta_dot
         theta_dot = theta_dot + self.tau * thetaacc
-        self.state = (x, x_dot[0], theta, theta_dot[0]) # fixme
+        self.state = (x, x_dot[0], theta, theta_dot[0])
         done = (x < -self.x_threshold or x > self.x_threshold
                 or theta < -self.theta_threshold_radians or theta > self.theta_threshold_radians)
         done = bool(done)
@@ -101,7 +101,7 @@ class ContCartPole(gym.Env):
             reward = 0.0
         return np.array(self.state), reward, done, {}
 
-    def reset(self,initial=None):
+    def reset(self, initial=None):
         if initial is None:
             self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(4,))
         else:

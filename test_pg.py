@@ -15,7 +15,7 @@ import copy
 
 """Global Vars"""
 # general
-dir = "/Users/ale/results/pg/pg_test_reinforce"
+dir = "/Users/ale/results/pg/pg_test_gpomdp_adasigma_adam"
 
 # environment
 horizon = 100
@@ -26,7 +26,7 @@ DEBUG = False
 NATURAL = False
 LR_STRATEGY = "adam"
 PARALLEL_FLAG = True
-ESTIMATOR = "REINFORCE"
+ESTIMATOR = "GPOMDP"
 ITE = 1000
 
 # test
@@ -41,7 +41,7 @@ dp = IdentityDataProcessor()
 """Policy"""
 pol = LinearGaussianPolicy(
     parameters=[1] * 4,
-    std_dev=0.3,
+    std_dev=2,
     action_bounds=[-10, 10]
 )
 
@@ -52,7 +52,7 @@ alg_parameters = dict(
     estimator_type=ESTIMATOR,
     initial_theta=[1] * 4,
     ite=ITE,
-    batch_size=10,
+    batch_size=20,
     env=env,
     policy=pol,
     data_processor=dp,

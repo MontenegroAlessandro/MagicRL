@@ -7,6 +7,7 @@ Date: 6/12/2023
 from envs import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor
+from utils import RhoElem
 import numpy as np
 import copy
 
@@ -18,26 +19,71 @@ def pg_sampling_worker(
         params: np.array = None,
         starting_state=None
 ) -> list:
-    trajectory_sampler = PGTrajectorySampler(env=env, pol=pol, data_processor=dp)
+    trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp)
     res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state)
     return res
 
 
-class PGTrajectorySampler:
+class ParameterSampler:
+    def __init__(
+            self, env: BaseEnv = None,
+            pol: BasePolicy = None,
+            data_processor: BaseProcessor = None,
+            episodes_per_theta: int = 1,
+            n_jobs: int = 1
+    ) -> None:
+        err_msg = "[PGPETrajectorySampler] no environment provided!"
+        assert env is not None, err_msg
+        self.env = env
+
+        err_msg = "[PGPETrajectorySampler] no policy provided!"
+        assert pol is not None, err_msg
+        self.pol = pol
+
+        err_msg = "[PGPETrajectorySampler] no data_processor provided!"
+        assert data_processor is not None, err_msg
+        self.dp = data_processor
+
+        self.episodes_per_theta = episodes_per_theta
+        self.trajectory_sampler = TrajectorySampler(
+            env=self.env,
+            pol=self.pol,
+            data_processor=self.dp
+        )
+        self.n_jobs = n_jobs
+
+        return
+
+    def collect_trajectories(self, params: np.array):
+        # sample a parameter configuration
+        dim = len(params[RhoElem.MEAN])
+        thetas = np.zeros(dim, dtype=np.float128)
+        for i in range(dim):
+            thetas[i] = np.random.normal(
+                thetas[RhoElem.MEAN, i],
+                np.float128(np.exp(thetas[RhoElem.STD]))
+            )
+
+        # collect performances over the sampled parameter configuration
+        res = 0
+        return
+
+
+class TrajectorySampler:
     def __init__(
             self, env: BaseEnv = None,
             pol: BasePolicy = None,
             data_processor: BaseProcessor = None
     ) -> None:
-        err_msg = "[TrajectorySampler] no environment provided!"
+        err_msg = "[PGTrajectorySampler] no environment provided!"
         assert env is not None, err_msg
         self.env = env
 
-        err_msg = "[TrajectorySampler] no policy provided!"
+        err_msg = "[PGTrajectorySampler] no policy provided!"
         assert pol is not None, err_msg
         self.pol = pol
 
-        err_msg = "[TrajectorySampler] no data_processor provided!"
+        err_msg = "[PGTrajectorySampler] no data_processor provided!"
         assert data_processor is not None, err_msg
         self.dp = data_processor
 
