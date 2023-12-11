@@ -11,9 +11,10 @@ from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
 from algorithms.utils import TrajectoryResults, check_directory_and_create
-from algorithms.trajectory_sampler import TrajectorySampler, pg_sampling_worker
+from algorithms.samplers import TrajectorySampler, pg_sampling_worker
 from joblib import Parallel, delayed
-import json, io
+import json
+import io
 from tqdm import tqdm
 import copy
 from adam.adam import Adam
@@ -36,7 +37,6 @@ class PolicyGradient:
             verbose: bool = False,
             natural: bool = False,
             checkpoint_freq: int = 1,
-            parallel_computation: bool = False,
             n_jobs: int = 1
     ) -> None:
         # Class' parameter with checks
@@ -78,8 +78,8 @@ class PolicyGradient:
         self.verbose = verbose
         self.natural = natural
         self.checkpoint_freq = checkpoint_freq
-        self.parallel_computation = parallel_computation
         self.n_jobs = n_jobs
+        self.parallel_computation = bool(self.n_jobs != 1)
 
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float128)
@@ -87,9 +87,9 @@ class PolicyGradient:
         self.performance_idx = np.zeros(ite, dtype=np.float128)
         self.best_theta = np.zeros(self.dim, dtype=np.float128)
         self.best_performance_theta = -np.inf
-        self.sampler = TrajectorySampler(env=self.env,
-                                         pol=self.policy,
-                                         data_processor=self.data_processor)
+        self.sampler = TrajectorySampler(
+            env=self.env, pol=self.policy, data_processor=self.data_processor
+        )
 
         # init the theta history
         self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
@@ -186,7 +186,9 @@ class PolicyGradient:
 
             # time update
             self.time += 1
-            self.policy.std_dev = np.clip(self.policy.std_dev - 1e-3, 1e-4, np.inf)
+
+            # reduce the exploration factor of the policy
+            self.policy.reduce_exploration()
         return
 
     def update_g(
@@ -198,8 +200,9 @@ class PolicyGradient:
         gamma_seq = (gamma * np.ones(horizon, dtype=np.float128)) ** (np.arange(horizon))
         rolling_scores = np.cumsum(score_trajectory, axis=1)
         reward_trajectory = reward_trajectory[:, :, np.newaxis] * rolling_scores
-        estimated_gradient = np.mean(np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
-                                     axis=0)
+        estimated_gradient = np.mean(
+            np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
+            axis=0)
         return estimated_gradient
 
     def update_best_theta(self, current_perf: np.float128) -> None:

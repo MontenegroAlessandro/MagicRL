@@ -7,7 +7,8 @@ Date: 6/12/2023
 from envs import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor
-from utils import RhoElem
+from algorithms.utils import RhoElem, TrajectoryResults
+from joblib import Parallel, delayed
 import numpy as np
 import copy
 
@@ -21,6 +22,25 @@ def pg_sampling_worker(
 ) -> list:
     trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp)
     res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state)
+    return res
+
+
+def pgpe_sampling_worker(
+        env=None,
+        pol=None,
+        dp=None,
+        params: np.array = None,
+        episodes_per_theta: int = None,
+        n_jobs: int = None
+) -> np.array:
+    parameter_sampler = ParameterSampler(
+        env=env,
+        pol=pol,
+        data_processor=dp,
+        episodes_per_theta=episodes_per_theta,
+        n_jobs=n_jobs
+    )
+    res = parameter_sampler.collect_trajectories(params=params)
     return res
 
 
@@ -54,19 +74,45 @@ class ParameterSampler:
 
         return
 
-    def collect_trajectories(self, params: np.array):
+    def collect_trajectories(self, params: np.array) -> list:
         # sample a parameter configuration
         dim = len(params[RhoElem.MEAN])
         thetas = np.zeros(dim, dtype=np.float128)
         for i in range(dim):
             thetas[i] = np.random.normal(
-                thetas[RhoElem.MEAN, i],
-                np.float128(np.exp(thetas[RhoElem.STD]))
+                params[RhoElem.MEAN, i],
+                np.float128(np.exp(params[RhoElem.STD, i]))
             )
 
         # collect performances over the sampled parameter configuration
-        res = 0
-        return
+        if self.n_jobs == 1:
+            raw_res = []
+            for i in range(self.episodes_per_theta):
+                raw_res.append(self.trajectory_sampler.collect_trajectory(
+                    params=thetas, starting_state=None)
+                )
+        else:
+            worker_dict = dict(
+                env=copy.deepcopy(self.env),
+                pol=copy.deepcopy(self.pol),
+                dp=copy.deepcopy(self.dp),
+                params=copy.deepcopy(thetas),
+                starting_state=None
+            )
+            # build the parallel functions
+            delayed_functions = delayed(pg_sampling_worker)
+
+            # parallel computation
+            raw_res = Parallel(n_jobs=self.n_jobs, backend="loky")(
+                delayed_functions(**worker_dict) for _ in range(self.episodes_per_theta)
+            )
+
+        # keep just the performance over each trajectory
+        res = np.zeros(self.episodes_per_theta, dtype=np.float128)
+        for i, elem in enumerate(raw_res):
+            res[i] = elem[TrajectoryResults.PERF]
+
+        return [thetas, res]
 
 
 class TrajectorySampler:

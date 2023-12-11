@@ -72,3 +72,6 @@ class GWPolicy(BasePolicy):
 
     def compute_score(self, state, action):
         raise NotImplementedError("[GWPolicy] Ops, not implemented yet!")
+
+    def reduce_exploration(self):
+        raise NotImplementedError("[GWPolicy] Ops, not implemented yet!")

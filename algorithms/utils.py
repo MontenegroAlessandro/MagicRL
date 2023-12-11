@@ -24,6 +24,11 @@ class TrajectoryResults:
     ScoreList = 2
 
 
+class ParamSamplerResults:
+    THETA = 0
+    PERF = 1
+
+
 def check_directory_and_create(dir_name: str = None) -> None:
     """
     Summary:

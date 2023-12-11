@@ -3,29 +3,29 @@ Summary: PGPE implementation
 Author: @MontenegroAlessandro
 Date: 14/7/2023
 """
-# todo: parallelize the sampling process via joblib
-# todo: ...
 # Libraries
-import numpy as np
-from envs.base_env import BaseEnv
-from policies import BasePolicy
-from data_processors import BaseProcessor, IdentityDataProcessor
-from algorithms.utils import RhoElem, LearnRates
-import json, io, os, errno
-from tqdm import tqdm
 import copy
+import errno
+import io
+import json
+import os
+
+import numpy as np
+from tqdm import tqdm
 from adam.adam import Adam
+from algorithms.utils import LearnRates, check_directory_and_create, ParamSamplerResults
+from data_processors import IdentityDataProcessor
+from algorithms.samplers import *
 
 
 # Objects
 class PGPE:
-    """Class implementing PGPE"""
-
+    """Class implementing PGPE exploiting a Gaussian Hyper-Policy."""
     def __init__(
             self,
             lr: list = None,
             initial_rho: np.array = None,
-            ite: int = 0,
+            ite: int = 100,
             batch_size: int = 10,
             episodes_per_theta: int = 10,
             env: BaseEnv = None,
@@ -36,7 +36,9 @@ class PGPE:
             natural: bool = False,
             checkpoint_freq: int = 1,
             lr_strategy: str = "constant",
-            learn_std: bool = False
+            learn_std: bool = False,
+            n_jobs_param: int = 1,
+            n_jobs_traj: int = 1
     ) -> None:
         """
         Args:
@@ -44,7 +46,7 @@ class PGPE:
             
             initial_rho (np.array, optional): Initial configuration of the
             hyperpolicy. Each element is assumed to be an array containing
-            "[mean, log(variance)]". Defaults to None.
+            "[mean, log(std_dev)]". Defaults to None.
             
             ite (int, optional): Number of required iterations. Defaults to 0.
             
@@ -68,16 +70,12 @@ class PGPE:
             
             natural (bool): whether to use the natural gradient
         """
-        # Arguments
+        # Arguments with checks
         assert lr is not None, "[ERROR] No Learning rate provided"
         self.lr = lr[LearnRates.RHO]
 
         assert initial_rho is not None, "[ERROR] No initial hyperpolicy."
-        self.rho = np.array(initial_rho, dtype=float)
-
-        self.ite = ite
-        self.batch_size = batch_size
-        self.episodes_per_theta = episodes_per_theta
+        self.rho = np.array(initial_rho, dtype=np.float128)
 
         assert env is not None, "[ERROR] No env provided."
         self.env = env
@@ -89,64 +87,102 @@ class PGPE:
         self.data_processor = data_processor
 
         self.directory = directory
-        if not os.path.exists(os.path.dirname(directory+"/")):
-            try:
-                os.makedirs(os.path.dirname(directory+"/"))
-            except OSError as exc:  # Guard against race condition
-                if exc.errno != errno.EEXIST:
-                    raise
-        self.verbose = verbose
-        self.natural = natural
-        self.learn_std = learn_std
+        check_directory_and_create(self.directory)
 
         err_msg = "[PGPE] The lr_strategy is not valid."
         assert lr_strategy in ["constant", "adam"], err_msg
         self.lr_strategy = lr_strategy
         if self.lr_strategy == "adam":
             self.rho_adam = [None, None]
-            self.rho_adam[RhoElem.MEAN] = Adam(step_size=self.lr,
-                                               strategy="ascent")
-            self.rho_adam[RhoElem.STD] = Adam(step_size=self.lr,
-                                              strategy="ascent")
+            self.rho_adam[RhoElem.MEAN] = Adam(step_size=self.lr, strategy="ascent")
+            self.rho_adam[RhoElem.STD] = Adam(step_size=self.lr, strategy="ascent")
 
-        # Other parameters
+        # Arguments without check
+        self.ite = ite
+        self.batch_size = batch_size
+        self.episodes_per_theta = episodes_per_theta
+        self.verbose = verbose
+        self.natural = natural
+        self.learn_std = learn_std
+        self.n_jobs_param = n_jobs_param
+        self.n_jobs_traj = n_jobs_traj
+
+        # Additional parameters
         self.dim = len(self.rho[RhoElem.MEAN])
         if len(self.rho[RhoElem.STD]) != self.dim:
             raise ValueError("[PGPE] different size in RHO for µ and σ.")
-        self.thetas = np.zeros((self.batch_size, self.dim))
+        self.thetas = np.zeros((self.batch_size, self.dim), dtype=np.float128)
         self.time = 0
-        self.performance_idx = np.zeros(ite, dtype=float)
-        self.performance_idx_theta = np.zeros((ite, batch_size), dtype=float)
+        self.performance_idx = np.zeros(ite, dtype=np.float128)
+        self.performance_idx_theta = np.zeros((ite, batch_size), dtype=np.float128)
+        self.parallel_computation_param = bool(self.n_jobs_param != 1)
+        self.parallel_computation_traj = bool(self.n_jobs_traj != 1)
+        self.sampler = ParameterSampler(
+            env=self.env, pol=self.policy, data_processor=self.data_processor,
+            episodes_per_theta=self.episodes_per_theta, n_jobs=self.n_jobs_traj
+        )
 
-        # Best saving parameters
-        self.best_theta = np.zeros(self.dim, dtype=float)
+        # Saving parameters
+        self.best_theta = np.zeros(self.dim, dtype=np.float128)
         self.best_rho = self.rho
         self.best_performance_theta = -np.inf
         self.best_performance_rho = -np.inf
         self.checkpoint_freq = checkpoint_freq
+
+        self.rho_history = np.zeros((ite, self.dim), dtype=np.float128)
+        self.rho_history[0, :] = copy.deepcopy(self.rho[RhoElem.MEAN])
+
         return
 
     def learn(self) -> None:
         """Learning function"""
         for i in tqdm(range(self.ite)):
-            # starting_state = self.env.sample_random_state()
-            for j in range(self.batch_size):
-                # Sample theta
-                self.sample_theta(index=j)
+            # Collect the results
+            if self.parallel_computation_param:
+                worker_dict = dict(
+                    env=copy.deepcopy(self.env),
+                    pol=copy.deepcopy(self.policy),
+                    dp=copy.deepcopy(self.data_processor),
+                    params=copy.deepcopy(self.rho),
+                    episodes_per_theta=self.episodes_per_theta,
+                    n_jobs=self.n_jobs_traj
+                )
+                delayed_functions = delayed(pgpe_sampling_worker)
+                res = Parallel(n_jobs=self.n_jobs_param)(
+                    delayed_functions(**worker_dict) for _ in range(self.batch_size)
+                )
+            else:
+                res = []
+                for j in range(self.batch_size):
+                    res.append(self.sampler.collect_trajectories(params=copy.deepcopy(self.rho)))
+                    '''# Sample theta
+                    self.sample_theta(index=j)
 
-                # Collect Trajectories
-                sample_mean = np.zeros(self.episodes_per_theta, dtype=float)
-                for z in range(self.episodes_per_theta):
-                    sample_mean[z] = self.collect_trajectory(
-                        params=self.thetas[j, :],
-                        # starting_state=starting_state
-                    )
-                perf = np.mean(sample_mean)
-                self.performance_idx_theta[i, j] = perf
+                    # Collect Trajectories
+                    sample_mean = np.zeros(self.episodes_per_theta, dtype=np.float128)
+                    for z in range(self.episodes_per_theta):
+                        sample_mean[z] = self.collect_trajectory(
+                            params=self.thetas[j, :],
+                            # starting_state=starting_state
+                        )
+                    perf = np.mean(sample_mean)
+                    self.performance_idx_theta[i, j] = perf
 
-                # Try to update the best config
-                self.update_best_theta(current_perf=perf,
-                                       params=self.thetas[j, :])
+                    # Try to update the best config
+                    self.update_best_theta(current_perf=perf, params=self.thetas[j, :])'''
+            # post-processing of results
+            performance_res = np.zeros(self.batch_size, dtype=np.float128)
+            for z in range(self.batch_size):
+                self.thetas[z, :] = res[z][ParamSamplerResults.THETA]
+                performance_res[z] = np.mean(res[z][ParamSamplerResults.PERF])
+            self.performance_idx_theta[i, :] = performance_res
+
+            # try to update the best theta
+            max_batch_perf = np.max(performance_res)
+            best_theta_batch_index = np.where(performance_res == max_batch_perf)[0]
+            self.update_best_theta(
+                current_perf=max_batch_perf, params=self.thetas[best_theta_batch_index, :]
+            )
 
             # Update performance
             self.performance_idx[i] = np.mean(self.performance_idx_theta[i, :])
@@ -156,6 +192,9 @@ class PGPE:
 
             # Update parameters
             self.update_rho()
+
+            # save the current rho configuration
+            self.rho_history[self.time, :] = copy.deepcopy(self.rho[RhoElem.MEAN])
 
             # Update time counter
             self.time += 1
@@ -193,22 +232,20 @@ class PGPE:
             grad_s = (log_nu_rho_std * cur_std_vec * batch_perf)
 
             if self.lr_strategy == "constant":
-                self.rho[RhoElem.MEAN, id] += self.lr * np.mean(grad_m)
+                self.rho[RhoElem.MEAN, id] = self.rho[RhoElem.MEAN, id] + self.lr * np.mean(grad_m)
                 if self.learn_std:
-                    self.rho[RhoElem.STD, id] += self.lr * np.mean(grad_s)
+                    self.rho[RhoElem.STD, id] = self.rho[RhoElem.STD, id] + self.lr * np.mean(grad_s)
             elif self.lr_strategy == "adam":
-                self.rho[RhoElem.MEAN, id] += self.rho_adam[RhoElem.MEAN].compute_gradient(grad_m)
+                self.rho[RhoElem.MEAN, id] = self.rho[RhoElem.MEAN, id] + self.rho_adam[RhoElem.MEAN].compute_gradient(grad_m)
                 if self.learn_std:
-                    self.rho[RhoElem.STD] += self.rho_adam[RhoElem.STD].compute_gradient(grad_s)
+                    self.rho[RhoElem.STD] = self.rho[RhoElem.STD] + self.rho_adam[RhoElem.STD].compute_gradient(grad_s)
 
             if self.verbose:
                 print(f"MEANs: {cur_mean_vec[0]} - STD: {cur_std_vec[0]}")
                 print(f"LOG MEANs: {log_nu_rho_mean}")
                 print(f"LOG STDs: {log_nu_rho_std}")
-                print(
-                    f"GRAD MEANs: {np.mean(grad_m)} - GRAD STDs: {np.mean(grad_s)}")
-                print(
-                    f"RHO: mean => {self.rho[RhoElem.MEAN, id]} - std => {self.rho[RhoElem.STD, id]}")
+                print(f"GRAD MEANs: {np.mean(grad_m)} - GRAD STDs: {np.mean(grad_s)}")
+                print(f"RHO: mean => {self.rho[RhoElem.MEAN, id]} - std => {self.rho[RhoElem.STD, id]}")
         return
 
     def sample_theta(self, index: int) -> None:
@@ -236,8 +273,7 @@ class PGPE:
             )
         return thetas
 
-    def collect_trajectory(self, params: np.array,
-                           starting_state=None) -> float:
+    def collect_trajectory(self, params: np.array, starting_state=None) -> float:
         """
         Summary:
             Function collecting a trajectory reward for a particular theta 
@@ -275,12 +311,12 @@ class PGPE:
             perf += (self.env.gamma ** t) * rew
 
             if self.verbose:
-                print("******************************************************")
-                print(f"ACTION: {a.radius} - {a.theta}")
+                print("*" * 30)
+                print(f"ACTION: {a}")
                 print(f"FEATURES: {features}")
                 print(f"REWARD: {rew}")
                 print(f"PERFORMANCE: {perf}")
-                print("******************************************************")
+                print("*" * 30)
             
             if abs:
                 break
@@ -297,10 +333,10 @@ class PGPE:
         if current_perf > self.best_performance_rho:
             self.best_rho = self.rho
             self.best_performance_rho = current_perf
-            print("-----------------------------------------------------------")
+            print("-" * 30)
             print(f"New best RHO: {self.best_rho}")
             print(f"New best PERFORMANCE: {self.best_performance_rho}")
-            print("-----------------------------------------------------------")
+            print("-" * 30)
 
             # Save the best rho configuration
             if self.directory != "":
@@ -321,10 +357,10 @@ class PGPE:
         if current_perf > self.best_performance_theta:
             self.best_theta = params
             self.best_performance_theta = current_perf
-            print("-----------------------------------------------------------")
+            print("*" * 30)
             print(f"New best THETA: {self.best_theta}")
             print(f"New best PERFORMANCE: {self.best_performance_theta}")
-            print("-----------------------------------------------------------")
+            print("*" * 30)
 
             # Save the best theta configuration
             if self.directory != "":
@@ -338,23 +374,17 @@ class PGPE:
     def save_results(self) -> None:
         """Function saving the results of the training procedure"""
         # Create the dictionary with the useful info
-        # fixme -> some histories as the one of rho...
         results = {
-            "performance_rho": self.performance_idx.tolist(),
-            "performance_thetas_per_rho": self.performance_idx_theta.tolist(),
-            "best_theta": self.best_theta.tolist(),
-            "best_rho": self.best_rho.tolist(),
-            "thetas_history": self.thetas.tolist()
+            "performance_rho": np.array(self.performance_idx, dtype=float).tolist(),
+            "performance_thetas_per_rho": np.array(self.performance_idx_theta, dtype=float).tolist(),
+            "best_theta": np.array(self.best_theta, dtype=float).tolist(),
+            "best_rho": np.array(self.best_rho, dtype=float).tolist(),
+            "thetas_history": np.array(self.thetas, dtype=float).tolist(),
+            "rho_history": np.array(self.rho_history, dtype=float).tolist()
         }
 
         # Save the json
         name = self.directory + "/pgpe_results.json"
-        if not os.path.exists(os.path.dirname(name)):
-            try:
-                os.makedirs(os.path.dirname(name))
-            except OSError as exc:  # Guard against race condition
-                if exc.errno != errno.EEXIST:
-                    raise
         with io.open(name, 'w', encoding='utf-8') as f:
             f.write(json.dumps(results, ensure_ascii=False, indent=4))
             f.close()
