@@ -147,8 +147,9 @@ class PolicyGradient:
                 estimated_gradient = np.mean(
                     perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=0)
             elif self.estimator_type == "GPOMDP":
-                estimated_gradient = self.update_g(reward_trajectory=reward_vector,
-                                                   score_trajectory=score_vector)
+                estimated_gradient = self.update_g(
+                    reward_trajectory=reward_vector, score_trajectory=score_vector
+                )
             else:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
                 raise NotImplementedError(err_msg)

@@ -16,7 +16,7 @@ gamma = 1
 # algorithm
 DEBUG = False
 NATURAL = False
-LR_STRATEGY = "constant"
+LR_STRATEGY = "adam"
 LEARN_STD = False
 ITE = 1000
 
@@ -40,11 +40,11 @@ hp = np.zeros((2, 4))
 hp[0] = [0.5] * 4
 hp[1] = [0.001] * 4
 alg_parameters = dict(
-    lr=[1e-3],
+    lr=[1e-1],
     initial_rho=hp,
     ite=ITE,
-    batch_size=10,
-    episodes_per_theta=20,
+    batch_size=20,
+    episodes_per_theta=1,
     env=env,
     policy=pol,
     data_processor=dp,
@@ -54,8 +54,10 @@ alg_parameters = dict(
     checkpoint_freq=100,
     lr_strategy=LR_STRATEGY,
     learn_std=LEARN_STD,
-    n_jobs_param=3,
-    n_jobs_traj=3
+    std_decay=0,
+    std_min=1e-4,
+    n_jobs_param=6,
+    n_jobs_traj=1
 )
 alg = PGPE(**alg_parameters)
 

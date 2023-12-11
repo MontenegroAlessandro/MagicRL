@@ -37,6 +37,8 @@ class PGPE:
             checkpoint_freq: int = 1,
             lr_strategy: str = "constant",
             learn_std: bool = False,
+            std_decay: float = 0,
+            std_min:float = 1e-4,
             n_jobs_param: int = 1,
             n_jobs_traj: int = 1
     ) -> None:
@@ -76,6 +78,7 @@ class PGPE:
 
         assert initial_rho is not None, "[ERROR] No initial hyperpolicy."
         self.rho = np.array(initial_rho, dtype=np.float128)
+        self.dim = len(self.rho[RhoElem.MEAN])
 
         assert env is not None, "[ERROR] No env provided."
         self.env = env
@@ -104,11 +107,12 @@ class PGPE:
         self.verbose = verbose
         self.natural = natural
         self.learn_std = learn_std
+        self.std_decay = std_decay
+        self.std_min = std_min
         self.n_jobs_param = n_jobs_param
         self.n_jobs_traj = n_jobs_traj
 
         # Additional parameters
-        self.dim = len(self.rho[RhoElem.MEAN])
         if len(self.rho[RhoElem.STD]) != self.dim:
             raise ValueError("[PGPE] different size in RHO for µ and σ.")
         self.thetas = np.zeros((self.batch_size, self.dim), dtype=np.float128)
@@ -155,21 +159,7 @@ class PGPE:
                 res = []
                 for j in range(self.batch_size):
                     res.append(self.sampler.collect_trajectories(params=copy.deepcopy(self.rho)))
-                    '''# Sample theta
-                    self.sample_theta(index=j)
 
-                    # Collect Trajectories
-                    sample_mean = np.zeros(self.episodes_per_theta, dtype=np.float128)
-                    for z in range(self.episodes_per_theta):
-                        sample_mean[z] = self.collect_trajectory(
-                            params=self.thetas[j, :],
-                            # starting_state=starting_state
-                        )
-                    perf = np.mean(sample_mean)
-                    self.performance_idx_theta[i, j] = perf
-
-                    # Try to update the best config
-                    self.update_best_theta(current_perf=perf, params=self.thetas[j, :])'''
             # post-processing of results
             performance_res = np.zeros(self.batch_size, dtype=np.float128)
             for z in range(self.batch_size):
@@ -203,16 +193,55 @@ class PGPE:
                 print(f"theta perf: {self.performance_idx_theta}")
             if self.time % self.checkpoint_freq == 0:
                 self.save_results()
+
+            # std_decay
+            if not self.learn_std:
+                self.rho[RhoElem.STD, :] = np.clip(
+                    self.rho[RhoElem.STD, :] - self.std_decay, self.std_min, np.inf
+                )
         return
 
-    def update_rho(self) -> None:  # FIXME
+    def update_rho(self) -> None:  # fixme
         """This function modifies the self.rho vector, by updating via the 
         estimated gradient."""
         # Take the performance of the whole batch
         batch_perf = self.performance_idx_theta[self.time, :]
 
+        # take the means and the sigmas
+        means = self.rho[RhoElem.MEAN, :]
+        log_stds = self.rho[RhoElem.STD, :]
+        stds = np.float128(np.exp(self.rho[RhoElem.STD, :]))
+
+        # compute the scores
+        if not self.natural:
+            log_nu_means = (self.thetas - means) / (stds ** 2)
+            log_nu_stds = (((self.thetas - means) ** 2) - (stds ** 2)) / (stds ** 2)
+        else:
+            log_nu_means = self.thetas - means
+            log_nu_stds = (((self.thetas - means) ** 2) - (stds ** 2)) / (2 * (stds ** 2))
+
+        # compute the gradients
+        grad_means = batch_perf[:, np.newaxis] * log_nu_means
+        grad_stds = batch_perf[:, np.newaxis] * log_nu_stds
+
+        # update rho
+        if self.lr_strategy == "constant":
+            self.rho[RhoElem.MEAN, :] = self.rho[RhoElem.MEAN, :] + self.lr * np.mean(grad_means)
+            if self.learn_std:
+                self.rho[RhoElem.STD, :] = self.rho[RhoElem.STD, :] + self.lr * np.mean(grad_stds)
+        elif self.lr_strategy == "adam":
+            adaptive_lr_m = self.rho_adam[RhoElem.MEAN].compute_gradient(np.mean(grad_means))
+            adaptive_lr_s = self.rho_adam[RhoElem.STD].compute_gradient(np.mean(grad_stds))
+            adaptive_lr_m = np.array(adaptive_lr_m)
+            adaptive_lr_s = np.array(adaptive_lr_s)
+            # update
+            self.rho[RhoElem.MEAN, :] = self.rho[RhoElem.MEAN, :] + adaptive_lr_m
+            self.rho[RhoElem.STD, :] = self.rho[RhoElem.STD, :] + adaptive_lr_s
+        else:
+            pass
+
         # Loop over the rho elements
-        for id in range(len(self.rho[RhoElem.MEAN])):
+        '''for id in range(self.dim):
             cur_mean_vec = self.rho[RhoElem.MEAN, id] * np.ones(self.batch_size)
             cur_std_vec = np.exp(
                 np.float128(self.rho[RhoElem.STD, id])) * np.ones(
@@ -236,16 +265,16 @@ class PGPE:
                 if self.learn_std:
                     self.rho[RhoElem.STD, id] = self.rho[RhoElem.STD, id] + self.lr * np.mean(grad_s)
             elif self.lr_strategy == "adam":
-                self.rho[RhoElem.MEAN, id] = self.rho[RhoElem.MEAN, id] + self.rho_adam[RhoElem.MEAN].compute_gradient(grad_m)
+                self.rho[RhoElem.MEAN, id] = self.rho[RhoElem.MEAN, id] + self.rho_adam[RhoElem.MEAN][id].compute_gradient(grad_m[id])
                 if self.learn_std:
-                    self.rho[RhoElem.STD] = self.rho[RhoElem.STD] + self.rho_adam[RhoElem.STD].compute_gradient(grad_s)
+                    self.rho[RhoElem.STD, id] = self.rho[RhoElem.STD, id] + self.rho_adam[RhoElem.STD][id].compute_gradient(grad_s[id])
 
             if self.verbose:
                 print(f"MEANs: {cur_mean_vec[0]} - STD: {cur_std_vec[0]}")
                 print(f"LOG MEANs: {log_nu_rho_mean}")
                 print(f"LOG STDs: {log_nu_rho_std}")
                 print(f"GRAD MEANs: {np.mean(grad_m)} - GRAD STDs: {np.mean(grad_s)}")
-                print(f"RHO: mean => {self.rho[RhoElem.MEAN, id]} - std => {self.rho[RhoElem.STD, id]}")
+                print(f"RHO: mean => {self.rho[RhoElem.MEAN, id]} - std => {self.rho[RhoElem.STD, id]}")'''
         return
 
     def sample_theta(self, index: int) -> None:
