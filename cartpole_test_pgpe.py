@@ -7,7 +7,7 @@ from art import *
 
 """Global Vars"""
 # general
-dir = "/Users/ale/results/pgpe/pg_test_cartpole"
+dir = "/Users/ale/results/pgpe/pgpe_test_cartpole_adam"
 
 # environment
 horizon = 100
@@ -54,7 +54,7 @@ alg_parameters = dict(
     checkpoint_freq=100,
     lr_strategy=LR_STRATEGY,
     learn_std=LEARN_STD,
-    std_decay=0,
+    std_decay=1e-5,
     std_min=1e-4,
     n_jobs_param=6,
     n_jobs_traj=1

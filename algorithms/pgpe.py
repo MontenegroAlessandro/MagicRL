@@ -196,12 +196,12 @@ class PGPE:
 
             # std_decay
             if not self.learn_std:
-                self.rho[RhoElem.STD, :] = np.clip(
-                    self.rho[RhoElem.STD, :] - self.std_decay, self.std_min, np.inf
-                )
+                std = np.float128(np.exp(self.rho[RhoElem.STD]))
+                std = np.clip(std - self.std_decay, self.std_min, np.inf)
+                self.rho[RhoElem.STD, :] = np.log(std)
         return
 
-    def update_rho(self) -> None:  # fixme
+    def update_rho(self) -> None:
         """This function modifies the self.rho vector, by updating via the 
         estimated gradient."""
         # Take the performance of the whole batch
@@ -209,7 +209,6 @@ class PGPE:
 
         # take the means and the sigmas
         means = self.rho[RhoElem.MEAN, :]
-        log_stds = self.rho[RhoElem.STD, :]
         stds = np.float128(np.exp(self.rho[RhoElem.STD, :]))
 
         # compute the scores
@@ -226,55 +225,21 @@ class PGPE:
 
         # update rho
         if self.lr_strategy == "constant":
-            self.rho[RhoElem.MEAN, :] = self.rho[RhoElem.MEAN, :] + self.lr * np.mean(grad_means)
+            self.rho[RhoElem.MEAN, :] = self.rho[RhoElem.MEAN, :] + self.lr * np.mean(grad_means, axis=0)
+            # update sigma if it is the case
             if self.learn_std:
-                self.rho[RhoElem.STD, :] = self.rho[RhoElem.STD, :] + self.lr * np.mean(grad_stds)
+                self.rho[RhoElem.STD, :] = self.rho[RhoElem.STD, :] + self.lr * np.mean(grad_stds, axis=0)
         elif self.lr_strategy == "adam":
-            adaptive_lr_m = self.rho_adam[RhoElem.MEAN].compute_gradient(np.mean(grad_means))
-            adaptive_lr_s = self.rho_adam[RhoElem.STD].compute_gradient(np.mean(grad_stds))
+            adaptive_lr_m = self.rho_adam[RhoElem.MEAN].compute_gradient(np.mean(grad_means, axis=0))
             adaptive_lr_m = np.array(adaptive_lr_m)
-            adaptive_lr_s = np.array(adaptive_lr_s)
-            # update
             self.rho[RhoElem.MEAN, :] = self.rho[RhoElem.MEAN, :] + adaptive_lr_m
-            self.rho[RhoElem.STD, :] = self.rho[RhoElem.STD, :] + adaptive_lr_s
+            # update sigma if it is the case
+            if self.learn_std:
+                adaptive_lr_s = self.rho_adam[RhoElem.STD].compute_gradient(np.mean(grad_stds, axis=0))
+                adaptive_lr_s = np.array(adaptive_lr_s)
+                self.rho[RhoElem.STD, :] = self.rho[RhoElem.STD, :] + adaptive_lr_s
         else:
-            pass
-
-        # Loop over the rho elements
-        '''for id in range(self.dim):
-            cur_mean_vec = self.rho[RhoElem.MEAN, id] * np.ones(self.batch_size)
-            cur_std_vec = np.exp(
-                np.float128(self.rho[RhoElem.STD, id])) * np.ones(
-                self.batch_size)
-
-            if not self.natural:
-                log_nu_rho_mean = (self.thetas[:, id] - cur_mean_vec) / (
-                            cur_std_vec ** 2)
-                log_nu_rho_std = (((self.thetas[:, id] - cur_mean_vec) ** 2) - (
-                            cur_std_vec ** 2)) / (cur_std_vec ** 2)
-            else:
-                log_nu_rho_mean = self.thetas[:, id] - cur_mean_vec
-                log_nu_rho_std = (((self.thetas[:, id] - cur_mean_vec) ** 2) - (
-                            cur_std_vec ** 2)) / (2 * cur_std_vec ** 2)
-
-            grad_m = (log_nu_rho_mean * batch_perf)
-            grad_s = (log_nu_rho_std * cur_std_vec * batch_perf)
-
-            if self.lr_strategy == "constant":
-                self.rho[RhoElem.MEAN, id] = self.rho[RhoElem.MEAN, id] + self.lr * np.mean(grad_m)
-                if self.learn_std:
-                    self.rho[RhoElem.STD, id] = self.rho[RhoElem.STD, id] + self.lr * np.mean(grad_s)
-            elif self.lr_strategy == "adam":
-                self.rho[RhoElem.MEAN, id] = self.rho[RhoElem.MEAN, id] + self.rho_adam[RhoElem.MEAN][id].compute_gradient(grad_m[id])
-                if self.learn_std:
-                    self.rho[RhoElem.STD, id] = self.rho[RhoElem.STD, id] + self.rho_adam[RhoElem.STD][id].compute_gradient(grad_s[id])
-
-            if self.verbose:
-                print(f"MEANs: {cur_mean_vec[0]} - STD: {cur_std_vec[0]}")
-                print(f"LOG MEANs: {log_nu_rho_mean}")
-                print(f"LOG STDs: {log_nu_rho_std}")
-                print(f"GRAD MEANs: {np.mean(grad_m)} - GRAD STDs: {np.mean(grad_s)}")
-                print(f"RHO: mean => {self.rho[RhoElem.MEAN, id]} - std => {self.rho[RhoElem.STD, id]}")'''
+            raise NotImplementedError("[PGPE] Ops, not implemented yet!")
         return
 
     def sample_theta(self, index: int) -> None:
