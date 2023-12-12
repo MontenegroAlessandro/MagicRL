@@ -7,11 +7,11 @@ from art import *
 
 """Global Vars"""
 # general
-dir = "/Users/ale/results/pgpe/pgpe_test_cartpole_adam"
+dir = "/Users/ale/results/pgpe/pgpe_test_cartpole_adam_long"
 
 # environment
-horizon = 100
-gamma = 1
+horizon = 1000
+gamma = 0.999
 
 # algorithm
 DEBUG = False

@@ -15,11 +15,11 @@ import copy
 
 """Global Vars"""
 # general
-dir = "/Users/ale/results/pg/pg_test_gpomdp_adasigma_adam"
+dir = "/Users/ale/results/pg/pg_test_gpomdp_adasigma_adam_long"
 
 # environment
-horizon = 100
-gamma = 1
+horizon = 1000
+gamma = 0.999
 
 # algorithm
 DEBUG = False
