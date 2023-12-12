@@ -1,8 +1,4 @@
-"""
-Summary: utils for the algorithm
-Author: @MontenegroAlessandro
-Date: 21/7/2023
-"""
+"""Utils for the Algorithms"""
 import os
 import errno
 

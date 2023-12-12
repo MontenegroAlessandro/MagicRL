@@ -1,8 +1,4 @@
-""" 
-Summary: Data Processing utils functions
-Author: @MontenegroAlessandro
-Date: 20/7/2023
-"""
+""" Data Processing utils functions"""
 # Libraries
 import numpy as np
 

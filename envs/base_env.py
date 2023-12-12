@@ -1,6 +1,7 @@
 """todo"""
 from abc import ABC, abstractmethod
 
+
 class BaseEnv(ABC):
     """Abstract class for the Environments"""
 
@@ -13,7 +14,7 @@ class BaseEnv(ABC):
         self.verbose = verbose
 
     @abstractmethod
-    def step(self):
+    def step(self, action):
         """todo"""
         pass
 

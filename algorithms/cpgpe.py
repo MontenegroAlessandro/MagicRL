@@ -1,8 +1,4 @@
-"""
-Summary: CPGPE implementation
-Author: @MontenegroAlessandro
-Date: 8/11/2023
-"""
+"""CPGPE implementation"""
 # todo -> parallelize the sampling process via joblib
 # todo -> adam in PGPE and then inherit
 # todo -> saving; resume and other stuff in PGPE

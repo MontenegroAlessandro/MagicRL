@@ -1,8 +1,4 @@
-"""
-Summary: Test for PGPE on continuous grid world environment
-Author: @MontenegroAlessandro
-Date 20/7/2023
-"""
+"""Test for PGPE on continuous grid world environment"""
 import envs.utils
 # Libraries
 from envs import *

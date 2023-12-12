@@ -1,10 +1,7 @@
-"""
-Summary: Base Policy class implementation
-Author: Alessandro Montenegro
-Date: 19/7/2023
-"""
+"""Base Policy class implementation"""
 # Libraries
 from abc import ABC, abstractmethod
+
 
 # Class
 class BaseProcessor(ABC):

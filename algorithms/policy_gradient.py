@@ -1,10 +1,7 @@
-"""
-Summary: Policy Gradient Implementation
-Author: @MontenegroAlessandro
-Date: 6/12/2023
+"""Policy Gradient Implementation"""
 # todo natural
 # todo baseline
-"""
+
 # Libraries
 import numpy as np
 from envs.base_env import BaseEnv

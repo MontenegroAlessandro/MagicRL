@@ -1,8 +1,4 @@
-"""
-Summary: Python Script implementing the GridWorldMDP with goal in the center
-Author: @MontenegroAlessandro
-Date: 12/7/2023
-"""
+"""Python Script implementing the GridWorldMDP with goal in the center"""
 import copy
 
 # todo -> make the discrete environment in line with the continuous one

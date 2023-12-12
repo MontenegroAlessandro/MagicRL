@@ -1,9 +1,5 @@
-"""
-Summary: implementation of a parametric policy for the continuous verison of 
-Grid World.
-Author: @MontenegroAlessandro
-Date: 19/7/2023
-"""
+"""Implementation of a parametric policy for the continuous version of
+Grid World."""
 # Libraries
 from policies.base_policy import BasePolicy
 import numpy as np

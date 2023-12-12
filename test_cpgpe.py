@@ -1,9 +1,6 @@
-"""
-Summary: Test for CPGPE on continuous grid world environment
-Author: @MontenegroAlessandro
-Date 12/10/2023
-todo -> create configuration files
-"""
+"""Test for CPGPE on continuous grid world environment"""
+# todo -> create configuration files
+
 # Libraries
 from envs import *
 from policies import GWPolicy

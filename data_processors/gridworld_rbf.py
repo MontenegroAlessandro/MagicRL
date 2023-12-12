@@ -1,14 +1,11 @@
-""" 
-Summary: Data Processing class performing a data transformation of the position 
-of the agent, by using RBF
-Author: @MontenegroAlessandro
-Date: 20/7/2023
-"""
+"""Data Processing class performing a data transformation of the position
+of the agent, by using RBF."""
 # Libraries
 from data_processors.utils import gauss
 from envs.utils import Position
 from data_processors.base_processor import BaseProcessor
 import numpy as np
+
 
 # Data Processor class
 class GWDataProcessorRBF(BaseProcessor):
@@ -19,9 +16,9 @@ class GWDataProcessorRBF(BaseProcessor):
     def __init__(self, num_basis: int, grid_size: int, std_dev: float) -> None:
         """
         Args:
-            num_basis (int): how many gaussians to use
+            num_basis (int): how many Gaussians to use
             grid_size (int): the dimension of the gridworld
-            std_dev (float): the standard deviation taht each gaussian needs 
+            std_dev (float): the standard deviation that each gaussian needs
             to have
         """
         super().__init__()
@@ -31,7 +28,6 @@ class GWDataProcessorRBF(BaseProcessor):
     
         self.num_basis = num_basis
         self.step = grid_size / num_basis
-        # self.means = np.arange(self.step/2, grid_size, self.step)
         self.means = np.linspace(0, grid_size, self.num_basis)
         self.std_dev = std_dev
         

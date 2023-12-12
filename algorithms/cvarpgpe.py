@@ -1,8 +1,4 @@
-"""
-Summary: CvarPGPE implementation
-Author: @MontenegroAlessandro
-Date: 4/10/2023
-"""
+"""CvarPGPE implementation"""
 # todo -> parallelize the sampling process via joblib
 # Libraries
 from algorithms.pgpe import PGPE

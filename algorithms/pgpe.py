@@ -1,8 +1,4 @@
-"""
-Summary: PGPE implementation
-Author: @MontenegroAlessandro
-Date: 14/7/2023
-"""
+"""PGPE implementation"""
 # Libraries
 import copy
 import errno

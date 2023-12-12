@@ -1,8 +1,4 @@
-"""
-Summary: Trajectory Sampler Implementation
-Author: @MontenegroAlessandro
-Date: 6/12/2023
-"""
+"""Trajectory Sampler Implementation"""
 # Libraries
 from envs import BaseEnv
 from policies import BasePolicy
@@ -176,7 +172,7 @@ class TrajectorySampler:
             score = self.pol.compute_score(state=features, action=a)
 
             # play the action
-            _, rew, abs, _ = self.env.step(action=a)
+            _, rew, done, _ = self.env.step(action=a)
 
             # update the performance index
             perf += (self.env.gamma ** t) * rew
@@ -185,7 +181,7 @@ class TrajectorySampler:
             rewards[t] = rew
             scores[t, :] = score
 
-            if abs:
+            if done:
                 if t < self.env.horizon - 1:
                     rewards[t+1:] = 0
                     scores[t+1:] = 0

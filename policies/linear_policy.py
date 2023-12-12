@@ -1,8 +1,4 @@
-"""
-Summary: Implementation of a Linear Policy
-Author: @MontenegroAlessandro
-Date: 11/12/2023
-"""
+"""Implementation of a Linear Policy"""
 # Libraries
 from policies import BasePolicy
 from abc import ABC

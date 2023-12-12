@@ -1,8 +1,4 @@
-"""
-Summary: Base Policy class implementation
-Author: Alessandro Montenegro
-Date: 19/7/2023
-"""
+"""Base Policy class implementation"""
 # Libraries
 from abc import ABC, abstractmethod
 
@@ -11,6 +7,7 @@ from abc import ABC, abstractmethod
 class BasePolicy(ABC):
     def __init__(self) -> None:
         super().__init__()
+        self.dim = None
     
     @abstractmethod
     def draw_action(self, state):

@@ -1,8 +1,4 @@
-"""
-Summary: Implementation of a Gaussian Policy
-Author: @MontenegroAlessandro
-Date: 7/12/2023
-"""
+"""Implementation of a Gaussian Policy"""
 # Libraries
 from policies import BasePolicy
 from abc import ABC

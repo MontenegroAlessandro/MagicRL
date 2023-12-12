@@ -1,10 +1,7 @@
-""" 
-Summary: Data Processing class performing a data transformation identity
-Author: @MontenegroAlessandro
-Date: 20/7/2023
-"""
+""" Data Processing class performing a data transformation identity"""
 # Libraries
 from data_processors.base_processor import BaseProcessor
+
 
 # Class
 class IdentityDataProcessor(BaseProcessor):

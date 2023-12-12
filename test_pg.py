@@ -1,9 +1,6 @@
-"""
-Summary: Test for PG on continuous cart pole environment
-Author: @MontenegroAlessandro
-Date 7/12/2023
-todo -> create configuration files
-"""
+"""Test for PG on continuous cart pole environment"""
+# todo -> create configuration files
+
 # Libraries
 from envs import *
 from policies import LinearGaussianPolicy

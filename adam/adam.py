@@ -1,9 +1,4 @@
-"""
-Summary: ADAM implementation
-Author: @MontenegroAlessandro
-Date: 31/10/2023
-"""
-
+"""ADAM implementation"""
 # Libraries
 import numpy as np
 
@@ -22,8 +17,7 @@ class Adam:
             strategy (str): the update strategy, it can be "descent" or "ascent".
             Default to "descent".
         """
-        # classical Adam parameter
-        # fixme -> make betas settable
+        # classical Adam parameters
         self.beta_1 = 0.9
         self.beta_2 = 0.999
         self.m = 0

@@ -1,8 +1,4 @@
-"""
-Smmary: Utils classes and functions for environments
-Author: @MontenegroAlessandro
-Date: 12/7/2023
-"""
+"""Utils classes and functions for environments"""
 # Libraries
 import numpy as np
 from copy import deepcopy
