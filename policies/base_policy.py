@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 class BasePolicy(ABC):
     def __init__(self) -> None:
         super().__init__()
-        self.dim = None
+        self.dim_state = None
     
     @abstractmethod
     def draw_action(self, state):

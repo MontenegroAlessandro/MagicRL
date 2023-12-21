@@ -3,7 +3,7 @@ classic cart-pole system implemented by Rich Sutton et al.
 Copied from http://incompleteideas.net/sutton/book/code/pole.c
 permalink: https://perma.cc/C9ZM-652R
 """
-
+# Libraries
 import logging
 import math
 import gym
@@ -24,6 +24,9 @@ class ContCartPole(gym.Env):
         # todo do better
         self.horizon = horizon
         self.gamma = gamma
+        self.action_bounds = [-10, 10]
+        self.state_dim = 4
+        self.action_dim = 1
 
         self.gravity = 9.8
         self.masscart = 1.0

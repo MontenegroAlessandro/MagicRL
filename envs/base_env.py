@@ -12,6 +12,8 @@ class BaseEnv(ABC):
         self.gamma = gamma
         self.time = 0
         self.verbose = verbose
+        self.state_dim = 0
+        self.action_dim = 0
 
     @abstractmethod
     def step(self, action):
