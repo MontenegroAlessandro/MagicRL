@@ -1,9 +1,13 @@
 # Libraries
+import copy
+
 from envs import *
-from policies import LinearPolicy
+from policies import NeuralNetworkPolicy
 from algorithms import PGPE
 from data_processors import IdentityDataProcessor
 from art import *
+import torch
+import torch.nn as nn
 
 """Global Vars"""
 # general
@@ -41,16 +45,25 @@ a_dim = env.action_dim
 dp = IdentityDataProcessor()
 
 """Policy"""
-pol = LinearPolicy(
-    parameters=np.ones((a_dim, s_dim)),
+net = nn.Sequential(
+    nn.Linear(s_dim, a_dim, bias=False)
+)
+model_desc = dict(
+    layers_shape=[(s_dim, a_dim)]
+)
+pol = NeuralNetworkPolicy(
+    parameters=None,
     action_bounds=env.action_bounds,
-    multi_linear=True
+    input_size=s_dim,
+    output_size=a_dim,
+    model=copy.deepcopy(net),
+    model_desc=copy.deepcopy(model_desc)
 )
 
 """Algorithms"""
-hp = np.zeros((2, s_dim * a_dim))
-hp[0] = [0.5] * (s_dim * a_dim)
-hp[1] = [0.001] * (s_dim * a_dim)
+hp = np.zeros((2, pol.tot_params))
+hp[0] = [0.5] * pol.tot_params
+hp[1] = [0.001] * pol.tot_params
 alg_parameters = dict(
     lr=[1e-1],
     initial_rho=hp,

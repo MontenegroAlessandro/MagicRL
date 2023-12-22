@@ -2,6 +2,7 @@
 # Libraries
 from policies import BasePolicy
 from abc import ABC
+from policies.utils import ActionBoundsIdx
 import numpy as np
 import copy
 
@@ -50,7 +51,12 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         mean = self.parameters @ state
         action = np.random.normal(mean, self.std_dev)
         if self.action_bounds is not None:
-            action = np.clip(action, self.action_bounds[0], self.action_bounds[1], dtype=np.float128)
+            action = np.clip(
+                action,
+                self.action_bounds[ActionBoundsIdx.lb],
+                self.action_bounds[ActionBoundsIdx.ub],
+                dtype=np.float128
+            )
         return action
 
     def reduce_exploration(self):
