@@ -10,6 +10,7 @@ import gym
 import gym.spaces as spaces
 from gym.utils import seeding
 import numpy as np
+from envs.utils import ActionBoundsIdx
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +50,10 @@ class ContCartPole(gym.Env):
             self.theta_threshold_radians * 2,
             np.finfo(np.float128).max])
 
-        self.action_space = spaces.Box(low=-self.force_mag, high=self.force_mag,shape=(1,),
-                                       dtype=np.float128)
+        self.action_space = spaces.Box(
+            low=-self.force_mag, high=self.force_mag,shape=(1,),
+            dtype=np.float128
+        )
         self.observation_space = spaces.Box(-high, high, dtype=np.float128)
 
         self.seed()
@@ -71,6 +74,10 @@ class ContCartPole(gym.Env):
 
     def step(self, action):
         action = np.ravel(action)
+        action = np.clip(
+            action,
+            self.action_bounds[ActionBoundsIdx.lb], self.action_bounds[ActionBoundsIdx.ub]
+        )
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
         state = self.state
         x, x_dot, theta, theta_dot = state

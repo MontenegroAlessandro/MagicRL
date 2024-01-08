@@ -37,9 +37,9 @@ class PolicyGradient:
             n_jobs: int = 1
     ) -> None:
         # Class' parameter with checks
-        err_msg = "[PG] lr size is different wrt the one of parameters!"
-        assert len(lr) == len(initial_theta), err_msg
-        self.lr = lr
+        err_msg = "[PG] lr must be positive!"
+        assert lr[0] > 0, err_msg
+        self.lr = lr[0]
 
         err_msg = "[PG] lr_strategy not valid!"
         assert lr_strategy in ["constant", "adam"], err_msg
@@ -77,6 +77,8 @@ class PolicyGradient:
         self.checkpoint_freq = checkpoint_freq
         self.n_jobs = n_jobs
         self.parallel_computation = bool(self.n_jobs != 1)
+        self.dim_action = self.env.action_dim
+        self.dim_state = self.env.state_dim
 
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float128)
@@ -92,10 +94,9 @@ class PolicyGradient:
         self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
 
         # create the adam optimizers
+        self.adam_optimizer = None
         if self.lr_strategy == "adam":
-            self.adam_optimizers = []
-            for i in range(self.dim):
-                self.adam_optimizers.append(Adam(self.lr[i], strategy="ascent"))
+            self.adam_optimizer = Adam(self.lr, strategy="ascent")
         return
 
     def learn(self) -> None:
@@ -155,10 +156,7 @@ class PolicyGradient:
             if self.lr_strategy == "constant":
                 self.thetas = self.thetas + self.lr * estimated_gradient
             elif self.lr_strategy == "adam":
-                adaptive_lr = []
-                for j in range(self.dim):
-                    adaptive_lr.append(self.adam_optimizers[j].compute_gradient(estimated_gradient[j]))
-                adaptive_lr = np.array(adaptive_lr)
+                adaptive_lr = self.adam_optimizer.compute_gradient(estimated_gradient)
                 self.thetas = self.thetas + adaptive_lr
             else:
                 err_msg = f"[PG] {self.lr_strategy} not implemented yet!"
@@ -208,12 +206,11 @@ class PolicyGradient:
             self.best_performance_theta = current_perf
             self.best_theta = copy.deepcopy(self.thetas)
 
-            if self.verbose:
-                print("#" * 30)
-                print("New best parameter configuration found")
-                print(f"Performance: {self.best_performance_theta}")
-                print(f"Parameter configuration: {self.best_theta}")
-                print("#" * 30)
+            print("#" * 30)
+            print("New best parameter configuration found")
+            print(f"Performance: {self.best_performance_theta}")
+            print(f"Parameter configuration: {self.best_theta}")
+            print("#" * 30)
         return
 
     def save_results(self) -> None:

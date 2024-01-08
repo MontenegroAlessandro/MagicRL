@@ -4,6 +4,11 @@ import numpy as np
 from copy import deepcopy
 
 
+class ActionBoundsIdx:
+    lb = 0
+    ub = 1
+
+
 # Position Class
 class Position:
     """Class implementing a position"""

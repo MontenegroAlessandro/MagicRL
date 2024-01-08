@@ -8,6 +8,8 @@ class BasePolicy(ABC):
     def __init__(self) -> None:
         super().__init__()
         self.dim_state = None
+        self.dim_action = None
+        self.tot_params = None
     
     @abstractmethod
     def draw_action(self, state):

@@ -2,7 +2,6 @@
 # Libraries
 from policies import BasePolicy
 from abc import ABC
-from policies.utils import ActionBoundsIdx
 import numpy as np
 import copy
 
@@ -14,7 +13,8 @@ class LinearPolicy(BasePolicy, ABC):
     """
     def __init__(
             self, parameters: np.array = None,
-            action_bounds: list = None,
+            dim_state: int = 1,
+            dim_action: int = 1,
             multi_linear: bool = False
     ) -> None:
         # Superclass initialization
@@ -25,34 +25,20 @@ class LinearPolicy(BasePolicy, ABC):
         assert parameters is not None, err_msg
         self.parameters = parameters
 
-        err_msg = "[LinPolicy] too many bounds, 2 or 0 values expected!"
-        assert len(action_bounds) == 2 or action_bounds is None, err_msg
-        self.action_bounds = action_bounds
-
         # Additional attributes
         self.multi_linear = multi_linear
-        self.dim_action = 1
-        if not self.multi_linear:
-            self.dim_state = len(self.parameters)
-        else:
-            self.dim_state = len(self.parameters[0])
-            self.dim_action = len(self.parameters)
+        self.dim_state = dim_state
+        self.dim_action = dim_action
+        self.tot_params = dim_state * dim_action
 
         return
 
     def draw_action(self, state) -> float:
         if len(state) != self.dim_state:
             err_msg = f"[LinPolicy] the state has not the same dimension of the parameter vector:"
-            err_msg += f"{len(state)} vs {self.dim_state}"
+            err_msg += f"{len(state)} vs. {self.dim_state}"
             raise ValueError(err_msg)
         action = self.parameters @ state
-        if self.action_bounds is not None:
-            action = np.clip(
-                action,
-                self.action_bounds[ActionBoundsIdx.lb],
-                self.action_bounds[ActionBoundsIdx.ub],
-                dtype=np.float128
-            )
         return action
 
     def reduce_exploration(self):
@@ -65,4 +51,6 @@ class LinearPolicy(BasePolicy, ABC):
             self.parameters = np.array(np.split(thetas, self.dim_action))
 
     def compute_score(self, state, action) -> np.array:
+        if self.multi_linear:
+            state = np.tile(state, self.dim_action)
         return state
