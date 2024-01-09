@@ -18,7 +18,7 @@ env_selection = ["half_cheetah", "swimmer"]
 ENV = env_selection[1]
 
 pol_selection = ["nn_policy", "linear", "gaussian"]
-POL = pol_selection[0]
+POL = pol_selection[2]
 
 alg_selection = ["pg", "pgpe"]
 ALG = alg_selection[0]
@@ -31,7 +31,7 @@ RENDER = False
 # algorithm
 DEBUG = False
 NATURAL = False
-ITE = 500
+ITE = 1000
 BATCH = 100
 N_JOBS_PARAM = 8
 LR_STRATEGY = "adam"
@@ -82,11 +82,12 @@ dp = IdentityDataProcessor()
 """Policy"""
 if POL == "nn_policy":
     net = nn.Sequential(
-        nn.Linear(s_dim, 5, bias=False),
-        nn.Linear(5, a_dim, bias=False)
+        nn.Linear(s_dim, 8, bias=False),
+        nn.Tanh(),
+        nn.Linear(8, a_dim, bias=False)
     )
     model_desc = dict(
-        layers_shape=[(s_dim, 5), (5, a_dim)]
+        layers_shape=[(s_dim, 8), (8, a_dim)]
     )
     if ALG == "pgpe":
         pol = NeuralNetworkPolicy(
@@ -97,6 +98,7 @@ if POL == "nn_policy":
             model_desc=copy.deepcopy(model_desc)
         )
         tot_params = pol.tot_params
+        dir += f"nn_policy_tanh_{tot_params}"
     else:
         pol = DeepGaussian(
             parameters=None,
@@ -104,13 +106,13 @@ if POL == "nn_policy":
             output_size=a_dim,
             model=copy.deepcopy(net),
             model_desc=copy.deepcopy(model_desc),
-            std_dev=np.sqrt(0.01),
+            std_dev=np.sqrt(1),
             std_decay=0,
             std_min=1e-6
         )
         tot_params = pol.tot_params
-    dir += f"nn_policy_{tot_params}"
-    dir += "_var_001"
+        dir += f"nn_policy_tanh_{tot_params}"
+        dir += "_var_1"
 elif POL == "linear":
     pol = LinearPolicy(
         parameters=np.ones((s_dim * a_dim)),
@@ -139,16 +141,16 @@ else:
 if ALG == "pgpe":
     hp = np.zeros((2, tot_params))
     hp[0] = [0.5] * tot_params
-    # hp[1] = [0.001] * tot_params                    # var = 1
-    # dir += "_var_1"
+    hp[1] = [0.001] * tot_params                    # var = 1
+    dir += "_var_1"
     # hp[1] = [1.151292546497023] * tot_params      # var = 10
     # dir += "_var_10"
     # hp[1] = [2.302585092994046] * tot_params      # var = 100
     # dir += "_var_100"
     # hp[1] = [-1.1512925464970227] * tot_params    # var = 0.1
     # dir += "_var_01"
-    hp[1] = [-2.3025850929940455] * tot_params    # var = 0.01
-    dir += "_var_001"
+    # hp[1] = [-2.3025850929940455] * tot_params    # var = 0.01
+    # dir += "_var_001"
     alg_parameters = dict(
         lr=[INIT_LR],
         initial_rho=hp,
@@ -175,7 +177,7 @@ else:
         lr=[INIT_LR],
         lr_strategy=LR_STRATEGY,
         estimator_type=ESTIMATOR,
-        initial_theta=[0.5] * tot_params,
+        initial_theta=[0] * tot_params,
         ite=ITE,
         batch_size=BATCH,
         env=env,
