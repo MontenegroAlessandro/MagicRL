@@ -3,6 +3,7 @@ import argparse
 from algorithms import *
 from data_processors import *
 from envs import *
+from envs.reacher import Reacher
 from policies import *
 from art import *
 
@@ -44,7 +45,7 @@ parser.add_argument(
     help="The environment.",
     type=str,
     default="swimmer",
-    choices=["swimmer", "half_cheetah"]
+    choices=["swimmer", "half_cheetah", "reacher"]
 )
 parser.add_argument(
     "--horizon",
@@ -83,15 +84,28 @@ parser.add_argument(
     type=int,
     default=100
 )
+parser.add_argument(
+    "--clip",
+    help="Whether to clip the action in the environment.",
+    type=int,
+    default=1
+)
 
 args = parser.parse_args()
 
 # Preprocess Arguments
+np.random.seed()
+
 if args.alg == "pg":
     if args.pol == "linear":
         args.pol = "gaussian"
     elif args.pol == "nn":
         args.pol = "deep_gaussian"
+
+if args.var < 1:
+    string_var = str(args.var).replace(".", "")
+else:
+    string_var = str(int(args.var))
 
 # Build
 if args.server:
@@ -99,17 +113,26 @@ if args.server:
 else:
     dir_name = f"/Users/ale/results/{args.alg}/"
 dir_name += f"{args.alg}_{args.ite}_{args.env}_{args.horizon}_{args.lr_strategy}_"
-dir_name += f"{str(args.lr).replace('.', '')}_{args.pol}_"
+dir_name += f"{str(args.lr).replace('.', '')}_{args.pol}_batch_{args.batch}_"
+
+if args.clip:
+    dir_name += "clip_"
+else:
+    dir_name += "noclip_"
 
 """Environment"""
 MULTI_LINEAR = False
 if args.env == "swimmer":
     env_class = Swimmer
-    env = Swimmer(horizon=args.horizon, gamma=args.gamma, render=False)
+    env = Swimmer(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
     MULTI_LINEAR = True
 elif args.env == "half_cheetah":
     env_class = HalfCheetah
-    env = HalfCheetah(horizon=args.horizon, gamma=args.gamma, render=False)
+    env = HalfCheetah(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+    MULTI_LINEAR = True
+elif args.env == "reacher":
+    env_class = Reacher
+    env = Reacher(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
     MULTI_LINEAR = True
 else:
     raise ValueError(f"Invalid env name.")
@@ -143,11 +166,23 @@ elif args.pol in ["nn", "deep_gaussian"]:
     net = nn.Sequential(
         nn.Linear(s_dim, 16, bias=False),
         nn.Tanh(),
-        nn.Linear(16, a_dim, bias=False)
+        nn.Linear(16, a_dim, bias=False),
+        nn.Tanh()
     )
     model_desc = dict(
         layers_shape=[(s_dim, 16), (16, a_dim)]
     )
+    """net = nn.Sequential(
+        nn.Linear(s_dim, 16, bias=False),
+        nn.Tanh(),
+        nn.Linear(16, 16, bias=False),
+        nn.Tanh(),
+        nn.Linear(16, a_dim, bias=False),
+        nn.Tanh()
+    )
+    model_desc = dict(
+        layers_shape=[(s_dim, 16), (16, 16), (16, a_dim)]
+    )"""
     if args.pol == "nn":
         pol = NeuralNetworkPolicy(
             parameters=None,
@@ -172,13 +207,20 @@ elif args.pol in ["nn", "deep_gaussian"]:
     tot_params = pol.tot_params
 else:
     raise ValueError(f"Invalid policy name.")
-dir_name += f"{tot_params}_var_{str(args.var).replace('.','')}"
+dir_name += f"{tot_params}_var_{string_var}"
 
 """Algorithm"""
 if args.alg == "pgpe":
+    if args.var == 1:
+        var_term = 1.001
+    else:
+        var_term = args.var
     hp = np.zeros((2, tot_params))
-    hp[0] = [0] * tot_params
-    hp[1] = [np.log(np.sqrt(args.var))] * tot_params
+    if args.pol == "linear":
+        hp[0] = [0] * tot_params
+    else:
+        hp[0] = np.random.normal(0, 1, tot_params)
+    hp[1] = [np.log(np.sqrt(var_term))] * tot_params
     alg_parameters = dict(
         lr=[args.lr],
         initial_rho=hp,
@@ -201,11 +243,15 @@ if args.alg == "pgpe":
     )
     alg = PGPE(**alg_parameters)
 elif args.alg == "pg":
+    if args.pol == "linear":
+        init_theta = [0] * tot_params
+    else:
+        init_theta = np.random.normal(0, 1, tot_params)
     alg_parameters = dict(
         lr=[args.lr],
         lr_strategy=args.lr_strategy,
         estimator_type="GPOMDP",
-        initial_theta=[0] * tot_params,
+        initial_theta=init_theta,
         ite=args.ite,
         batch_size=args.batch,
         env=env,

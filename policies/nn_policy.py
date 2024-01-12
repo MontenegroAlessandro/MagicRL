@@ -154,5 +154,9 @@ class DeepGaussian(NeuralNetworkPolicy):
 
     def draw_action(self, state) -> np.array:
         means = np.array(super().draw_action(state=state), dtype=np.float64)
-        action = np.array(np.random.normal(means, self.std_dev), dtype=np.float128)
+        # action = np.array(np.random.normal(means, self.std_dev), dtype=np.float128)
+        action = np.array(
+            means + self.std_dev * np.random.normal(0, 1, self.dim_action),
+            dtype=np.float128
+        )
         return action

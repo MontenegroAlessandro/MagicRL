@@ -128,6 +128,7 @@ class PGPE:
         self.best_performance_theta = -np.inf
         self.best_performance_rho = -np.inf
         self.checkpoint_freq = checkpoint_freq
+        self.deterministic_curve = np.zeros(self.ite)
 
         self.rho_history = np.zeros((ite, self.dim), dtype=np.float128)
         self.rho_history[0, :] = copy.deepcopy(self.rho[RhoElem.MEAN])
@@ -195,6 +196,10 @@ class PGPE:
                 std = np.float128(np.exp(self.rho[RhoElem.STD]))
                 std = np.clip(std - self.std_decay, self.std_min, np.inf)
                 self.rho[RhoElem.STD, :] = np.log(std)
+
+        # Sample the deterministic curve
+        self.sample_deterministic_curve()
+
         return
 
     def update_rho(self) -> None:
@@ -361,6 +366,32 @@ class PGPE:
             np.save(file_name, self.best_theta)
         return
 
+    def sample_deterministic_curve(self):
+        for i in tqdm(range(self.ite)):
+            self.policy.set_parameters(thetas=self.rho_history[i, :])
+            worker_dict = dict(
+                env=copy.deepcopy(self.env),
+                pol=copy.deepcopy(self.policy),
+                dp=IdentityDataProcessor(),
+                params=copy.deepcopy(self.rho_history[i, :]),
+                starting_state=None
+            )
+            # build the parallel functions
+            delayed_functions = delayed(pg_sampling_worker)
+
+            # parallel computation
+            res = Parallel(n_jobs=self.n_jobs_param, backend="loky")(
+                delayed_functions(**worker_dict) for _ in range(self.batch_size)
+            )
+
+            # extract data
+            ite_perf = np.zeros(self.batch_size, dtype=np.float128)
+            for j in range(self.batch_size):
+                ite_perf[j] = res[j][TrajectoryResults.PERF]
+
+            # compute mean
+            self.deterministic_curve[i] = np.mean(ite_perf)
+
     def save_results(self) -> None:
         """Function saving the results of the training procedure"""
         # Create the dictionary with the useful info
@@ -370,7 +401,8 @@ class PGPE:
             "best_theta": np.array(self.best_theta, dtype=float).tolist(),
             "best_rho": np.array(self.best_rho, dtype=float).tolist(),
             "thetas_history": np.array(self.thetas, dtype=float).tolist(),
-            "rho_history": np.array(self.rho_history, dtype=float).tolist()
+            "rho_history": np.array(self.rho_history, dtype=float).tolist(),
+            "deterministic_res": np.array(self.deterministic_curve, dtype=float).tolist()
         }
 
         # Save the json

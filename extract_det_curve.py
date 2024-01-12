@@ -11,10 +11,10 @@ from tqdm import tqdm
 # Globals
 N_JOBS = 8
 N_TRAJECTORIES = 100
-ITE = 500
+ITE = 2000
 
 WHAT = "pg"
-POL = "nn"
+POL = "gaussian"
 
 if WHAT == "pgpe":
     """path = [
@@ -24,12 +24,16 @@ if WHAT == "pgpe":
         "/Users/ale/results/pgpe/pgpe_test_500_adam_01_swimmer_200_linear_policy_16_var_100",
         "/Users/ale/results/pgpe/pgpe_test_500_adam_01_swimmer_200_linear_policy_16_var_001",
     ]"""
-    path = [
+    """path = [
         "/Users/ale/results/pgpe/pgpe_test_500_adam_01_swimmer_200_nn_policy_50_var_001",
         "/Users/ale/results/pgpe/pgpe_test_500_adam_01_swimmer_200_nn_policy_50_var_01",
         "/Users/ale/results/pgpe/pgpe_test_500_adam_01_swimmer_200_nn_policy_50_var_1",
         "/Users/ale/results/pgpe/pgpe_test_500_adam_01_swimmer_200_nn_policy_50_var_10",
         "/Users/ale/results/pgpe/pgpe_test_500_adam_01_swimmer_200_nn_policy_50_var_100"
+    ]"""
+    path = [
+        # "/Users/ale/results/pgpe/pgpe_1000_swimmer_200_adam_01_nn_clip_416_var_1",
+        "/Users/ale/results/pgpe/pgpe_1000_swimmer_200_adam_01_nn_clip_1344_var_1"
     ]
 else:
     """path = [
@@ -39,26 +43,36 @@ else:
         "/Users/ale/results/pg/pg_test_500_adam_001_swimmer_200_lingauss_policy_16_var_100",
         "/Users/ale/results/pg/pg_test_500_adam_001_swimmer_200_lingauss_policy_16_var_001",
     ]"""
-    path = [
+    """path = [
         "/Users/ale/results/pg/pg_test_500_adam_001_swimmer_200_nn_policy_50_var_001",
         "/Users/ale/results/pg/pg_test_500_adam_001_swimmer_200_nn_policy_50_var_01",
         "/Users/ale/results/pg/pg_test_500_adam_001_swimmer_200_nn_policy_50_var_1",
         "/Users/ale/results/pg/pg_test_500_adam_001_swimmer_200_nn_policy_50_var_10",
         "/Users/ale/results/pg/pg_test_500_adam_001_swimmer_200_nn_policy_50_var_100"
+    ]"""
+    # path = ["/Users/ale/results/pg/pg_1000_swimmer_200_adam_001_deep_gaussian_clip_416_var_1"]
+    path = [
+        #"/Users/ale/results/pg/pg_1000_swimmer_200_adam_001_deep_gaussian_clip_1344_var_1",
+        "/Users/ale/results/pg/pg_2000_half_cheetah_100_adam_001_gaussian_clip_102_var_1",
     ]
 
-env = Swimmer(horizon=200, gamma=0.995, render=False)
+# env = Swimmer(horizon=200, gamma=0.995, render=False)
+env = HalfCheetah(horizon=100, gamma=1, clip=True, render=False)
 dp = IdentityDataProcessor()
 
 if POL != "nn":
-    pol = LinearPolicy(parameters=np.ones(16), dim_state=8, dim_action=2, multi_linear=True)
+    pol = LinearPolicy(parameters=np.ones(env.action_dim*env.state_dim), dim_state=env.state_dim, dim_action=env.action_dim, multi_linear=True)
 else:
     net = nn.Sequential(
-        nn.Linear(env.state_dim, 5, bias=False),
-        nn.Linear(5, env.action_dim, bias=False)
+        nn.Linear(env.state_dim, 32, bias=False),
+        nn.Tanh(),
+        nn.Linear(32, 32, bias=False),
+        nn.Tanh(),
+        nn.Linear(32, env.action_dim, bias=False),
+        nn.Tanh(),
     )
     model_desc = dict(
-        layers_shape=[(env.state_dim, 5), (5, env.action_dim)]
+        layers_shape=[(env.state_dim, 32), (32, 32), (32, env.action_dim)]
     )
     pol = NeuralNetworkPolicy(
         parameters=None,

@@ -19,12 +19,14 @@ class HalfCheetah(MujocoBase):
             ctrl_cost_weight: float = 0.1,
             reset_noise_scale: float = 0.1,
             exclude_current_positions_from_observation: bool = True,
-            render: bool = False
+            render: bool = False,
+            clip: bool = True
     ) -> None:
         super().__init__(
             horizon=horizon,
             gamma=gamma,
-            verbose=verbose
+            verbose=verbose,
+            clip=clip
         )
         self.render = render
         render_mode = None
@@ -46,10 +48,13 @@ class HalfCheetah(MujocoBase):
         return
 
     def step(self, action):
-        clipped_action = np.clip(
-            action,
-            self.action_bounds[ActionBoundsIdx.lb],
-            self.action_bounds[ActionBoundsIdx.ub],
-            dtype=np.float128
-        )
+        if self.clip:
+            clipped_action = np.clip(
+                action,
+                self.action_bounds[ActionBoundsIdx.lb],
+                self.action_bounds[ActionBoundsIdx.ub],
+                dtype=np.float128
+            )
+        else:
+            clipped_action = action
         return super().step(action=clipped_action)

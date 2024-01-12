@@ -89,6 +89,7 @@ class PolicyGradient:
         self.sampler = TrajectorySampler(
             env=self.env, pol=self.policy, data_processor=self.data_processor
         )
+        self.deterministic_curve = np.zeros(self.ite)
 
         # init the theta history
         self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
@@ -185,6 +186,7 @@ class PolicyGradient:
 
             # reduce the exploration factor of the policy
             self.policy.reduce_exploration()
+        self.sample_deterministic_curve()
         return
 
     def update_g(
@@ -213,13 +215,44 @@ class PolicyGradient:
             print("#" * 30)
         return
 
+    def sample_deterministic_curve(self):
+        # make the policy deterministic
+        self.policy.std_dev = 0
+
+        # sample
+        for i in tqdm(range(self.ite)):
+            self.policy.set_parameters(thetas=self.theta_history[i, :])
+            worker_dict = dict(
+                env=copy.deepcopy(self.env),
+                pol=copy.deepcopy(self.policy),
+                dp=IdentityDataProcessor(),
+                params=copy.deepcopy(self.theta_history[i, :]),
+                starting_state=None
+            )
+            # build the parallel functions
+            delayed_functions = delayed(pg_sampling_worker)
+
+            # parallel computation
+            res = Parallel(n_jobs=self.n_jobs, backend="loky")(
+                delayed_functions(**worker_dict) for _ in range(self.batch_size)
+            )
+
+            # extract data
+            ite_perf = np.zeros(self.batch_size, dtype=np.float128)
+            for j in range(self.batch_size):
+                ite_perf[j] = res[j][TrajectoryResults.PERF]
+
+            # compute mean
+            self.deterministic_curve[i] = np.mean(ite_perf)
+
     def save_results(self) -> None:
         results = {
             "performance": np.array(self.performance_idx, dtype=float).tolist(),
             "best_theta": np.array(self.best_theta, dtype=float).tolist(),
             "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
             "last_theta": np.array(self.thetas, dtype=float).tolist(),
-            "best_perf": float(self.best_performance_theta)
+            "best_perf": float(self.best_performance_theta),
+            "performance_det": np.array(self.deterministic_curve, dtype=float).tolist()
         }
 
         # Save the json

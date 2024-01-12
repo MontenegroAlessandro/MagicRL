@@ -7,7 +7,13 @@ import numpy as np
 class BaseEnv(ABC):
     """Abstract class for the Environments"""
 
-    def __init__(self, horizon: int = 0, gamma: float = 0.99, verbose: bool = False) -> None:
+    def __init__(
+            self,
+            horizon: int = 0,
+            gamma: float = 0.99,
+            verbose: bool = False,
+            clip: bool = True
+    ) -> None:
         """todo"""
         self.horizon = horizon
         assert 0 <= gamma <= 1, "[ERROR] Invalid Discount Factor value."
@@ -16,6 +22,7 @@ class BaseEnv(ABC):
         self.verbose = verbose
         self.state_dim = 0
         self.action_dim = 0
+        self.clip = clip
 
     @abstractmethod
     def step(self, action):
@@ -32,8 +39,14 @@ class BaseEnv(ABC):
 
 
 class MujocoBase(BaseEnv, ABC):
-    def __init__(self, horizon: int = 0, gamma: float = 0.99, verbose: bool = False) -> None:
-        super().__init__(horizon=horizon, gamma=gamma, verbose=verbose)
+    def __init__(
+            self,
+            horizon: int = 0,
+            gamma: float = 0.99,
+            verbose: bool = False,
+            clip: bool = True
+    ) -> None:
+        super().__init__(horizon=horizon, gamma=gamma, verbose=verbose, clip=clip)
         self.gym_env = None
         self.state = None
 

@@ -63,6 +63,9 @@ class LinearGaussianPolicy(BasePolicy, ABC):
             self.parameters = np.array(np.split(thetas, self.dim_action))
 
     def compute_score(self, state, action) -> np.array:
+        if self.std_dev == 0:
+            return super().compute_score(state, action)
+
         state = np.ravel(state)
         action_deviation = action - (self.parameters @ state)
         if self.multi_linear:
