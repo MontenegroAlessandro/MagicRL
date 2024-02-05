@@ -67,6 +67,30 @@ class PGPE:
             directory (str, optional): where to save the results
             
             natural (bool): whether to use the natural gradient
+            
+            verbose (bool): whether to log additional information. 
+            Defaults to FALSE.
+            
+            checkpoint_freq (int): after how many iterations results are saved.
+            Defualts to 1.
+            
+            lr_strategy (str): how to update the learning rate. Choises in 
+            "constant" or "adam". Defaults to "adam".
+            
+            learn_std (bool): whether to learn the standard deviation of the 
+            hyper-policy. Defaults to False.
+            
+            std_decay (float): how much to decrease the standard deviation at 
+            each iteration of the algorithm. Defaults to 0 (i.e., no decay).
+            
+            std_min (float): the minimum value the standard deviation can 
+            assume. Defaults to 1e-4.
+            
+            n_jobs_param (int): how many parameters sampled are tested in 
+            parallel. Defaults to 1.
+            
+            n_jobs_traj (int): how many trajectories (for each parameter 
+            sampled) are evaluated in parallel. Defaults to 1.
         """
         # Arguments with checks
         assert lr is not None, "[ERROR] No Learning rate provided"
@@ -260,6 +284,14 @@ class PGPE:
         return
 
     def sample_theta_from_best(self):
+        """
+        Summary:
+            This function samples a parameter configuration $\\theta$ from 
+            the best hyperparameter configuration found so far.
+
+        Returns:
+            np.array: the sampeld parameter vector.
+        """
         thetas = []
         for id in range(len(self.best_rho[RhoElem.MEAN])):
             thetas.append(np.random.normal(
@@ -367,13 +399,19 @@ class PGPE:
         return
 
     def sample_deterministic_curve(self):
+        """
+        Summary:
+            This sample computes the deterministic curve associated with the 
+            sequence of hyperparameter configuration seen during the learning.
+        """
         for i in tqdm(range(self.ite)):
             self.policy.set_parameters(thetas=self.rho_history[i, :])
             worker_dict = dict(
                 env=copy.deepcopy(self.env),
                 pol=copy.deepcopy(self.policy),
                 dp=IdentityDataProcessor(),
-                params=copy.deepcopy(self.rho_history[i, :]),
+                # params=copy.deepcopy(self.rho_history[i, :]),
+                params=None,
                 starting_state=None
             )
             # build the parallel functions

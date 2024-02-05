@@ -36,6 +36,49 @@ class PolicyGradient:
             checkpoint_freq: int = 1,
             n_jobs: int = 1
     ) -> None:
+        """
+        Summary:
+            Initialization.
+
+        Args:
+            lr (np.array, optional): learning rate. Defaults to None.
+            
+            lr_strategy (str, optional): how to update the learning rate. 
+            Choises in "constant" or "adam". Defaults to "constant".
+            
+            estimator_type (str, optional): how to update the parameters.
+            Choices in "REINFORCE" and "GPOMDP". Defaults to "REINFORCE".
+            
+            initial_theta (np.array, optional): initialization for the parameter
+            vector. Defaults to None.
+            
+            ite (int, optional): how many iteraiton to run the algorithm. 
+            Defaults to 100.
+            
+            batch_size (int, optional): how many trajectories to try for each 
+            parameter sampled. Defaults to 1.
+            
+            env (BaseEnv, optional): which environment to use. Defaults to None.
+            
+            policy (BasePolicy, optional): which policy to use. Defaults to None.
+            
+            data_processor (BaseProcessor, optional): which data processor to 
+            employ to process the data. Defaults to IdentityDataProcessor().
+            
+            directory (str, optional): where to save data. Defaults to "".
+            
+            verbose (bool, optional): whether to log additional information. 
+            Defaults to False.
+            
+            natural (bool, optional): whether to employ the natural gradient. 
+            Defaults to False.
+            
+            checkpoint_freq (int, optional): number of iterations after which 
+            results are periodically saved. Defaults to 1.
+            
+            n_jobs (int, optional): how many trajectories to evaluate in 
+            parallel. Defaults to 1.
+        """
         # Class' parameter with checks
         err_msg = "[PG] lr must be positive!"
         assert lr[0] > 0, err_msg
@@ -105,11 +148,13 @@ class PolicyGradient:
         for i in tqdm(range(self.ite)):
             if self.parallel_computation:
                 # prepare the parameters
+                self.policy.set_parameters(copy.deepcopy(self.thetas))
                 worker_dict = dict(
                     env=copy.deepcopy(self.env),
                     pol=copy.deepcopy(self.policy),
                     dp=copy.deepcopy(self.data_processor),
-                    params=copy.deepcopy(self.thetas),
+                    # params=copy.deepcopy(self.thetas),
+                    params=None,
                     starting_state=None
                 )
 
@@ -193,6 +238,21 @@ class PolicyGradient:
             self, reward_trajectory: np.array,
             score_trajectory: np.array
     ) -> np.array:
+        """
+        Summary:
+            Update teh gradient estimate accoring to GPOMDP.
+
+        Args:
+            reward_trajectory (np.array): array containing the rewards obtained 
+            in each trajectory of the batch.
+            
+            score_trajectory (np.array):  array containing the scores 
+            $\\nabla_{\\theta} log \\pi(s_t, a_t)$ obtained in each 
+            trajectory of the batch.
+
+        Returns:
+            np.array: the estimated gradient for each parameter.
+        """
         gamma = self.env.gamma
         horizon = self.env.horizon
         gamma_seq = (gamma * np.ones(horizon, dtype=np.float128)) ** (np.arange(horizon))
@@ -204,6 +264,14 @@ class PolicyGradient:
         return estimated_gradient
 
     def update_best_theta(self, current_perf: np.float128) -> None:
+        """
+        Summary:
+            Updates the best theta configuration.
+
+        Args:
+            current_perf (np.float128): teh perforamance obtained by the current 
+            theta configuraiton.
+        """
         if self.best_theta is None or self.best_performance_theta <= current_perf:
             self.best_performance_theta = current_perf
             self.best_theta = copy.deepcopy(self.thetas)
@@ -216,6 +284,12 @@ class PolicyGradient:
         return
 
     def sample_deterministic_curve(self):
+        """
+        Summary:
+            Switch-off the noise and collect the deterministic performance 
+            associated to the sequence of parameter configuratios seen during 
+            the learning.
+        """
         # make the policy deterministic
         self.policy.std_dev = 0
 
@@ -226,7 +300,8 @@ class PolicyGradient:
                 env=copy.deepcopy(self.env),
                 pol=copy.deepcopy(self.policy),
                 dp=IdentityDataProcessor(),
-                params=copy.deepcopy(self.theta_history[i, :]),
+                # params=copy.deepcopy(self.theta_history[i, :]),
+                params=None,
                 starting_state=None
             )
             # build the parallel functions
@@ -246,6 +321,7 @@ class PolicyGradient:
             self.deterministic_curve[i] = np.mean(ite_perf)
 
     def save_results(self) -> None:
+        """Save the results."""
         results = {
             "performance": np.array(self.performance_idx, dtype=float).tolist(),
             "best_theta": np.array(self.best_theta, dtype=float).tolist(),

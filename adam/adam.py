@@ -37,14 +37,14 @@ class Adam:
 
         # revert the step size sign
         if self.strategy == "ascent":
-            # self.step_size = -self.step_size
             self.step_size = self.step_size
+        else:
+            self.step_size = -self.step_size
 
     def compute_gradient(self, g: np.array) -> np.array:
         """
         Summary:
-            this function computes the new gradient with the adaptive learning
-            rate.
+            Computes the new gradient with the adaptive learning rate.
         Args:
             g (np.array): the gradient already computed by the algorithm.
         Returns:

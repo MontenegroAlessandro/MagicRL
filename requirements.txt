@@ -1,6 +1,7 @@
 art==6.1
 gym==0.26.2
 gymnasium==0.29.1
+imageio==2.31.1
 joblib==1.2.0
 matplotlib==3.7.2
 mujoco==2.3.7

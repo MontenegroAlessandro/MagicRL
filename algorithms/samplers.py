@@ -10,25 +10,66 @@ import copy
 
 
 def pg_sampling_worker(
-        env=None,
-        pol=None,
-        dp=None,
+        env: BaseEnv = None,
+        pol: BasePolicy = None,
+        dp: BaseProcessor = None,
         params: np.array = None,
-        starting_state=None
+        starting_state: np.array = None
 ) -> list:
+    """Worker collecting a single trajectory.
+
+    Args:
+        env (BaseEnv, optional): the env to employ. Defaults to None.
+        
+        pol (BasePolicy, optional): the policy to play. Defaults to None.
+        
+        dp (Baseprocessor, optional): the data processor to employ. 
+        Defaults to None.
+        
+        params (np.array, optional): the parameters to plug into the policy. 
+        Defaults to None.
+        
+        starting_state (np.array, optional): the state to which the env should 
+        be initialized. Defaults to None.
+
+    Returns:
+        list: [performance, reward, scores]
+    """
     trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp)
     res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state)
     return res
 
 
 def pgpe_sampling_worker(
-        env=None,
-        pol=None,
-        dp=None,
+        env: BaseEnv = None,
+        pol: BasePolicy = None,
+        dp: BaseProcessor = None,
         params: np.array = None,
         episodes_per_theta: int = None,
         n_jobs: int = None
 ) -> np.array:
+    """Worker collecting trajectories for muliple sampling of parameters from the hyperpolicy.
+
+    Args:
+        env (BaseEnv, optional): the env to use. Defaults to None.
+        
+        pol (BasePolicy, optional): the policy to play. Defaults to None.
+        
+        dp (BaseProcessor, optional): the data processor to use. 
+        Defaults to None.
+        
+        params (np.array, optional): the parameter of the hyper.policy. 
+        Defaults to None.
+        
+        episodes_per_theta (int, optional): how many episodes to evaluate for 
+        each sampled parameter. Defaults to None.
+        
+        n_jobs (int, optional): how many parallel trajectories to evaluate 
+        in parallel. Defaults to None.
+
+    Returns:
+        np.array: [parameters, performance]
+    """
     parameter_sampler = ParameterSampler(
         env=env,
         pol=pol,
@@ -41,6 +82,7 @@ def pgpe_sampling_worker(
 
 
 class ParameterSampler:
+    """Sampler for PGPE."""
     def __init__(
             self, env: BaseEnv = None,
             pol: BasePolicy = None,
@@ -48,6 +90,24 @@ class ParameterSampler:
             episodes_per_theta: int = 1,
             n_jobs: int = 1
     ) -> None:
+        """
+        Summary:
+            Initialization.
+
+        Args:
+            env (BaseEnv, optional): the env to employ. Defaults to None.
+            
+            pol (BasePolicy, optional): the poliy to play. Defaults to None.
+            
+            data_processor (BaseProcessor, optional): the data processor to use. 
+            Defaults to None.
+            
+            episodes_per_theta (int, optional): how many trajectories to 
+            evalluate for each sampled theta. Defaults to 1.
+            
+            n_jobs (int, optional): how many theta sample (and evaluate) 
+            in parallel. Defaults to 1.
+        """
         err_msg = "[PGPETrajectorySampler] no environment provided!"
         assert env is not None, err_msg
         self.env = env
@@ -71,6 +131,16 @@ class ParameterSampler:
         return
 
     def collect_trajectories(self, params: np.array) -> list:
+        """
+        Summary:
+            Collect the trajectories for a sampled parameter configurations.
+
+        Args:
+            params (np.array): hyper-policy configuration.
+
+        Returns:
+            list: [params, performance]
+        """
         # sample a parameter configuration
         dim = len(params[RhoElem.MEAN])
         thetas = np.zeros(dim, dtype=np.float128)
@@ -112,11 +182,24 @@ class ParameterSampler:
 
 
 class TrajectorySampler:
+    """Trajectory sampler for PolicyGradient methods."""
     def __init__(
             self, env: BaseEnv = None,
             pol: BasePolicy = None,
             data_processor: BaseProcessor = None
     ) -> None:
+        """
+        Summary:
+            Initialization.
+
+        Args:
+            env (BaseEnv, optional): the env to use. Defaults to None.
+            
+            pol (BasePolicy, optional): the policy to play. Defaults to None.
+            
+            data_processor (BaseProcessor, optional): the data processor to use. 
+            Defaults to None.
+        """
         err_msg = "[PGTrajectorySampler] no environment provided!"
         assert env is not None, err_msg
         self.env = env

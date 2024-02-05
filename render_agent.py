@@ -5,25 +5,38 @@ from envs import Swimmer, HalfCheetah
 from policies import *
 
 ALG = ["pgpe", "pg"][1]
-ENV = ["half_cheetah", "swimmer"][0]
-POL = ["linear", "nn"][1]
+ENV = ["half_cheetah", "swimmer"][1]
+POL = ["linear", "nn"][0]
 WHAT = ["theta", "rho"][1]
-if ALG == "pgpe":
-    # path = "/Users/ale/results/pgpe/pgpe_2000_swimmer_200_adam_01_nn_160_var_1"
-    # path = "/Users/ale/results/pgpe/pgpe_1000_swimmer_200_adam_01_nn_clip_1344_var_1"
-    # path = "/Users/ale/results/pgpe/pgpe_1000_half_cheetah_100_adam_01_linear_clip_102_var_1"
-    path = "/Users/ale/results/pgpe/pgpe_2000_half_cheetah_100_adam_01_linear_clip_102_var_1"
-    name = path + "/pgpe_results.json"
-else:
-    # path = "/Users/ale/results/pg/pg_1000_swimmer_100_adam_001_deep_gaussian_clip_160_var_1"
-    # path = "/Users/ale/results/pg/pg_1000_swimmer_200_adam_001_deep_gaussian_clip_160_var_1"
-    # path = "/Users/ale/results/pg/pg_1000_swimmer_200_adam_001_deep_gaussian_clip_416_var_1"
-    # path = "/Users/ale/results/pg/pg_2000_half_cheetah_100_adam_001_gaussian_clip_102_var_1"
-    path = "/Users/ale/results/pg/pg_2000_half_cheetah_100_adam_001_deep_gaussian_batch_100_clip_368_var_1"
+
+base = "/Users/ale/results/server_results/"
+
+if ALG == "pg":
+    tmp_pol = ""
+    params = 0
+    if POL == "linear":
+        tmp_pol = "gaussian"
+        if ENV == "swimmer":
+            params = 16
+        else:
+            params = 102
+    else:
+        tmp_pol = "deep_gaussian"
+    path = base + f"pg/pg_2000_{ENV}_100_adam_001_{tmp_pol}_batch_100_clip_{params}_var_1_trial_0"
     name = path + "/pg_results.json"
+else:
+    params = 0
+    if POL == "linear":
+        if ENV == "swimmer":
+            params = 16
+        else:
+            params = 102
+    path = base + f"pgpe/pgpe_2000_{ENV}_100_adam_01_{POL}_batch_100_clip_{params}_var_1_trial_0"
+    name = path + "/pgpe_results.json"
 
 file = open(name)
 data = json.load(file)
+print(name)
 
 n_test = 10
 if ENV == "half_cheetah":
@@ -31,7 +44,7 @@ if ENV == "half_cheetah":
     gamma = 1
     env = HalfCheetah(horizon=horizon, gamma=gamma, render=True, clip=True)
 elif ENV == "swimmer":
-    horizon = 200
+    horizon = 100
     gamma = 1
     env = Swimmer(horizon=horizon, gamma=gamma, render=True, clip=True)
 else:
