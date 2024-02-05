@@ -1,4 +1,4 @@
-# MagicRL
+# MagicRL :rocket:
 Magic as the AS Roma! :wolf:
 
 ## Set up the environment.
