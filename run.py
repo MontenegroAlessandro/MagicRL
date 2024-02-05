@@ -8,11 +8,10 @@ from art import *
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
-    "--server",
-    help="Location.",
+    "--dir",
+    help="Directory in which save the results.",
     type=str,
-    default="local",
-    choices=["local", "turing", "bellman", "markov"]
+    default=""
 )
 parser.add_argument(
     "--ite",
@@ -116,16 +115,7 @@ else:
     string_var = str(int(args.var))
 
 # Build
-if args.server == "turing":
-    base_dir = f"/data/alessandro/{args.alg}/"
-elif args.server == "local":
-    base_dir = f"/Users/ale/results/{args.alg}/"
-elif args.server == "bellman":
-    base_dir = f"/home/paxmile/results/{args.alg}/"
-elif args.server == "markov":
-    base_dir = f"/home/alessandro/results/{args.alg}/"
-else:
-    base_dir = ""
+base_dir = args.dir
 
 for i in range(args.n_trials):
     np.random.seed(i)
