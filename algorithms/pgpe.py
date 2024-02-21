@@ -97,7 +97,7 @@ class PGPE:
         self.lr = lr[LearnRates.RHO]
 
         assert initial_rho is not None, "[ERROR] No initial hyperpolicy."
-        self.rho = np.array(initial_rho, dtype=np.float128)
+        self.rho = np.array(initial_rho, dtype=np.float64)
         self.dim = len(self.rho[RhoElem.MEAN])
 
         assert env is not None, "[ERROR] No env provided."
@@ -135,10 +135,10 @@ class PGPE:
         # Additional parameters
         if len(self.rho[RhoElem.STD]) != self.dim:
             raise ValueError("[PGPE] different size in RHO for µ and σ.")
-        self.thetas = np.zeros((self.batch_size, self.dim), dtype=np.float128)
+        self.thetas = np.zeros((self.batch_size, self.dim), dtype=np.float64)
         self.time = 0
-        self.performance_idx = np.zeros(ite, dtype=np.float128)
-        self.performance_idx_theta = np.zeros((ite, batch_size), dtype=np.float128)
+        self.performance_idx = np.zeros(ite, dtype=np.float64)
+        self.performance_idx_theta = np.zeros((ite, batch_size), dtype=np.float64)
         self.parallel_computation_param = bool(self.n_jobs_param != 1)
         self.parallel_computation_traj = bool(self.n_jobs_traj != 1)
         self.sampler = ParameterSampler(
@@ -147,14 +147,14 @@ class PGPE:
         )
 
         # Saving parameters
-        self.best_theta = np.zeros(self.dim, dtype=np.float128)
+        self.best_theta = np.zeros(self.dim, dtype=np.float64)
         self.best_rho = self.rho
         self.best_performance_theta = -np.inf
         self.best_performance_rho = -np.inf
         self.checkpoint_freq = checkpoint_freq
         self.deterministic_curve = np.zeros(self.ite)
 
-        self.rho_history = np.zeros((ite, self.dim), dtype=np.float128)
+        self.rho_history = np.zeros((ite, self.dim), dtype=np.float64)
         self.rho_history[0, :] = copy.deepcopy(self.rho[RhoElem.MEAN])
 
         return
@@ -182,7 +182,7 @@ class PGPE:
                     res.append(self.sampler.collect_trajectories(params=copy.deepcopy(self.rho)))
 
             # post-processing of results
-            performance_res = np.zeros(self.batch_size, dtype=np.float128)
+            performance_res = np.zeros(self.batch_size, dtype=np.float64)
             for z in range(self.batch_size):
                 self.thetas[z, :] = res[z][ParamSamplerResults.THETA]
                 performance_res[z] = np.mean(res[z][ParamSamplerResults.PERF])
@@ -217,7 +217,7 @@ class PGPE:
 
             # std_decay
             if not self.learn_std:
-                std = np.float128(np.exp(self.rho[RhoElem.STD]))
+                std = np.float64(np.exp(self.rho[RhoElem.STD]))
                 std = np.clip(std - self.std_decay, self.std_min, np.inf)
                 self.rho[RhoElem.STD, :] = np.log(std)
 
@@ -234,7 +234,7 @@ class PGPE:
 
         # take the means and the sigmas
         means = self.rho[RhoElem.MEAN, :]
-        stds = np.float128(np.exp(self.rho[RhoElem.STD, :]))
+        stds = np.float64(np.exp(self.rho[RhoElem.STD, :]))
 
         # compute the scores
         if not self.natural:
@@ -279,7 +279,7 @@ class PGPE:
         for id in range(len(self.rho[RhoElem.MEAN])):
             self.thetas[index, id] = np.random.normal(
                 loc=self.rho[RhoElem.MEAN, id],
-                scale=np.exp(np.float128(self.rho[RhoElem.STD, id]))
+                scale=np.exp(np.float64(self.rho[RhoElem.STD, id]))
             )
         return
 
@@ -296,7 +296,7 @@ class PGPE:
         for id in range(len(self.best_rho[RhoElem.MEAN])):
             thetas.append(np.random.normal(
                 loc=self.rho[RhoElem.MEAN, id],
-                scale=np.exp(np.float128(self.rho[RhoElem.STD, id])))
+                scale=np.exp(np.float64(self.rho[RhoElem.STD, id])))
             )
         return thetas
 
@@ -423,7 +423,7 @@ class PGPE:
             )
 
             # extract data
-            ite_perf = np.zeros(self.batch_size, dtype=np.float128)
+            ite_perf = np.zeros(self.batch_size, dtype=np.float64)
             for j in range(self.batch_size):
                 ite_perf[j] = res[j][TrajectoryResults.PERF]
 

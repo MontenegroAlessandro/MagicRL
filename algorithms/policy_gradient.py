@@ -124,10 +124,10 @@ class PolicyGradient:
         self.dim_state = self.env.state_dim
 
         # Useful structures
-        self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float128)
+        self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
         self.time = 0
-        self.performance_idx = np.zeros(ite, dtype=np.float128)
-        self.best_theta = np.zeros(self.dim, dtype=np.float128)
+        self.performance_idx = np.zeros(ite, dtype=np.float64)
+        self.best_theta = np.zeros(self.dim, dtype=np.float64)
         self.best_performance_theta = -np.inf
         self.sampler = TrajectorySampler(
             env=self.env, pol=self.policy, data_processor=self.data_processor
@@ -173,10 +173,10 @@ class PolicyGradient:
                     res.append(tmp_res)
 
             # Update performance
-            perf_vector = np.zeros(self.batch_size, dtype=np.float128)
+            perf_vector = np.zeros(self.batch_size, dtype=np.float64)
             score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim),
-                                    dtype=np.float128)
-            reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float128)
+                                    dtype=np.float64)
+            reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float64)
             for j in range(self.batch_size):
                 perf_vector[j] = res[j][TrajectoryResults.PERF]
                 reward_vector[j, :] = res[j][TrajectoryResults.RewList]
@@ -255,7 +255,7 @@ class PolicyGradient:
         """
         gamma = self.env.gamma
         horizon = self.env.horizon
-        gamma_seq = (gamma * np.ones(horizon, dtype=np.float128)) ** (np.arange(horizon))
+        gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
         rolling_scores = np.cumsum(score_trajectory, axis=1)
         reward_trajectory = reward_trajectory[:, :, np.newaxis] * rolling_scores
         estimated_gradient = np.mean(
@@ -263,13 +263,13 @@ class PolicyGradient:
             axis=0)
         return estimated_gradient
 
-    def update_best_theta(self, current_perf: np.float128) -> None:
+    def update_best_theta(self, current_perf: np.float64) -> None:
         """
         Summary:
             Updates the best theta configuration.
 
         Args:
-            current_perf (np.float128): teh perforamance obtained by the current 
+            current_perf (np.float64): teh perforamance obtained by the current 
             theta configuraiton.
         """
         if self.best_theta is None or self.best_performance_theta <= current_perf:
@@ -291,7 +291,8 @@ class PolicyGradient:
             the learning.
         """
         # make the policy deterministic
-        self.policy.std_dev = 0
+        # self.policy.std_dev = 0
+        self.policy.sigma_noise = 0
 
         # sample
         for i in tqdm(range(self.ite)):
@@ -313,7 +314,7 @@ class PolicyGradient:
             )
 
             # extract data
-            ite_perf = np.zeros(self.batch_size, dtype=np.float128)
+            ite_perf = np.zeros(self.batch_size, dtype=np.float64)
             for j in range(self.batch_size):
                 ite_perf[j] = res[j][TrajectoryResults.PERF]
 

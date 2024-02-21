@@ -164,21 +164,20 @@ for i in range(args.n_trials):
     if args.pol == "linear":
         tot_params = s_dim * a_dim
         pol = LinearPolicy(
-            parameters=np.ones(tot_params),
+            parameters=np.zeros(tot_params),
             dim_state=s_dim,
             dim_action=a_dim,
-            multi_linear=MULTI_LINEAR
+            sigma_noise=0
         )
     elif args.pol == "gaussian":
         tot_params = s_dim * a_dim
-        pol = LinearGaussianPolicy(
-            parameters=np.ones(tot_params),
+        pol = LinearPolicy(
+            parameters=np.zeros(tot_params),
             dim_state=s_dim,
             dim_action=a_dim,
-            std_dev=np.sqrt(args.var),
+            sigma_noise=np.sqrt(args.var),
             std_decay=0,
-            std_min=1e-6,
-            multi_linear=MULTI_LINEAR
+            std_min=1e-5
         )
     elif args.pol in ["nn", "deep_gaussian"]:
         if not huge:

@@ -46,15 +46,15 @@ class ContCartPole(gym.Env):
         # bounds
         high = np.array([
             self.x_threshold * 2,
-            np.finfo(np.float128).max,
+            np.finfo(np.float64).max,
             self.theta_threshold_radians * 2,
-            np.finfo(np.float128).max])
+            np.finfo(np.float64).max])
 
         self.action_space = spaces.Box(
             low=-self.force_mag, high=self.force_mag,shape=(1,),
-            dtype=np.float128
+            dtype=np.float64
         )
-        self.observation_space = spaces.Box(-high, high, dtype=np.float128)
+        self.observation_space = spaces.Box(-high, high, dtype=np.float64)
 
         self.seed()
         self.viewer = None

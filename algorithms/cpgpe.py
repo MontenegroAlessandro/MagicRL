@@ -277,8 +277,8 @@ class CPGPE(PGPE):
             The gradient to apply to rho_std vector.
         """
         """build the vector of sigma**2"""
-        sigma_squared = np.exp(np.float128(self.rho[RhoElem.STD])) ** 2
-        # sigma = np.exp(np.float128(self.rho[RhoElem.STD]))
+        sigma_squared = np.exp(np.float64(self.rho[RhoElem.STD])) ** 2
+        # sigma = np.exp(np.float64(self.rho[RhoElem.STD]))
 
         """build the scores vectors"""
         if self.natural:

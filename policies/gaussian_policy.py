@@ -50,7 +50,7 @@ class LinearGaussianPolicy(BasePolicy, ABC):
             err_msg += f"\n{len(state)} vs. {self.dim_state}"
             raise ValueError(err_msg)
         mean = np.array(self.parameters @ state, dtype=np.float64)
-        action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float128)
+        action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
         return action
 
     def reduce_exploration(self):

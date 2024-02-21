@@ -42,7 +42,7 @@ class Hopper(MujocoBase):
                 action,
                 self.action_bounds[ActionBoundsIdx.lb],
                 self.action_bounds[ActionBoundsIdx.ub],
-                dtype=np.float128
+                dtype=np.float64
             )
         else:
             clipped_action = action

@@ -143,11 +143,11 @@ class ParameterSampler:
         """
         # sample a parameter configuration
         dim = len(params[RhoElem.MEAN])
-        thetas = np.zeros(dim, dtype=np.float128)
+        thetas = np.zeros(dim, dtype=np.float64)
         for i in range(dim):
             thetas[i] = np.random.normal(
                 params[RhoElem.MEAN, i],
-                np.float128(np.exp(params[RhoElem.STD, i]))
+                np.float64(np.exp(params[RhoElem.STD, i]))
             )
 
         # collect performances over the sampled parameter configuration
@@ -174,7 +174,7 @@ class ParameterSampler:
             )
 
         # keep just the performance over each trajectory
-        res = np.zeros(self.episodes_per_theta, dtype=np.float128)
+        res = np.zeros(self.episodes_per_theta, dtype=np.float64)
         for i, elem in enumerate(raw_res):
             res[i] = elem[TrajectoryResults.PERF]
 
@@ -238,8 +238,8 @@ class TrajectorySampler:
         # initialize parameters
         np.random.seed()
         perf = 0
-        rewards = np.zeros(self.env.horizon, dtype=np.float128)
-        scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float128)
+        rewards = np.zeros(self.env.horizon, dtype=np.float64)
+        scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
