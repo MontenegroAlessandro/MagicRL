@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 class BaseProcessor(ABC):
     def __init__(self) -> None:
         super().__init__()
+        self.dim_feat = None
         
     @abstractmethod
     def transform(self, state):

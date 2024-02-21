@@ -61,6 +61,9 @@ class LinearGaussianPolicy(BasePolicy, ABC):
             self.parameters = copy.deepcopy(thetas)
         else:
             self.parameters = np.array(np.split(thetas, self.dim_action))
+            
+    def get_parameters(self):
+        return self.parameters
 
     def compute_score(self, state, action) -> np.array:
         if self.std_dev == 0:
@@ -75,3 +78,6 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         if self.multi_linear:
             scores = np.ravel(scores)
         return scores
+    
+    def diff(self, state):
+        raise NotImplementedError 

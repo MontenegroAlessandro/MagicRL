@@ -89,10 +89,16 @@ class NeuralNetworkPolicy(BasePolicy, ABC):
                 batch_params = tensor_param[self.param_idx[i - 1]:self.param_idx[i]]
             reshaped_params = torch.reshape(batch_params, self.net_layer_shape[i])
             param_layer.data = nn.parameter.Parameter(reshaped_params, requires_grad=True)
+            
+    def get_parameters(self):
+        return nn.utils.parameters_to_vector(self.net.parameters())
 
     def compute_score(self, state, action) -> np.array:
         # todo
         return np.zeros(self.tot_params)
+    
+    def diff(self, state):
+        raise NotImplementedError 
 
 
 class DeepGaussian(NeuralNetworkPolicy):
@@ -143,6 +149,9 @@ class DeepGaussian(NeuralNetworkPolicy):
                 grads[self.param_idx[i - 1]:self.param_idx[i]] = np.ravel(layer_grads)
 
         return grads
+    
+    def get_parameters(self):
+        return super().get_parameters()
 
     def reduce_exploration(self):
         self.std_dev = np.clip(
@@ -160,3 +169,6 @@ class DeepGaussian(NeuralNetworkPolicy):
             dtype=np.float64
         )
         return action
+    
+    def diff(self, state):
+        raise NotImplementedError 

@@ -7,3 +7,4 @@ from envs.swimmer import *
 from envs.humanoid import *
 from envs.ant import *
 from envs.hopper import *
+from envs.reacher import *

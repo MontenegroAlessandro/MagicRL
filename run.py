@@ -1,7 +1,7 @@
 # Libraries
 import argparse
-from algorithms import *
-from data_processors import *
+from algorithms import PGPE, PolicyGradient, DeterministicPG
+from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
 from art import *
@@ -24,7 +24,7 @@ parser.add_argument(
     help="The algorithm to use.",
     type=str,
     default="pgpe",
-    choices=["pgpe", "pg"]
+    choices=["pgpe", "pg", "dpg"]
 )
 parser.add_argument(
     "--var",
@@ -158,7 +158,7 @@ for i in range(args.n_trials):
     a_dim = env.action_dim
 
     """Data Processor"""
-    dp = IdentityDataProcessor()
+    dp = IdentityDataProcessor(dim_feat=env.state_dim)
 
     """Policy"""
     if args.pol == "linear":
@@ -287,6 +287,33 @@ for i in range(args.n_trials):
             n_jobs=args.n_workers
         )
         alg = PolicyGradient(**alg_parameters)
+    elif args.alg == "dpg":
+        if args.pol == "linear":
+            init_theta = [0] * tot_params
+        else:
+            init_theta = np.random.normal(0, 1, tot_params)
+        pol.set_parameters(init_theta)
+        b_pol = copy.deepcopy(pol)
+        b_pol.sigma_noise = np.sqrt(args.var)
+        alg_parameters = dict(
+            ite=args.ite * args.batch,
+            directory=dir_name,
+            det_pol=pol,
+            b_pol=b_pol,
+            env=env,
+            value_features=dp,
+            b_pol_features=dp,
+            theta_step=args.lr,
+            omega_step=args.lr,
+            v_step=args.lr,
+            lr_strategy=args.lr_strategy,
+            checkpoint_freq=100,
+            save_det_curve=True,
+            deterministic_sampling_params=dict(batch=30, ite=args.ite, n_jobs=args.n_workers),
+            env_seed=i,
+            update_b_pol=True
+        )
+        alg = DeterministicPG(**alg_parameters)
     else:
         raise ValueError("Invalid algorithm name.")
 
@@ -296,4 +323,4 @@ for i in range(args.n_trials):
     print(text2art("Learn Start"))
     alg.learn()
     alg.save_results()
-    print(alg.performance_idx)
+    # print(alg.performance_idx)

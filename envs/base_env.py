@@ -55,9 +55,8 @@ class MujocoBase(BaseEnv, ABC):
         self.state = copy.deepcopy(obs)
         return obs, reward, done, None
 
-    def reset(self):
-        # todo: put seed
-        obs = self.gym_env.reset()
+    def reset(self, seed=None):
+        obs = self.gym_env.reset(seed=seed)
         self.state = copy.deepcopy(obs[0])
         return obs
 

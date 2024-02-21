@@ -51,11 +51,17 @@ class OldLinearPolicy(BasePolicy, ABC):
             self.parameters = copy.deepcopy(thetas)
         else:
             self.parameters = np.array(np.split(thetas, self.dim_action))
+            
+    def get_parameters(self):
+        return self.parameters
 
     def compute_score(self, state, action) -> np.array:
         if self.multi_linear:
             state = np.tile(state, self.dim_action)
         return state
+    
+    def diff(self, state):
+        raise NotImplementedError 
 
 
 class LinearPolicy(BasePolicy, ABC):
@@ -115,6 +121,9 @@ class LinearPolicy(BasePolicy, ABC):
             thetas, 
             self.pol.parameters()
         )
+        
+    def get_parameters(self):
+        return nn.utils.parameters_to_vector(self.pol.parameters())
 
     def compute_score(self, state, action) -> np.array:
         state = torch.tensor(state, dtype=torch.float64, requires_grad=False)
@@ -142,3 +151,9 @@ class LinearPolicy(BasePolicy, ABC):
             grads = torch.nn.utils.parameters_to_vector(gradients)
             
             return grads.detach().numpy()
+        
+    def diff(self, state):
+        if self.sigma_noise > 0:
+            raise NotImplementedError("[LinPol] no diff for stochastic policy.")
+        else:
+            return state.repeat(self.dim_action)

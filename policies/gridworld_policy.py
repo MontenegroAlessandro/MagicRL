@@ -65,9 +65,15 @@ class GWPolicy(BasePolicy):
         # self.thetas = np.array(thetas[:self.dim_state])
         # self.omegas = np.array(thetas[self.dim_state:])
         self.thetas = np.array(thetas)
+        
+    def get_parameters(self):
+        return self.thetas
 
     def compute_score(self, state, action):
         raise NotImplementedError("[GWPolicy] Ops, not implemented yet!")
 
     def reduce_exploration(self):
         raise NotImplementedError("[GWPolicy] Ops, not implemented yet!")
+    
+    def diff(self, state):
+        raise NotImplementedError 
