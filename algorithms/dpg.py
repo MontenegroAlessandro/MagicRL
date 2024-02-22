@@ -25,6 +25,7 @@ class DeterministicPG:
     def __init__(
         self,
         ite: int = 100,
+        batch: int = 1,
         directory: str = "",
         det_pol: BasePolicy = None,
         b_pol: BasePolicy = None,
@@ -37,13 +38,14 @@ class DeterministicPG:
         lr_strategy: str = "constant",
         checkpoint_freq: int = 100,
         save_det_curve: bool = False,
-        deterministic_sampling_params: dict = None,
+        n_jobs: int = 1,
         env_seed: int = None,
         update_b_pol: bool = False
     ) -> None:
         # Args checking
         assert ite > 0, "[DPG] ite must be > 0."
         self.ite = ite
+        self.batch = batch
         
         assert det_pol is not None, "[DPG] no deterministic policy provided."
         self.det_pol = copy.deepcopy(det_pol)
@@ -95,12 +97,11 @@ class DeterministicPG:
         check_directory_and_create(self.directory)
         self.checkpoint_freq = checkpoint_freq
         self.theta_history = torch.zeros((self.ite, self.det_pol.tot_params), dtype=torch.float64)
-        self.deterministic_curve = None
         
         # Deterministic sampling
         self.save_det_curve = save_det_curve
-        self.deterministic_sampling_params = deterministic_sampling_params
         self.deterministic_curve = torch.zeros(self.ite, dtype=torch.float64)
+        self.n_jobs = n_jobs
     
     def learn(self):
         # Reset the environment
@@ -109,10 +110,17 @@ class DeterministicPG:
         omega = nn.utils.parameters_to_vector(self.advantage_function.parameters())
         v = nn.utils.parameters_to_vector(self.value_function.parameters())
         
+        self.theta_history[0,:] = theta.clone().detach()
+        
         # Learning Phase
-        for i in tqdm(range(self.ite)):
-            # Save thetas
-            self.theta_history[i,:] = theta.detach().clone()
+        for i in tqdm(range(self.ite * self.batch * self.env.horizon)):
+            # See whether the envirnoment has to be re-initialized
+            if (i + 1) % (self.env.horizon * self.batch) == 0:
+                idx = int((i + 1) / (self.env.horizon * self.batch)) - 1
+                state = torch.tensor(self.env.reset(seed=self.env_seed+idx)[0], dtype=torch.float64)
+            
+                # Save thetas
+                self.theta_history[idx,:] = theta.clone().detach()
             
             # Select an action
             raw_action = self.b_pol.draw_action(state)
@@ -156,11 +164,15 @@ class DeterministicPG:
                 self.save_results()
                 
             # Change state
-            state = next_state.detach().clone()
+            state = next_state.clone().detach()
         
         # Simulate the deterministic curve if needed
         if self.save_det_curve:
-            self.sample_deterministic_curve(**self.deterministic_sampling_params)
+            self.sample_deterministic_curve(
+                ite=self.ite, 
+                batch=self.batch, 
+                n_jobs=self.n_jobs
+            )
         
         # Save the results
         self.save_results()
@@ -209,7 +221,8 @@ class DeterministicPG:
         batch: int = None, 
         n_jobs: int = None
     ):
-        for i in tqdm(range(0, ite, batch)):
+        self.deterministic_curve = torch.zeros(ite, dtype=torch.float64)
+        for i in tqdm(range(ite)):
             self.det_pol.set_parameters(thetas=self.theta_history[i, :])
             worker_dict = dict(
                 env=copy.deepcopy(self.env),

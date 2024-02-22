@@ -296,11 +296,12 @@ for i in range(args.n_trials):
         b_pol = copy.deepcopy(pol)
         b_pol.sigma_noise = np.sqrt(args.var)
         alg_parameters = dict(
-            ite=args.ite * args.batch,
+            ite=args.ite,
             directory=dir_name,
             det_pol=pol,
             b_pol=b_pol,
             env=env,
+            batch=args.batch,
             value_features=dp,
             b_pol_features=dp,
             theta_step=args.lr,
@@ -309,7 +310,7 @@ for i in range(args.n_trials):
             lr_strategy=args.lr_strategy,
             checkpoint_freq=100,
             save_det_curve=True,
-            deterministic_sampling_params=dict(batch=30, ite=args.ite, n_jobs=args.n_workers),
+            n_jobs=args.n_workers,
             env_seed=i,
             update_b_pol=True
         )
