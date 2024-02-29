@@ -1,6 +1,7 @@
 """ADAM implementation"""
 # Libraries
 import numpy as np
+from algorithms.utils import is_tensor, is_numpy, tensor_to_numpy, numpy_to_tensor
 
 
 # Adam class implementation
@@ -50,6 +51,10 @@ class Adam:
         Returns:
             np.array: the modified gradient.
         """
+        # fixme: remove the conversions after the refactor
+        convert = is_tensor(g)
+        if convert:
+            g = tensor_to_numpy(g)
         # compute m and v
         self.m = self.m * self.beta_1 + (1 - self.beta_1) * g
         self.v = self.v * self.beta_2 + (1 - self.beta_2) * np.power(g, 2)
@@ -63,5 +68,9 @@ class Adam:
 
         # update t
         self.t += 1
+
+        # fixme: remove the conversions after the refactor
+        if convert:
+            new_gradient = numpy_to_tensor(new_gradient)
 
         return new_gradient

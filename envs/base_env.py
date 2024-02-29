@@ -1,7 +1,6 @@
-"""todo"""
+"""Abstract Classes for the Environments"""
 from abc import ABC, abstractmethod
 import copy
-import numpy as np
 
 
 class BaseEnv(ABC):
@@ -12,7 +11,7 @@ class BaseEnv(ABC):
             horizon: int = 0,
             gamma: float = 0.99,
             verbose: bool = False,
-            clip: bool = True
+            clip: bool = True,
     ) -> None:
         """todo"""
         self.horizon = horizon
@@ -23,13 +22,15 @@ class BaseEnv(ABC):
         self.state_dim = 0
         self.action_dim = 0
         self.clip = clip
+        self.action_space = None
+        self.observation_space = None
 
     @abstractmethod
     def step(self, action):
         """todo"""
         pass
 
-    def reset(self) -> None:
+    def reset(self, seed=None) -> None:
         """todo"""
         self.time = 0
 
@@ -44,7 +45,7 @@ class MujocoBase(BaseEnv, ABC):
             horizon: int = 0,
             gamma: float = 0.99,
             verbose: bool = False,
-            clip: bool = True
+            clip: bool = True,
     ) -> None:
         super().__init__(horizon=horizon, gamma=gamma, verbose=verbose, clip=clip)
         self.gym_env = None

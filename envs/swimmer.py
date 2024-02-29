@@ -35,6 +35,8 @@ class Swimmer(MujocoBase):
         self.action_bounds = [-1, 1]
         self.state_dim = self.gym_env.observation_space.shape[0]    # 8
         self.action_dim = self.gym_env.action_space.shape[0]        # 2
+        self.action_space = self.gym_env.action_space
+        self.observation_space = self.gym_env.observation_space
         self.state = None
         return
 

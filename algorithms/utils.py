@@ -2,6 +2,9 @@
 import os
 import errno
 
+import numpy as np
+import torch
+
 
 class RhoElem:
     MEAN = 0
@@ -41,3 +44,25 @@ def check_directory_and_create(dir_name: str = None) -> None:
             if exc.errno != errno.EEXIST:
                 raise
     return
+
+
+def is_numpy(arr) -> bool:
+    return isinstance(arr, np.ndarray)
+
+
+def is_tensor(arr) -> bool:
+    return isinstance(arr, torch.Tensor)
+
+
+def tensor_to_numpy(tensor: torch.Tensor) -> np.ndarray:
+    """Convert a tensor to a numpy array."""
+    if is_numpy(tensor):
+        return tensor
+    return tensor.detach().numpy()
+
+
+def numpy_to_tensor(arr: np.ndarray) -> torch.Tensor:
+    """Convert a numpy array to a torch tensor."""
+    if is_tensor(arr):
+        return arr
+    return torch.tensor(arr)

@@ -36,6 +36,8 @@ class Ant(MujocoBase):
         self.state_dim = self.gym_env.observation_space.shape[0]    # 27
         self.action_dim = self.gym_env.action_space.shape[0]        # 8
         self.state = None
+        self.action_space = self.gym_env.action_space
+        self.observation_space = self.gym_env.observation_space
         return
 
     def step(self, action):

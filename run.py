@@ -176,8 +176,8 @@ for i in range(args.n_trials):
             dim_state=s_dim,
             dim_action=a_dim,
             sigma_noise=np.sqrt(args.var),
-            std_decay=0,
-            std_min=1e-5
+            sigma_decay=0,
+            sigma_min=1e-5
         )
     elif args.pol in ["nn", "deep_gaussian"]:
         if not huge:
@@ -305,8 +305,8 @@ for i in range(args.n_trials):
             value_features=dp,
             b_pol_features=dp,
             theta_step=args.lr,
-            omega_step=args.lr,
-            v_step=args.lr,
+            omega_step=0.01,
+            v_step=0.01,
             lr_strategy=args.lr_strategy,
             checkpoint_freq=100,
             save_det_curve=True,

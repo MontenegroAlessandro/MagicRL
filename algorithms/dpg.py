@@ -1,6 +1,8 @@
 """Implementation of DPG (deterministic policy gradient):
 Compatible Off-Policy Deterministic Actor Critic.
 Silver et al., 2015."""
+# fixme: for the moment we have a mix of numpy and torch,
+#  we need to switch to torch.
 
 # Libraries
 import numpy as np
@@ -79,8 +81,17 @@ class DeterministicPG:
         
         assert lr_strategy in ["constant", "adam"], "[DPG] illegal LR_STRATEGY."
         self.lr_strategy = lr_strategy
+
+        # Adam scheduler
+        self.theta_adam = None
+        self.omega_adam = None
+        self.v_adam = None
+        if self.lr_strategy == "adam":
+            self.theta_adam = Adam(step_size=self.theta_step, strategy="ascent")
+            self.omega_adam = Adam(step_size=self.omega_step, strategy="ascent")
+            self.v_adam = Adam(step_size=self.v_step, strategy="ascent")
         
-        # V and A approximators
+        # V and A approx.
         self.value_function = nn.Sequential(
             nn.Linear(self.value_features.dim_feat, 1, bias=False)
         )
@@ -114,11 +125,13 @@ class DeterministicPG:
         
         # Learning Phase
         for i in tqdm(range(self.ite * self.batch * self.env.horizon)):
-            # See whether the envirnoment has to be re-initialized
+            # See whether the environment has to be re-initialized
+            if (i + 1) % self.env.horizon == 0:
+                state = torch.tensor(self.env.reset(seed=self.env_seed+i)[0], dtype=torch.float64)
+            
+            # See whether we need to save the parameters
             if (i + 1) % (self.env.horizon * self.batch) == 0:
                 idx = int((i + 1) / (self.env.horizon * self.batch)) - 1
-                state = torch.tensor(self.env.reset(seed=self.env_seed+idx)[0], dtype=torch.float64)
-            
                 # Save thetas
                 self.theta_history[idx,:] = theta.clone().detach()
             
@@ -133,19 +146,28 @@ class DeterministicPG:
             # Process the state
             t_value_state = self.value_features.transform(state)
             t_value_next_state = self.value_features.transform(next_state)
-            t_b_pol_state = self.b_pol_features.transform(state)
+            # t_b_pol_state = self.b_pol_features.transform(state)
             
             # Update routine
             q_next = 0 if done else self.value_function(t_value_next_state)
             grad_det_pol = self.det_pol.diff(t_value_state)
-            omega = nn.utils.parameters_to_vector(self.advantage_function.parameters())
+            # omega = nn.utils.parameters_to_vector(self.advantage_function.parameters())
             
             # compute the deltas
             delta = reward + self.env.gamma * q_next - self._Q(state, action)
-            # delta_theta = self.theta_step * (grad_det_pol @ (grad_det_pol.T @ omega))
-            delta_theta = self.theta_step * (torch.outer(omega, grad_det_pol) @ grad_det_pol)
-            delta_omega = self.omega_step * delta * self._nu(state, action)
-            delta_v = self.v_step * delta * t_value_state
+            if self.lr_strategy == "constant":
+                # delta_theta = self.theta_step * (grad_det_pol @ (grad_det_pol.T @ omega))
+                delta_theta = self.theta_step * (torch.outer(omega, grad_det_pol) @ grad_det_pol)
+                delta_omega = self.omega_step * delta * self._nu(state, action)
+                delta_v = self.v_step * delta * t_value_state
+            elif self.lr_strategy == "adam":
+                delta_theta = self.theta_adam.compute_gradient(
+                    torch.outer(omega, grad_det_pol) @ grad_det_pol
+                )
+                delta_omega = self.omega_adam.compute_gradient(delta * self._nu(state, action))
+                delta_v = self.v_adam.compute_gradient(delta * t_value_state)
+            else:
+                raise NotImplementedError("[DPG] Illegal lr schedule strategy.")
             
             # updates values
             theta = theta + delta_theta

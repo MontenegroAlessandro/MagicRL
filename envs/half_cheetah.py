@@ -45,6 +45,8 @@ class HalfCheetah(MujocoBase):
         self.state_dim = self.gym_env.observation_space.shape[0]    # 17
         self.action_dim = self.gym_env.action_space.shape[0]        # 6
         self.state = None
+        self.action_space = self.gym_env.action_space
+        self.observation_space = self.gym_env.observation_space
         return
 
     def step(self, action):
