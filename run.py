@@ -44,7 +44,7 @@ parser.add_argument(
     help="The environment.",
     type=str,
     default="swimmer",
-    choices=["swimmer", "half_cheetah", "reacher", "humanoid", "ant", "hopper"]
+    choices=["swimmer", "half_cheetah", "reacher", "humanoid", "ant", "hopper", "lqr"]
 )
 parser.add_argument(
     "--horizon",
@@ -94,6 +94,18 @@ parser.add_argument(
     help="How many runs of the same experiment to perform.",
     type=int,
     default=1
+)
+parser.add_argument(
+    "--lqr_state_dim",
+    help="State dimension for the LQR environment.",
+    type=int,
+    default=1
+)
+parser.add_argument(
+    "--lqr_action_dim",
+    help="Action dimension for the LQR environment.",
+    type=int,
+    default=2
 )
 
 args = parser.parse_args()
@@ -152,6 +164,16 @@ for i in range(args.n_trials):
         env_class = Hopper
         env = Hopper(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
+    elif args.env == "lqr":
+        env_class = LQR
+        env = LQR.generate(
+            s_dim=args.lqr_state_dim,
+            a_dim=args.lqr_action_dim,
+            horizon=args.horizon,
+            gamma=args.gamma,
+            scale_matrix=0.9
+        )
+        MULTI_LINEAR = bool(args.lqr_action_dim > 1)
     else:
         raise ValueError(f"Invalid env name.")
     s_dim = env.state_dim
@@ -163,22 +185,37 @@ for i in range(args.n_trials):
     """Policy"""
     if args.pol == "linear":
         tot_params = s_dim * a_dim
-        pol = LinearPolicy(
+        """pol = LinearPolicy(
             parameters=np.zeros(tot_params),
             dim_state=s_dim,
             dim_action=a_dim,
             sigma_noise=0
+        )"""
+        pol = OldLinearPolicy(
+            parameters=np.zeros(tot_params),
+            dim_state=s_dim,
+            dim_action=a_dim,
+            multi_linear=MULTI_LINEAR
         )
     elif args.pol == "gaussian":
         tot_params = s_dim * a_dim
-        pol = LinearPolicy(
+        pol = LinearGaussianPolicy(
+            parameters=np.zeros(tot_params),
+            dim_state=s_dim,
+            dim_action=a_dim,
+            std_dev=np.sqrt(args.var),
+            std_decay=0,
+            std_min=1e-5,
+            multi_linear=MULTI_LINEAR
+        )
+        """pol = LinearPolicy(
             parameters=np.zeros(tot_params),
             dim_state=s_dim,
             dim_action=a_dim,
             sigma_noise=np.sqrt(args.var),
             sigma_decay=0,
             sigma_min=1e-5
-        )
+        )"""
     elif args.pol in ["nn", "deep_gaussian"]:
         if not huge:
             net = nn.Sequential(
@@ -305,8 +342,8 @@ for i in range(args.n_trials):
             value_features=dp,
             b_pol_features=dp,
             theta_step=args.lr,
-            omega_step=0.01,
-            v_step=0.01,
+            omega_step=args.lr*10,
+            v_step=args.lr*10,
             lr_strategy=args.lr_strategy,
             checkpoint_freq=100,
             save_det_curve=True,
@@ -324,4 +361,5 @@ for i in range(args.n_trials):
     print(text2art("Learn Start"))
     alg.learn()
     alg.save_results()
-    # print(alg.performance_idx)
+    if args.alg != "dpg":
+        print(alg.performance_idx)

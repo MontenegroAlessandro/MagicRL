@@ -93,7 +93,7 @@ class LinearPolicy(BasePolicy, ABC):
         else:
             self.parameters = copy.deepcopy(torch.tensor(parameters, dtype=torch.float64, requires_grad=True))
         
-        # Model istantiation
+        # Model instantiation
         self.pol = nn.Sequential(
             nn.Linear(self.dim_state, self.dim_action, bias=False)
         )

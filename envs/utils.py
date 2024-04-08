@@ -9,6 +9,11 @@ class ActionBoundsIdx:
     ub = 1
 
 
+class StateBoundsIdx:
+    lb = 0
+    ub = 1
+
+
 # Position Class
 class Position:
     """Class implementing a position"""

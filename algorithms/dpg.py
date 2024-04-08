@@ -108,6 +108,7 @@ class DeterministicPG:
         check_directory_and_create(self.directory)
         self.checkpoint_freq = checkpoint_freq
         self.theta_history = torch.zeros((self.ite, self.det_pol.tot_params), dtype=torch.float64)
+        # self.reward_step = torch.zeros(self.ite * self.batch * self.env.horizon, dtype=torch.float64)
         
         # Deterministic sampling
         self.save_det_curve = save_det_curve
@@ -121,7 +122,7 @@ class DeterministicPG:
         omega = nn.utils.parameters_to_vector(self.advantage_function.parameters())
         v = nn.utils.parameters_to_vector(self.value_function.parameters())
         
-        self.theta_history[0,:] = theta.clone().detach()
+        self.theta_history[0, :] = theta.clone().detach()
         
         # Learning Phase
         for i in tqdm(range(self.ite * self.batch * self.env.horizon)):
@@ -142,6 +143,7 @@ class DeterministicPG:
             # Collect the result of a step
             next_state, reward, done, _ = self.env.step(raw_action)
             next_state = torch.tensor(next_state, dtype=torch.float64)
+            # self.reward_step[i] = reward
             
             # Process the state
             t_value_state = self.value_features.transform(state)
@@ -174,7 +176,8 @@ class DeterministicPG:
             self.det_pol.set_parameters(theta)
             if self.update_b_pol:
                 self.b_pol.set_parameters(theta)
-            
+            # print(theta)
+
             omega = omega + delta_omega
             nn.utils.vector_to_parameters(omega, self.advantage_function.parameters())
             
@@ -272,7 +275,8 @@ class DeterministicPG:
         # Create the dictionary with the useful info
         results = {
             "thetas_history": self.theta_history.tolist(),
-            "deterministic_res": self.deterministic_curve.tolist()
+            "deterministic_res": self.deterministic_curve.tolist(),
+            # "reward_step": self.reward_step.tolist()
         }
 
         # Save the json
