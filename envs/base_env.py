@@ -24,6 +24,8 @@ class BaseEnv(ABC):
         self.clip = clip
         self.action_space = None
         self.observation_space = None
+        self.with_costs = False
+        self.how_many_costs = 0
 
     @abstractmethod
     def step(self, action):
@@ -52,9 +54,9 @@ class MujocoBase(BaseEnv, ABC):
         self.state = None
 
     def step(self, action):
-        obs, reward, done, _, _ = self.gym_env.step(action)
+        obs, reward, done, info, _ = self.gym_env.step(action)
         self.state = copy.deepcopy(obs)
-        return obs, reward, done, None
+        return obs, reward, done, info
 
     def reset(self, seed=None):
         obs = self.gym_env.reset(seed=seed)

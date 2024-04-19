@@ -1,6 +1,5 @@
 """
 Implementation of the LQR Environment.
-Import from MushroomRL
 """
 import numpy as np
 import scipy
@@ -13,10 +12,10 @@ from envs.utils import StateBoundsIdx, ActionBoundsIdx
 class LQR(BaseEnv, ABC):
     def __init__(
             self,
-            A: np.ndarray = None,
-            B: np.ndarray = None,
-            Q: np.ndarray = None,
-            R: np.ndarray = None,
+            A: np.ndarray=None,
+            B: np.ndarray=None,
+            Q: np.ndarray=None,
+            R: np.ndarray=None,
             max_pos=np.inf,
             max_action=np.inf,
             random_init=False,
@@ -67,6 +66,10 @@ class LQR(BaseEnv, ABC):
         low_u = -high_u
         self.action_bounds = [low_u, high_u]
         self.action_dim = len(self.B[0])
+
+        # Control whether to insert the action term in the rewards
+        if self.R is None:
+            self.R = 0 * np.eye(self.action_dim)
 
         self.state = None
         self.K = self.get_optimal_K()

@@ -9,3 +9,4 @@ from envs.ant import *
 from envs.hopper import *
 from envs.reacher import *
 from envs.lqr import *
+from envs.lqr_cost import *

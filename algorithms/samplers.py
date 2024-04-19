@@ -103,7 +103,7 @@ class ParameterSampler:
             Defaults to None.
             
             episodes_per_theta (int, optional): how many trajectories to 
-            evalluate for each sampled theta. Defaults to 1.
+            evaluate for each sampled theta. Defaults to 1.
             
             n_jobs (int, optional): how many theta sample (and evaluate) 
             in parallel. Defaults to 1.
@@ -174,11 +174,21 @@ class ParameterSampler:
             )
 
         # keep just the performance over each trajectory
-        res = np.zeros(self.episodes_per_theta, dtype=np.float64)
+        # if it is the case keep also the costs
+        perf_res = np.zeros(self.episodes_per_theta, dtype=np.float64)
+        cum_costs = np.zeros(
+            shape=(self.episodes_per_theta, self.env.how_many_costs),
+            dtype=np.float64
+        )
         for i, elem in enumerate(raw_res):
-            res[i] = elem[TrajectoryResults.PERF]
+            perf_res[i] = elem[TrajectoryResults.PERF]
+            if self.env.with_costs:
+                cum_costs[i, :] = np.array(
+                    elem[TrajectoryResults.CostInfo]["cost_perf"],
+                    dtype=np.float64
+                )
 
-        return [thetas, res]
+        return [thetas, perf_res, cum_costs]
 
 
 class TrajectorySampler:
@@ -223,7 +233,7 @@ class TrajectorySampler:
             configuration.
         Args:
             params (np.array): the current sampling of theta values
-            starting_state (any): teh starting state for the iterations
+            starting_state (any): the starting state for the iterations
         Returns:
             list of:
                 float: the discounted reward of the trajectory
@@ -238,8 +248,10 @@ class TrajectorySampler:
         # initialize parameters
         np.random.seed()
         perf = 0
+        cost_perf = np.zeros(self.env.how_many_costs)
         rewards = np.zeros(self.env.horizon, dtype=np.float64)
-        scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
+        costs = np.zeros(shape=(self.env.horizon, self.env.how_many_costs), dtype=np.float64)
+        scores = np.zeros(shape=(self.env.horizon, self.pol.tot_params), dtype=np.float64)
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
@@ -256,10 +268,14 @@ class TrajectorySampler:
             score = self.pol.compute_score(state=features, action=a)
 
             # play the action
-            _, rew, done, _ = self.env.step(action=a)
+            _, rew, done, info = self.env.step(action=a)
 
             # update the performance index
             perf += (self.env.gamma ** t) * rew
+            if self.env.with_costs:
+                cost_array = copy.deepcopy(np.array(info["costs"], dtype=np.float64))
+                cost_perf = cost_perf + (self.env.gamma ** t) * cost_array
+                costs[t, :] = copy.deepcopy(cost_array)
 
             # update the vectors of rewards and scores
             rewards[t] = rew
@@ -268,7 +284,16 @@ class TrajectorySampler:
             if done:
                 if t < self.env.horizon - 1:
                     rewards[t+1:] = 0
-                    scores[t+1:] = 0
+                    scores[t+1:, :] = 0
+                    if self.env.with_costs:
+                        costs[t+1:, :] = 0
                 break
 
-        return [perf, rewards, scores]
+        # if necessary save the info of the costs
+        info_cost = None
+        if self.env.with_costs:
+            info_cost = dict(
+                cost_perf=copy.deepcopy(cost_perf),
+                costs=copy.deepcopy(costs)
+            )
+        return [perf, rewards, scores, info_cost]

@@ -21,11 +21,13 @@ class TrajectoryResults:
     PERF = 0
     RewList = 1
     ScoreList = 2
+    CostInfo = 3
 
 
 class ParamSamplerResults:
     THETA = 0
     PERF = 1
+    COST = 2
 
 
 def check_directory_and_create(dir_name: str = None) -> None:

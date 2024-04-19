@@ -40,7 +40,8 @@ class Adam:
         if self.strategy == "ascent":
             self.step_size = self.step_size
         else:
-            self.step_size = -self.step_size
+            # self.step_size = -self.step_size
+            self.step_size = self.step_size
 
     def compute_gradient(self, g: np.array) -> np.array:
         """

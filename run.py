@@ -1,6 +1,6 @@
 # Libraries
 import argparse
-from algorithms import PGPE, PolicyGradient, DeterministicPG
+from algorithms import PGPE, PolicyGradient, DeterministicPG, CPGPE
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
@@ -24,7 +24,7 @@ parser.add_argument(
     help="The algorithm to use.",
     type=str,
     default="pgpe",
-    choices=["pgpe", "pg", "dpg"]
+    choices=["pgpe", "pg", "dpg", "cpgpe"]
 )
 parser.add_argument(
     "--var",
@@ -45,6 +45,13 @@ parser.add_argument(
     type=str,
     default="swimmer",
     choices=["swimmer", "half_cheetah", "reacher", "humanoid", "ant", "hopper", "lqr"]
+)
+parser.add_argument(
+    "--costs",
+    help="Flag to ensure the usage of the costly-version of the environment.",
+    type=int,
+    default=0,
+    choices=[0, 1]
 )
 parser.add_argument(
     "--horizon",
@@ -87,7 +94,8 @@ parser.add_argument(
     "--clip",
     help="Whether to clip the action in the environment.",
     type=int,
-    default=1
+    default=1,
+    choices=[0, 1]
 )
 parser.add_argument(
     "--n_trials",
@@ -141,38 +149,56 @@ for i in range(args.n_trials):
     """Environment"""
     MULTI_LINEAR = False
     if args.env == "swimmer":
-        env_class = Swimmer
-        env = Swimmer(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = Swimmer
+            env = Swimmer(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "half_cheetah":
-        env_class = HalfCheetah
-        env = HalfCheetah(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = HalfCheetah
+            env = HalfCheetah(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "reacher":
-        env_class = Reacher
-        env = Reacher(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = Reacher
+            env = Reacher(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "humanoid":
-        env_class = Humanoid
-        env = Humanoid(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = Humanoid
+            env = Humanoid(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "ant":
-        env_class = Ant
-        env = Ant(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = Ant
+            env = Ant(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "hopper":
-        env_class = Hopper
-        env = Hopper(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = Hopper
+            env = Hopper(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "lqr":
-        env_class = LQR
-        env = LQR.generate(
-            s_dim=args.lqr_state_dim,
-            a_dim=args.lqr_action_dim,
-            horizon=args.horizon,
-            gamma=args.gamma,
-            scale_matrix=0.9
-        )
+        env_class = CostLQR if args.costs else LQR
+        env = env_class.generate(
+                s_dim=args.lqr_state_dim,
+                a_dim=args.lqr_action_dim,
+                horizon=args.horizon,
+                gamma=args.gamma,
+                scale_matrix=0.9
+            )
         MULTI_LINEAR = bool(args.lqr_action_dim > 1)
     else:
         raise ValueError(f"Invalid env name.")
@@ -302,6 +328,44 @@ for i in range(args.n_trials):
             n_jobs_traj=1
         )
         alg = PGPE(**alg_parameters)
+    elif args.alg == "cpgpe":
+        if args.var == 1:
+            var_term = 1.001
+        else:
+            var_term = args.var
+        hp = np.zeros((2, tot_params))
+        if args.pol == "linear":
+            hp[0] = [0] * tot_params
+        else:
+            hp[0] = np.random.normal(0, 1, tot_params)
+        hp[1] = [np.log(np.sqrt(var_term))] * tot_params
+        alg_parameters = dict(
+            cost_type="tc",
+            cost_param=0,
+            omega=.1,
+            thresholds=np.array([0.05]),
+            lambda_init=np.array([1]),
+            eta_init=0,
+            lr=[args.lr, args.lr * 10, args.lr],
+            initial_rho=hp,
+            ite=args.ite,
+            batch_size=args.batch,
+            episodes_per_theta=1,
+            env=env,
+            policy=pol,
+            data_processor=dp,
+            directory=dir_name,
+            verbose=False,
+            natural=False,
+            checkpoint_freq=100,
+            lr_strategy=args.lr_strategy,
+            learn_std=False,
+            std_decay=0,
+            std_min=1e-6,
+            n_jobs_param=args.n_workers,
+            n_jobs_traj=1
+        )
+        alg = CPGPE(**alg_parameters)
     elif args.alg == "pg":
         if args.pol == "gaussian":
             init_theta = [0] * tot_params
@@ -363,3 +427,5 @@ for i in range(args.n_trials):
     alg.save_results()
     if args.alg != "dpg":
         print(alg.performance_idx)
+    if args.alg == "cpgpe":
+        print(alg.cost_idx)
