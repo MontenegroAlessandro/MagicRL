@@ -1,10 +1,13 @@
 # Libraries
 import argparse
 from algorithms import PGPE, PolicyGradient, DeterministicPG
+from algorithms.JAX_algorithms.pgao import PGAO
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
 from art import *
+import jax
+import jax.numpy as jnp
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -24,7 +27,7 @@ parser.add_argument(
     help="The algorithm to use.",
     type=str,
     default="pgpe",
-    choices=["pgpe", "pg", "dpg"]
+    choices=["pgpe", "pg", "dpg", "pg_jax"]
 )
 parser.add_argument(
     "--var",
@@ -324,6 +327,29 @@ for i in range(args.n_trials):
             n_jobs=args.n_workers
         )
         alg = PolicyGradient(**alg_parameters)
+    elif args.alg == "pg_jax":
+        if args.pol == "gaussian":
+            init_theta = [0] * tot_params
+        else:
+            key = jax.random.PRNGKey(0)
+            init_theta = jax.random.normal(key, (tot_params,))
+        alg_parameters = dict(
+            lr=[args.lr],
+            lr_strategy=args.lr_strategy,
+            estimator_type="GPOMDP",
+            initial_theta=init_theta,
+            ite=args.ite,
+            batch_size=args.batch,
+            env=env,
+            policy=pol,
+            data_processor=dp,
+            directory=dir_name,
+            verbose=False,
+            natural=False,
+            checkpoint_freq=100,
+            n_jobs= 1 # jax do not allow for parallelism
+        )
+        alg = PGAO(**alg_parameters)
     elif args.alg == "dpg":
         if args.pol == "linear":
             init_theta = [0] * tot_params

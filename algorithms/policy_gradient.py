@@ -291,7 +291,7 @@ class PolicyGradient:
             the learning.
         """
         # make the policy deterministic
-        # self.policy.std_dev = 0
+        self.policy.std_dev = 0
         self.policy.sigma_noise = 0
 
         # sample

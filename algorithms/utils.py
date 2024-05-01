@@ -27,6 +27,13 @@ class ParamSamplerResults:
     THETA = 0
     PERF = 1
 
+class PolicyGradientAlgorithms:
+    PG = "PG"
+    PGPE = "PGPE"
+    CPG = "CPG"
+    CPGPE = "CPGPE"
+    REINFORCE = "REINFORCE"
+    GPOMDP = "GPOMDP"
 
 def check_directory_and_create(dir_name: str = None) -> None:
     """
@@ -66,3 +73,4 @@ def numpy_to_tensor(arr: np.ndarray) -> torch.Tensor:
     if is_tensor(arr):
         return arr
     return torch.tensor(arr)
+
