@@ -292,7 +292,7 @@ class PGAO(PolicyGradients):
             res = []
             for _ in range(self.batch_size):
                 tmp_res = self.sampler.collect_trajectory(
-                    params=copy.deepcopy(np.array(self.thetas)))  # It may be necessary to use np.array(self.thetas)
+                    params=copy.deepcopy(self.thetas))  # It may be necessary to use np.array(self.thetas)
                 res.append(tmp_res)
 
             # Update performance

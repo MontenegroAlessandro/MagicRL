@@ -9,6 +9,8 @@ from art import *
 import jax
 import jax.numpy as jnp
 
+np.random.seed(42)
+
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
     "--dir",
@@ -118,7 +120,7 @@ if args.pol == "big_nn":
     huge = True
     args.pol = "nn"
 
-if args.alg == "pg":
+if args.alg == "pg" or args.alg == "pg_jax":
     if args.pol == "linear":
         args.pol = "gaussian"
     elif args.pol == "nn":
@@ -329,7 +331,7 @@ for i in range(args.n_trials):
         alg = PolicyGradient(**alg_parameters)
     elif args.alg == "pg_jax":
         if args.pol == "gaussian":
-            init_theta = [0] * tot_params
+            init_theta = jnp.zeros(tot_params)
         else:
             key = jax.random.PRNGKey(0)
             init_theta = jax.random.normal(key, (tot_params,))
