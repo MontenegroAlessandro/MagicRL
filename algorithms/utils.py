@@ -12,7 +12,7 @@ class RhoElem:
 
 
 class LearnRates:
-    RHO = 0
+    PARAM = 0
     LAMBDA = 1
     ETA = 2
 

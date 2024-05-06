@@ -94,7 +94,7 @@ class PGPE:
         """
         # Arguments with checks
         assert lr is not None, "[ERROR] No Learning rate provided"
-        self.lr = lr[LearnRates.RHO]
+        self.lr = lr[LearnRates.PARAM]
 
         assert initial_rho is not None, "[ERROR] No initial hyperpolicy."
         self.rho = np.array(initial_rho, dtype=np.float64)

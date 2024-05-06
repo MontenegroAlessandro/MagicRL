@@ -11,5 +11,5 @@ Pillow==9.4.0
 torch==1.11.0
 tqdm==4.43.0
 adam==0.0.0.dev0
-scipy==1.8.1
+scipy==1.11.1
 argparse==1.4.0

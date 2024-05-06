@@ -13,8 +13,9 @@ def pg_sampling_worker(
         env: BaseEnv = None,
         pol: BasePolicy = None,
         dp: BaseProcessor = None,
-        params: np.array = None,
-        starting_state: np.array = None
+        params: np.ndarray = None,
+        starting_state: np.ndarray = None,
+        starting_action: np.ndarray = None
 ) -> list:
     """Worker collecting a single trajectory.
 
@@ -36,7 +37,7 @@ def pg_sampling_worker(
         list: [performance, reward, scores]
     """
     trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp)
-    res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state)
+    res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state, starting_action=starting_action)
     return res
 
 
@@ -225,7 +226,7 @@ class TrajectorySampler:
         return
 
     def collect_trajectory(
-            self, params: np.array = None, starting_state=None
+            self, params: np.array = None, starting_state=None, starting_action=None
     ) -> list:
         """
         Summary:
@@ -243,7 +244,8 @@ class TrajectorySampler:
         # reset the environment
         self.env.reset()
         if starting_state is not None:
-            self.env.state = copy.deepcopy(starting_state)
+            # self.env.state = copy.deepcopy(starting_state)
+            self.env.set_state(starting_state)
 
         # initialize parameters
         np.random.seed()
@@ -264,7 +266,10 @@ class TrajectorySampler:
             features = self.dp.transform(state=state)
 
             # select the action
-            a = self.pol.draw_action(state=features)
+            if t == 0 and starting_action is not None:
+                a = starting_action
+            else:
+                a = self.pol.draw_action(state=features)
             score = self.pol.compute_score(state=features, action=a)
 
             # play the action

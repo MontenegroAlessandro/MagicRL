@@ -26,6 +26,9 @@ class BaseEnv(ABC):
         self.observation_space = None
         self.with_costs = False
         self.how_many_costs = 0
+        self.continuous_env = True
+        self.disc_state_space = None # just if discrete env
+        self.disc_action_space = None # just if discrete env
 
     @abstractmethod
     def step(self, action):
@@ -38,6 +41,14 @@ class BaseEnv(ABC):
 
     @abstractmethod
     def sample_state(self, args: dict = None):
+        pass
+    
+    @abstractmethod
+    def sample_action(self, args: dict = None):
+        pass
+    
+    @abstractmethod
+    def set_state(self, state):
         pass
 
 
@@ -74,3 +85,6 @@ class MujocoBase(BaseEnv, ABC):
 
     def sample_state(self, args: dict = None):
         return self.gym_env.observation_space.sample()
+    
+    def set_state(self, state):
+        pass

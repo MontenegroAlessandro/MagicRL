@@ -61,9 +61,9 @@ class OldCPGPE(PGPE):
             self.lambda_adam = Adam(step_size=self.lr[LearnRates.LAMBDA], strategy="ascent")
 
             self.rho_adam = [None, None]
-            self.rho_adam[RhoElem.MEAN] = Adam(step_size=self.lr[LearnRates.RHO],
+            self.rho_adam[RhoElem.MEAN] = Adam(step_size=self.lr[LearnRates.PARAM],
                                                strategy="descent")
-            self.rho_adam[RhoElem.STD] = Adam(step_size=self.lr[LearnRates.RHO], strategy="descent")
+            self.rho_adam[RhoElem.STD] = Adam(step_size=self.lr[LearnRates.PARAM], strategy="descent")
 
         # Constraint Structures
         err_msg = "[ERROR] Number of thresholds != Number of constraints."
@@ -174,9 +174,9 @@ class OldCPGPE(PGPE):
                 self.lambdas = np.where(self.lambdas >= 0, self.lambdas, 0)
                 # update rho
                 self.rho[RhoElem.MEAN] = self.rho[RhoElem.MEAN] - self.lr[
-                    LearnRates.RHO] * rho_grad_mean
+                    LearnRates.PARAM] * rho_grad_mean
                 self.rho[RhoElem.STD] = self.rho[RhoElem.STD] - self.lr[
-                    LearnRates.RHO] * rho_grad_std
+                    LearnRates.PARAM] * rho_grad_std
             elif self.lr_strategy == "adam":
                 self.lambdas = self.lambdas + self.lambda_adam.compute_gradient(lambda_grad)
                 self.lambdas = np.where(self.lambdas >= 0, self.lambdas, 0)
