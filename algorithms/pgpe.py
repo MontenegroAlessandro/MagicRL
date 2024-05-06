@@ -222,7 +222,7 @@ class PGPE:
                 self.rho[RhoElem.STD, :] = np.log(std)
 
         # Sample the deterministic curve
-        self.sample_deterministic_curve()
+        #   self.sample_deterministic_curve()
 
         return
 

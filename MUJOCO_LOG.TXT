@@ -1,0 +1,27 @@
+Fri May  3 09:56:07 2024
+WARNING: Inertia matrix is too close to singular at DOF 1. Check model. Time = 0.0000.
+
+Fri May  3 09:56:07 2024
+WARNING: Nan, Inf or huge value in QVEL at DOF 0. The simulation is unstable. Time = 0.0200.
+
+Fri May  3 09:56:07 2024
+WARNING: Inertia matrix is too close to singular at DOF 3. Check model. Time = 0.2300.
+
+Fri May  3 09:56:07 2024
+WARNING: Inertia matrix is too close to singular at DOF 2. Check model. Time = 0.2300.
+
+Fri May  3 09:56:07 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 0.2400.
+
+Fri May  3 09:56:07 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 0.2400.
+
+Fri May  3 09:56:07 2024
+WARNING: Inertia matrix is too close to singular at DOF 2. Check model. Time = 0.0900.
+
+Fri May  3 09:56:07 2024
+WARNING: Inertia matrix is too close to singular at DOF 2. Check model. Time = 0.0900.
+
+Fri May  3 09:56:07 2024
+WARNING: Inertia matrix is too close to singular at DOF 1. Check model. Time = 0.0050.
+

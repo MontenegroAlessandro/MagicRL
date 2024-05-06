@@ -7,13 +7,13 @@ from abc import ABC, abstractmethod
 from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
-from algorithms.utils import check_directory_and_create
+from algorithms.utils import check_directory_and_create, PolicyGradientAlgorithms
 import jax.numpy as jnp
 
 
 class PolicyGradients(ABC):
     def __init__(self,
-                 alg: str = "[PG]",
+                 alg: str = PolicyGradientAlgorithms.PG,
                  lr: jnp.array = None,
                  ite: int = None,
                  batch_size: int = 1,
@@ -61,35 +61,35 @@ class PolicyGradients(ABC):
         assert alg in ["PG", "PGPE", "CPG", "CPGPE"], err_msg
         self.alg = alg
 
-        err_msg = alg + " lr must be positive!"
+        err_msg = "[" + alg + "]" + " lr must be positive!"
         assert lr[0] > 0, err_msg
         self.lr = lr[0]
 
-        err_msg = " lr_strategy not valid!"
+        err_msg =  "[" + alg + "]"  +  " lr_strategy not valid!"
         assert lr_strategy in ["constant", "adam"], err_msg
         self.lr_strategy = lr_strategy
 
-        err_msg = alg + " ite must be positive!"
+        err_msg = "[" + alg + "]" + " ite must be positive!"
         assert ite > 0, err_msg
         self.ite = ite
 
-        err_msg = alg + " batch_size must be positive!"
+        err_msg = "[" + alg + "]" + " batch_size must be positive!"
         assert batch_size > 0, err_msg
         self.batch_size = batch_size
 
-        err_msg = alg + " env is None"
+        err_msg = "[" + alg + "]" + " env is None"
         assert env is not None, err_msg
         self.env = env
 
-        err_msg = alg + " policy is None"
+        err_msg = "[" + alg + "]" + " policy is None"
         assert policy is not None, err_msg
         self.policy = policy
 
-        err_msg = alg + " data_processor is None"
+        err_msg = "[" + alg + "]" + " data_processor is None"
         assert data_processor is not None, err_msg
         self.data_processor = data_processor
 
-        err_msg = alg + " checkpoint_freq must be positive!"
+        err_msg = "[" + alg + "]" + " checkpoint_freq must be positive!"
         assert checkpoint_freq > 0, err_msg
         self.checkpoint_freq = checkpoint_freq
 
@@ -106,7 +106,8 @@ class PolicyGradients(ABC):
 
         return
 
-    def _objective_function(self, score_vector, perf_vector, reward_vector) -> None:
+    @abstractmethod
+    def _objective_function(self, **params) -> None:
         """
           Summary:
             This function computes the objective function.

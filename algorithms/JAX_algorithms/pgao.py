@@ -22,12 +22,14 @@ from adam.adam import Adam
 import io
 import os
 
+"""
 os.environ[
     "XLA_FLAGS"
 ] = "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREAD"] = "1"
+"""
 
 class PGAO(PolicyGradients):
     def __init__(self,
@@ -105,7 +107,7 @@ class PGAO(PolicyGradients):
         return
 
     """
-    Jax function without autograd
+    Jax function with autograd
     """
     def _objective_function(self) -> None:
         """
@@ -120,7 +122,7 @@ class PGAO(PolicyGradients):
             err_msg = self.estimator_type + " estimator_type not in [REINFORCE], [GPOMDP]!"
             raise NotImplementedError(err_msg)
 
-    def _compute_reinforce_objective(self, score_vector, perf_vector) -> None:
+    def _compute_reinforce_objective(self) -> None:
         """
         Summary:
           This function computes the objective function for the REINFORCE target.
@@ -150,6 +152,17 @@ class PGAO(PolicyGradients):
         else:
             err_msg = self.estimator_type + " has not been implemented yet!"
             raise NotImplementedError(err_msg)
+
+        # Update the parameters
+        if self.lr_strategy == "constant":
+            self.thetas = self.thetas.at[:].set(self.thetas + self.lr * estimated_gradient)
+        elif self.lr_strategy == "adam":
+            adaptive_lr = self.adam_optimizer.compute_gradient(estimated_gradient)
+            self.thetas = self.thetas.at[:].set(self.thetas + adaptive_lr)
+        else:
+            err_msg = self.lr_strategy + " lr_strategy not in 'constant', 'adam'!"
+            raise NotImplementedError(err_msg)
+
         return estimated_gradient
 
     def _update_g(self, reward_trajectory: jnp.array, score_trajectory: jnp.array) -> jnp.array:
@@ -261,11 +274,10 @@ class PGAO(PolicyGradients):
           This function learns the policy.
         """
         for i in tqdm(range(self.ite)):
-            """
-            JAX LIBRARY DOES NOT ALLOW FOR PARALLEL COMPUTATION
+             # JAX LIBRARY DOES NOT ALLOW FOR PARALLEL COMPUTATION
              if self.parallel_computation:
                 # prepare the parameters
-                self.policy.set_parameters(copy.deepcopy(self.thetas)) # It may be necessary to use np.array(self.thetas)
+                self.policy.set_parameters(copy.deepcopy(np.array(self.thetas, dtype=np.float64))) # It may be necessary to use np.array(self.thetas)
                 worker_dict = dict(
                     env=copy.deepcopy(self.env),
                     pol=copy.deepcopy(self.policy),
@@ -283,70 +295,54 @@ class PGAO(PolicyGradients):
                     delayed_functions(**worker_dict) for _ in range(self.batch_size)
                 )
 
-            else:
+             else:
                 res = []
                 for _ in range(self.batch_size):
                     tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas)) # It may be necessary to use np.array(self.thetas)
                     res.append(tmp_res)
-            """
-            res = []
-            for _ in range(self.batch_size):
-                tmp_res = self.sampler.collect_trajectory(
-                    params=copy.deepcopy(self.thetas))  # It may be necessary to use np.array(self.thetas)
-                res.append(tmp_res)
 
             # Update performance
-            perf_vector = jnp.zeros(self.batch_size, dtype=jnp.float64)
-            score_vector = jnp.zeros((self.batch_size, self.env.horizon, self.dim), dtype=jnp.float64)
-            reward_vector = jnp.zeros((self.batch_size, self.env.horizon), dtype=jnp.float64)
+             perf_vector = jnp.zeros(self.batch_size, dtype=jnp.float64)
+             score_vector = jnp.zeros((self.batch_size, self.env.horizon, self.dim), dtype=jnp.float64)
+             reward_vector = jnp.zeros((self.batch_size, self.env.horizon), dtype=jnp.float64)
 
-            for j in range(self.batch_size):
-                perf_vector = perf_vector.at[j].set(res[j][TrajectoryResults.PERF])
-                reward_vector = reward_vector.at[j, :].set(res[j][TrajectoryResults.RewList])
-                score_vector = score_vector.at[j, :, :].set(res[j][TrajectoryResults.ScoreList])
-            self.performance_idx = self.performance_idx.at[i].set(jnp.mean(perf_vector))
+             for j in range(self.batch_size):
+                 perf_vector = perf_vector.at[j].set(jnp.array(res[j][TrajectoryResults.PERF], dtype=jnp.float64))
+                 reward_vector = reward_vector.at[j, :].set(jnp.array(res[j][TrajectoryResults.RewList], dtype=jnp.float64))
+                 score_vector = score_vector.at[j, :, :].set(jnp.array(res[j][TrajectoryResults.ScoreList], dtype=jnp.float64))
+             self.performance_idx = self.performance_idx.at[i].set(jnp.mean(perf_vector))
 
-            # Update best rho
-            self._update_best_theta(current_perf=self.performance_idx[i])
+             # Update best rho
+             self._update_best_theta(current_perf=self.performance_idx[i])
 
-            # Compute the estimated gradient
-            #estimated_gradient = grad(self._objective_function)(score_vector=score_vector, perf_vector=perf_vector, reward_vector=reward_vector)
-            estimated_gradient = self._compute_gradient(score_vector=score_vector, perf_vector=perf_vector, reward_vector=reward_vector)
+             # Compute the estimated gradient
+             #estimated_gradient = grad(self._objective_function)(score_vector=score_vector, perf_vector=perf_vector, reward_vector=reward_vector)
+             estimated_gradient = self._compute_gradient(score_vector=score_vector, perf_vector=perf_vector, reward_vector=reward_vector)
 
-            # Update the parameters
-            if self.lr_strategy == "constant":
-                self.thetas = self.thetas.at[:].set(self.thetas + self.lr * estimated_gradient)
-            elif self.lr_strategy == "adam":
-                adaptive_lr = self.adam_optimizer.compute_gradient(estimated_gradient)
-                self.thetas = self.thetas.at[:].set(self.thetas + adaptive_lr)
-            else:
-                err_msg = self.lr_strategy + " lr_strategy not in 'constant', 'adam'!"
-                raise NotImplementedError(err_msg)
+             # Log
+             if self.verbose:
+                 print("*" * 30)
+                 print(f"Step: {self.time}")
+                 print(f"Mean Performance: {self.performance_idx[self.time - 1]}")
+                 print(f"Estimated gradient: {estimated_gradient}")
+                 print(f"Parameter (new) values: {self.thetas}")
+                 print(f"Best performance so far: {self.best_performance_theta}")
+                 print(f"Best configuration so far: {self.best_theta}")
+                 print("*" * 30)
 
-            # Log
-            if self.verbose:
-                print("*" * 30)
-                print(f"Step: {self.time}")
-                print(f"Mean Performance: {self.performance_idx[self.time - 1]}")
-                print(f"Estimated gradient: {estimated_gradient}")
-                print(f"Parameter (new) values: {self.thetas}")
-                print(f"Best performance so far: {self.best_performance_theta}")
-                print(f"Best configuration so far: {self.best_theta}")
-                print("*" * 30)
+             # Checkpoint
+             if self.time % self.checkpoint_freq == 0:
+                 self.save_results()
 
-            # Checkpoint
-            if self.time % self.checkpoint_freq == 0:
-                self.save_results()
+             # Save theta history
+             self.theta_history = self.theta_history.at[self.time, :].set(copy.deepcopy(self.thetas))
 
-            # Save theta history
-            self.theta_history = self.theta_history.at[self.time, :].set(copy.deepcopy(self.thetas))
+             # Time update
+             self.time += 1
 
-            # Time update
-            self.time += 1
+             # Reduce the exploration factor of the policy
+             #self.policy.reduce_exploration()
 
-            # Reduce the exploration factor of the policy
-            #self.policy.reduce_exploration()
-
-        # Make a comparison wrt the deterministic performance
-        if self.sample_deterministic_curve:
-            self._sample_deterministic_curve()
+             # Make a comparison wrt the deterministic performance
+             if self.sample_deterministic_curve:
+                 self._sample_deterministic_curve()

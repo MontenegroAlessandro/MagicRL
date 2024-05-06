@@ -2,12 +2,14 @@
 import argparse
 from algorithms import PGPE, PolicyGradient, DeterministicPG
 from algorithms.JAX_algorithms.pgao import PGAO
+from algorithms.JAX_algorithms.pgpe_jax import PGPE_JAX
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
 from art import *
 import jax
 import jax.numpy as jnp
+jax.config.update("jax_enable_x64", True)
 
 np.random.seed(42)
 
@@ -29,7 +31,7 @@ parser.add_argument(
     help="The algorithm to use.",
     type=str,
     default="pgpe",
-    choices=["pgpe", "pg", "dpg", "pg_jax"]
+    choices=["pgpe", "pg", "dpg", "pg_jax", "pgpe_jax"]
 )
 parser.add_argument(
     "--var",
@@ -307,6 +309,42 @@ for i in range(args.n_trials):
             n_jobs_traj=1
         )
         alg = PGPE(**alg_parameters)
+    elif args.alg == "pgpe_jax":
+        if args.var == 1:
+            var_term = 1.001
+        else:
+            var_term = args.var
+        hp = jnp.zeros((2, tot_params), dtype=jnp.float64)
+        if args.pol == "linear":
+            hp = hp.at[0].set([0] * tot_params)
+        else:
+            rnd_mean = np.random.normal(0, 1, tot_params)
+            hp = hp.at[0].set(jnp.array(rnd_mean, dtype=jnp.float64))
+        hp = hp.at[1].set([jnp.log(jnp.sqrt(var_term))] * tot_params)
+
+        alg_parameters = dict(
+            lr=[args.lr],
+            initial_rho=hp,
+            ite=args.ite,
+            batch_size=args.batch,
+            episodes_per_theta=1,
+            env=env,
+            policy=pol,
+            data_processor=dp,
+            directory=dir_name,
+            verbose=False,
+            natural=False,
+            checkpoint_freq=100,
+            lr_strategy=args.lr_strategy,
+            learn_std=False,
+            std_decay=0,
+            std_min=1e-6,
+            n_jobs_param=args.n_workers,
+            n_jobs_traj=1,
+            sample_deterministic_curve = False
+        )
+        alg = PGPE_JAX(**alg_parameters)
+
     elif args.alg == "pg":
         if args.pol == "gaussian":
             init_theta = [0] * tot_params
@@ -349,7 +387,7 @@ for i in range(args.n_trials):
             verbose=False,
             natural=False,
             checkpoint_freq=100,
-            n_jobs= 1 # jax do not allow for parallelism
+            n_jobs= args.n_workers # jax do not allow for parallelism
         )
         alg = PGAO(**alg_parameters)
     elif args.alg == "dpg":
