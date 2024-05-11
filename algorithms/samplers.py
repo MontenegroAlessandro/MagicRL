@@ -15,7 +15,8 @@ def pg_sampling_worker(
         dp: BaseProcessor = None,
         params: np.ndarray = None,
         starting_state: np.ndarray = None,
-        starting_action: np.ndarray = None
+        starting_action: np.ndarray = None,
+        pol_values: bool = False
 ) -> list:
     """Worker collecting a single trajectory.
 
@@ -36,7 +37,7 @@ def pg_sampling_worker(
     Returns:
         list: [performance, reward, scores]
     """
-    trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp)
+    trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp, pol_values=pol_values)
     res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state, starting_action=starting_action)
     return res
 
@@ -197,7 +198,8 @@ class TrajectorySampler:
     def __init__(
             self, env: BaseEnv = None,
             pol: BasePolicy = None,
-            data_processor: BaseProcessor = None
+            data_processor: BaseProcessor = None,
+            pol_values: bool = False
     ) -> None:
         """
         Summary:
@@ -222,6 +224,8 @@ class TrajectorySampler:
         err_msg = "[PGTrajectorySampler] no data_processor provided!"
         assert data_processor is not None, err_msg
         self.dp = data_processor
+        
+        self.pol_values = pol_values
 
         return
 
@@ -254,6 +258,7 @@ class TrajectorySampler:
         rewards = np.zeros(self.env.horizon, dtype=np.float64)
         costs = np.zeros(shape=(self.env.horizon, self.env.how_many_costs), dtype=np.float64)
         scores = np.zeros(shape=(self.env.horizon, self.pol.tot_params), dtype=np.float64)
+        pol_values = 0
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
@@ -281,6 +286,9 @@ class TrajectorySampler:
                 cost_array = copy.deepcopy(np.array(info["costs"], dtype=np.float64))
                 cost_perf = cost_perf + (self.env.gamma ** t) * cost_array
                 costs[t, :] = copy.deepcopy(cost_array)
+                
+            if self.pol_values:
+                pol_values += np.log(self.pol.compute_pi(state=features, action=a))
 
             # update the vectors of rewards and scores
             rewards[t] = rew
@@ -295,10 +303,11 @@ class TrajectorySampler:
                 break
 
         # if necessary save the info of the costs
-        info_cost = None
+        info = None
         if self.env.with_costs:
-            info_cost = dict(
+            info = dict(
                 cost_perf=copy.deepcopy(cost_perf),
-                costs=copy.deepcopy(costs)
+                costs=copy.deepcopy(costs),
+                pol_values=copy.deepcopy(pol_values)
             )
-        return [perf, rewards, scores, info_cost]
+        return [perf, rewards, scores, info]

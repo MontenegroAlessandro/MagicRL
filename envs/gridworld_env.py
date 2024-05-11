@@ -39,7 +39,8 @@ class GridWorldEnvDisc(BaseEnv):
     def __init__(
             self, horizon: int = 0, gamma: float = 0, grid_size: int = 0,
             reward_type: str = "linear", env_type: str = "empty",
-            render: bool = False, dir: str = None, random_init: bool = False
+            render: bool = False, dir: str = None, random_init: bool = False,
+            ding_flag: bool = False
     ) -> None:
         """
         Summary: Initialization function
@@ -63,6 +64,7 @@ class GridWorldEnvDisc(BaseEnv):
         # Super class initialization
         super().__init__(horizon=horizon, gamma=gamma)  # self.horizon, self.gamma, self.time
         self.continuous_env = False
+        self.ding_flag = ding_flag
 
         # Map initialization
         if grid_size % 2 == 0:
@@ -146,14 +148,14 @@ class GridWorldEnvDisc(BaseEnv):
 
         # Check if the new position is forbidden
         isAbs = self.is_absorbing(self.state.agent_pos)
-        cost = 0
+        cost = 1 if self.ding_flag else 0
         if self.with_costs:
             if isAbs:
                 new_pos = deepcopy(self.state.agent_pos)
             else:
                 for pos in self.forbidden_coordinates:
                     if pos.x == new_pos.x and pos.y == new_pos.y:
-                        cost = 1
+                        cost = 0 if self.ding_flag else 1
                         break
                 self.state.agent_pos = deepcopy(new_pos)
 
@@ -351,10 +353,16 @@ class GridWorldEnvDisc(BaseEnv):
                 current_distance += 1
 
         elif reward_type == "sparse":
-            self.grid_map[:, :] = -1
+            if self.ding_flag:
+                self.grid_map[:, :] = 0
+            else:
+                self.grid_map[:, :] = -1
         else:
             pass
-        self.grid_map[self.goal_pos.x, self.goal_pos.y] = 0
+        if self.ding_flag:
+            self.grid_map[self.goal_pos.x, self.goal_pos.y] = 1
+        else:
+            self.grid_map[self.goal_pos.x, self.goal_pos.y] = 0
 
     def is_absorbing(self, position: Position) -> bool:
         """

@@ -11,7 +11,8 @@ class TabularSoftmax(BasePolicy):
         dim_state: int = 1,
         dim_action: int = 1,
         tot_params: int = 1,
-        temperature: float = 1
+        temperature: float = 1,
+        deterministic: bool = False
     ) -> None:
         """
         Summary:
@@ -43,6 +44,8 @@ class TabularSoftmax(BasePolicy):
         assert temperature > 0, err_msg
         self.temperature = temperature
         
+        self.exploration = 1 if not deterministic else 0
+        
     def draw_action(self, state: int) -> int:
         """
         Summary:
@@ -55,13 +58,11 @@ class TabularSoftmax(BasePolicy):
             int: index of the action to be selected.
         """
         idx = state
-        running_theta = np.zeros(self.dim_action, dtype=np.float64)
-        running_theta[:-1] = deepcopy(self.theta[idx, :-1] / self.temperature)
-        # norm = 1 + np.sum(np.exp(self.theta[idx, :-1] / self.temperature))
-        # probs = np.exp(running_theta) / norm
         
         # get the noise vector for all the actions
-        noise = np.random.gumbel(loc=0, scale=1, size=self.dim_action)
+        running_theta = deepcopy(self.theta[idx, :] / self.temperature)
+        
+        noise = np.random.gumbel(loc=0, scale=self.exploration, size=self.dim_action)
         gumbel_scores = running_theta + noise
         return np.argmax(gumbel_scores)
     
@@ -69,7 +70,7 @@ class TabularSoftmax(BasePolicy):
         si = state
         ai = action
         running_theta = deepcopy(self.theta[si, ai] / self.temperature)
-        norm = 1 + np.sum(np.exp(self.theta[si, :-1] / self.temperature))
+        norm = np.sum(np.exp(self.theta[si, :] / self.temperature))
         prob = np.exp(running_theta) / norm
         return prob
     
@@ -106,28 +107,19 @@ class TabularSoftmax(BasePolicy):
         Returns:
             np.ndarray: vector of the scores.
         """
-        # FIXME: check correctness
         # keep the base vector
-        base_vector = np.zeros(self.dim_action - 1, dtype=np.float64)
-        # base_vector = np.zeros(self.dim_action, dtype=np.float64)
-        if action < self.dim_action - 1:
-            base_vector[action] = 1
+        base_vector = np.zeros(self.dim_action, dtype=np.float64)
+        base_vector[action] = 1
             
         # compute pi(.|state)
-        running_theta = deepcopy(self.theta[state, :-1] / self.temperature)
-        norm = 1 + np.sum(np.exp(self.theta[state, :-1] / self.temperature))
+        running_theta = deepcopy(self.theta[state, :] / self.temperature)
+        norm = np.sum(np.exp(self.theta[state, :] / self.temperature))
         probs = np.exp(running_theta) / norm
-        # ! new !
-        # complete_probs = np.zeros(self.dim_action, dtype=np.float64)
-        # complete_probs[:-1] = deepcopy(probs)
-        # complete_probs[-1] = 1 - np.sum(probs)
         
         # score
-        score = (1/self.temperature) * (base_vector - probs)
-        # score = (1/self.temperature) * (base_vector - complete_probs)
+        score = (1 / self.temperature) * (base_vector - probs)
         scores = np.zeros(self.dim_state * self.dim_action).reshape((self.dim_state, self.dim_action))
-        scores[state, :-1] = deepcopy(score)
-        # scores[state, :] = deepcopy(score)
+        scores[state, :] = deepcopy(score)
         return scores.flatten()
     
     def diff(self, state):
@@ -137,4 +129,4 @@ class TabularSoftmax(BasePolicy):
         pass
     
     def get_parameters(self):
-        pass
+        return self.theta.flatten()

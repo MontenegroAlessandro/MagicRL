@@ -1,6 +1,6 @@
 # Libraries
 import argparse
-from algorithms import CPGPE, CPolicyGradient, NaturalPG_PD
+from algorithms import CPGPE, CPolicyGradient, NaturalPG_PD, RegularizedPG_PD
 from data_processors import IdentityDataProcessor, GWTabularProcessor
 from envs import *
 from policies import *
@@ -25,7 +25,7 @@ parser.add_argument(
     help="The algorithm to use.",
     type=str,
     default="cpgpe",
-    choices=["cpgpe", "cpg", "npgpd"]
+    choices=["cpgpe", "cpg", "npgpd", "rpgpd"]
 )
 parser.add_argument(
     "--risk",
@@ -190,7 +190,9 @@ for i in range(args.n_trials):
             env_type="U",
             render=False,
             dir=None,
-            random_init=True
+            random_init=True,
+            ding_flag=False
+            # ding_flag=bool(args.alg in ["rpgpd", "npgpd"])
         )
     else:
         raise ValueError(f"Invalid env name.")
@@ -241,11 +243,13 @@ for i in range(args.n_trials):
         raise NotImplementedError
     elif args.pol == "softmax":
         tot_params = env.state_dim * env.action_dim
+        temperature = 1 if args.alg != "cpgpe" else 0.1
         pol = TabularSoftmax(
             dim_state=env.state_dim, 
             dim_action=env.action_dim, 
             tot_params=tot_params, 
-            temperature=1
+            temperature=temperature,
+            deterministic=bool(args.alg == "cpgpe")
         )
     else:
         raise ValueError(f"Invalid policy name.")
@@ -332,13 +336,44 @@ for i in range(args.n_trials):
             batch=args.batch,
             pol=pol,
             env=env,
-            lr=args.lr,
-            lr_strategy="constant",
+            lr=args.lr[:2],
+            lr_strategy=args.lr_strategy,
             dp=dp,
             threshold=args.c_bounds[0],
-            n_jobs=args.n_workers
+            n_jobs=args.n_workers,
+            reg=0
         )
         alg = NaturalPG_PD(**alg_parameters)
+    elif args.alg == "rpgpd":
+        alg_parameters = dict(
+            directory=dir_name,
+            ite=args.ite,
+            batch=args.batch,
+            pol=pol,
+            env=env,
+            lr=args.lr[:2],
+            lr_strategy=args.lr_strategy,
+            dp=dp,
+            threshold=args.c_bounds[0],
+            n_jobs=args.n_workers,
+            reg=args.reg
+        )
+        alg = NaturalPG_PD(**alg_parameters)
+        """alg_parameters = dict(
+            directory=dir_name,
+            ite=args.ite,
+            batch=args.batch,
+            pol=pol,
+            env=env,
+            lr=args.lr[:2],
+            lr_strategy=args.lr_strategy,
+            dp=dp,
+            threshold=args.c_bounds[0],
+            n_jobs=args.n_workers,
+            reg=args.reg,
+            inner_loop_param=1
+        )
+        alg = RegularizedPG_PD(**alg_parameters)"""
     else:
         raise ValueError("Invalid algorithm name.")
 

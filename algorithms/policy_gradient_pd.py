@@ -96,13 +96,21 @@ class NaturalPG_PD(BasePG_PD):
         threshold: float = 0,
         checkpoint_freq: int = 1000,
         n_jobs: int = 1,
-        directory: str = None
+        directory: str = None,
+        reg: float = 0
     ) -> None:
         super().__init__(
             ite=ite, env=env, pol=pol, dp=dp, batch=batch, lr=lr, 
             lr_strategy=lr_strategy, threshold=threshold, 
             checkpoint_freq=checkpoint_freq, n_jobs=n_jobs, directory=directory
         )
+        self.obj_name = "npgpd"
+        assert reg >= 0
+        self.reg = reg
+        if self.reg > 0:
+            assert self.lr_lambda == self.lr_theta
+            self.lr_strategy = "constant"
+            self.obj_name = "rpgpd"
         
         # structures
         self.theta = np.zeros(self.env.state_dim * self.env.action_dim)
@@ -119,14 +127,16 @@ class NaturalPG_PD(BasePG_PD):
         )
         self.adv_values = deepcopy(self.action_values)
         self.cost_values = np.zeros(self.ite, dtype=np.float64)
+        self.perf = np.zeros(self.ite, dtype=np.float64)
         
         # additional parameters
         self.gamma = self.env.gamma
-        assert self.gamma < 1, f"[NPGPD] gamma must be less than one."
+        assert self.gamma < 1, f"[{self.obj_name}] gamma must be less than one."
         self.eff_h = 1 / (1 - self.gamma)
         
         # cast the problem to cost minimization
         self.threshold = - self.threshold
+        self.inner_batch = 1
         
     def learn(self):
         for t in tqdm(range(self.ite)):
@@ -142,43 +152,50 @@ class NaturalPG_PD(BasePG_PD):
                 dp=deepcopy(self.dp),
                 params=None,
                 starting_state=None,
-                starting_action=None
+                starting_action=None,
+                pol_values=bool(self.reg > 0)
             )
             
             # estimate V and Q values
             for state_idx in self.env.discrete_state_space:
                 sampler_dict["starting_state"] = deepcopy(state_idx)
-                perf = np.zeros(self.batch, dtype=np.float64)
-                costs = np.zeros(self.batch, dtype=np.float64)
+                perf = np.zeros(self.inner_batch, dtype=np.float64)
+                costs = np.zeros(self.inner_batch, dtype=np.float64)
+                pol_values = np.zeros(self.inner_batch, dtype=np.float64)
                 
                 # parallel computation
                 delayed_functions = delayed(pg_sampling_worker)
                 res = Parallel(n_jobs=self.n_jobs, backend="loky")(
-                    delayed_functions(**sampler_dict) for _ in range(self.batch)
+                    delayed_functions(**sampler_dict) for _ in range(self.inner_batch)
                 )
-                for i in range(self.batch):
+                for i in range(self.inner_batch):
                     perf[i] = res[i][TrajectoryResults.PERF]
                     costs[i] = - res[i][TrajectoryResults.CostInfo]["cost_perf"][0]
+                    if self.reg > 0:
+                        pol_values[i] = res[i][TrajectoryResults.CostInfo]["pol_values"]
                     
                 # V(s) estimation
-                self.values[t, state_idx] = np.mean(perf + self.lam * costs)
+                self.values[t, state_idx] = np.mean(perf + self.lam * costs - self.reg * pol_values)
                 
                 # Q(s, *) estimation
                 for action_idx in self.env.discrete_action_space:
                     sampler_dict["starting_action"] = deepcopy(action_idx)
-                    perf = np.zeros(self.batch, dtype=np.float64)
-                    costs = np.zeros(self.batch, dtype=np.float64)
+                    perf = np.zeros(self.inner_batch, dtype=np.float64)
+                    costs = np.zeros(self.inner_batch, dtype=np.float64)
+                    pol_values = np.zeros(self.inner_batch, dtype=np.float64)
                     
                     # parallel computation
                     delayed_functions = delayed(pg_sampling_worker)
                     res = Parallel(n_jobs=self.n_jobs, backend="loky")(
-                        delayed_functions(**sampler_dict) for _ in range(self.batch)
+                        delayed_functions(**sampler_dict) for _ in range(self.inner_batch)
                     )
-                    for i in range(self.batch):
+                    for i in range(self.inner_batch):
                         perf[i] = res[i][TrajectoryResults.PERF]
                         costs[i] = - res[i][TrajectoryResults.CostInfo]["cost_perf"][0]
+                        if self.reg > 0:
+                            pol_values[i] = res[i][TrajectoryResults.CostInfo]["pol_values"]
                         
-                    self.action_values[t, state_idx, action_idx] = np.mean(perf + self.lam * costs)
+                    self.action_values[t, state_idx, action_idx] = np.mean(perf + self.lam * costs - self.reg * pol_values)
                     
             # compute the advantage
             self.adv_values[t, :, :] = self.action_values[t, :, :] - self.values[t, :, np.newaxis]
@@ -186,6 +203,7 @@ class NaturalPG_PD(BasePG_PD):
             # estimate the sample cost
             sampler_dict["starting_state"] = None
             sampler_dict["starting_action"] = None
+            perfs = np.zeros(self.batch, dtype=np.float64)
             costs = np.zeros(self.batch, dtype=np.float64)
             
             # parallel computation
@@ -194,13 +212,16 @@ class NaturalPG_PD(BasePG_PD):
                 delayed_functions(**sampler_dict) for _ in range(self.batch)
             )
             for i in range(self.batch):
+                perfs[i] = res[i][TrajectoryResults.PERF]
                 costs[i] = - res[i][TrajectoryResults.CostInfo]["cost_perf"][0]
+            self.perf[t] = np.mean(perfs)
             self.cost_values[t] = np.mean(costs)
             
             # update the parameters
             if self.lr_strategy == "constant":
-                self.theta = self.theta + (self.lr_theta * self.eff_h * self.adv_values[t,:,:]).flatten()
-                self.lam = np.clip(self.lam - self.lr_lambda * (self.cost_values[t] - self.threshold), 0, np.inf)
+                # self.theta = self.theta + (self.lr_theta * self.eff_h * self.adv_values[t,:,:]).flatten()
+                self.theta = self.theta + (self.lr_theta * self.adv_values[t,:,:]).flatten()
+                self.lam = np.clip((1 - self.reg * self.lr_lambda) * self.lam - self.lr_lambda * (self.cost_values[t] - self.threshold), 0, np.inf)
             elif self.lt_strategy == "adam":
                 self.theta = self.theta + self.theta_adam.compute_gradient(self.eff_h * self.adv_values[t,:,:].flatten())
                 self.lam = np.clip(self.lam - self.lambda_adam.compute_gradient(self.cost_values[t] - self.threshold), 0, np.inf)
@@ -209,12 +230,14 @@ class NaturalPG_PD(BasePG_PD):
             if not (t % self.checkpoint_freq):
                 self.save_results()
                 
-            print(f"[NPGPD] values: {np.mean(self.values[t,:])}")
-            print(f"[NPGPD] costs: {self.cost_values[t]}")
+            print(f"[{self.obj_name}] values: {np.mean(self.values[t,:])}")
+            print(f"[{self.obj_name}] perf: {self.perf[t]}")
+            print(f"[{self.obj_name}] costs: {self.cost_values[t]}")
     
     def save_results(self):
         """Save the results."""
         results = {
+            "perf": np.array(self.perf, dtype=float).tolist(),
             "v": np.array(self.values, dtype=float).tolist(),
             "q": np.array(self.action_values, dtype=float).tolist(),
             "adv": np.array(self.adv_values, dtype=float).tolist(),
@@ -224,7 +247,7 @@ class NaturalPG_PD(BasePG_PD):
         }
 
         # Save the json
-        name = self.directory + "/npgpd_results.json"
+        name = self.directory + f"/{self.obj_name}_results.json"
         with io.open(name, 'w', encoding='utf-8') as f:
             f.write(json.dumps(results, ensure_ascii=False, indent=4))
             f.close()
@@ -250,7 +273,6 @@ class RegularizedPG_PD(BasePG_PD):
         n_jobs: int = 1,
         directory: str = None,
         inner_loop_param: float = 1,
-        inner_lr: float = 1,
         reg: float = 0
     ) -> None:
         # super class initialization
@@ -263,9 +285,6 @@ class RegularizedPG_PD(BasePG_PD):
         # additional fields
         assert inner_loop_param > 0
         self.inner_loop_param = inner_loop_param
-        
-        assert 0 < inner_lr < 1
-        self.inner_lr = inner_lr
         
         assert reg >= 0
         self.reg = reg
@@ -287,6 +306,7 @@ class RegularizedPG_PD(BasePG_PD):
         self.lambdas = np.zeros(self.ite, dtype=np.float64)
         self.cost_values = np.zeros(self.ite, dtype=np.float64)
         self.omegas = np.zeros((self.ite, self.env.state_dim * self.env.action_dim), dtype=np.float64)
+        self.values = np.zeros(self.ite, dtype=np.float64)
         
         # additional parameters
         self.gamma = self.env.gamma
@@ -333,31 +353,46 @@ class RegularizedPG_PD(BasePG_PD):
                 feat = feat.flatten()
                 
                 # grad
-                self.omega = np.clip(self.omega - 2 * alpha (feat * self.omega - q) * feat, 0, np.inf)
+                # self.omega = np.clip(self.omega - 2 * alpha * (feat * self.omega - q) * feat, 0, np.inf)
+                self.omega = self.omega - 2 * alpha * (feat * self.omega - q) * feat
                 self.omega_batch[k, :] = deepcopy(self.omega)
             
-            # unbiased estimation of Vg [can be parallelized]
+            # unbiased estimation of Vr and Vg [can be parallelized]
+            rews = np.zeros(self.batch, dtype=np.float64)
             costs = np.zeros(self.batch, dtype=np.float64)
             delayed_functions = delayed(pg_sampling_worker)
             res = Parallel(n_jobs=self.n_jobs, backend="loky")(
                 delayed_functions(**sampler_dict) for _ in range(self.batch)
             )
             for i in range(self.batch):
+                rews[i] = res[i][TrajectoryResults.PERF]
                 costs[i] = - res[i][TrajectoryResults.CostInfo]["cost_perf"][0]
+                # costs[i] = res[i][TrajectoryResults.CostInfo]["cost_perf"][0]
             self.cost_values[t] = np.mean(costs)
+            self.values[t] = np.mean(rews)
+            """res = pg_sampling_worker(**sampler_dict)
+            self.cost_values[t] = - res[TrajectoryResults.CostInfo]["cost_perf"][0]
+            self.values[t] = res[TrajectoryResults.PERF]"""
             
             # compute the final omega for the iteration
             k_series = (np.arange(self.batch, dtype=np.float64) + 1)[:, np.newaxis]
             omega_hat = (2 / (self.batch * (self.batch + 1))) * np.sum(k_series * self.omega_batch, axis=0)
-            self.omegas[t, :] = self.omega_hat # just keep the last one
+            self.omegas[t, :] = omega_hat # just keep the last one
+            # self.values[t] = np.mean(omega_hat)
             
             # update parameters
-            self.theta = self.lr_theta * np.sum(self.omegas, axis=0)
+            self.theta = self.lr_theta * np.sum(self.omegas, axis=0) 
             self.lam = np.clip((1 - self.lr_lambda * self.reg) * self.lam - self.reg * (self.cost_values[t] - self.threshold), 0, np.inf)
             
             # save
             if not (t % self.checkpoint_freq):
                 self.save_results()
+                
+            print(f"[RPGPD] mean trajectory reward:\t {self.values[t]}")
+            print(f"[RPGPD] mean lagrangian values:\t {np.mean(omega_hat)}")
+            print(f"[RPGPD] mean trajectory cost:\t {self.cost_values[t]}")
+            print(f"[RPGPD] lambda:\t {self.lam}")
+            print(f"[RPGPD] lag values:\t {omega_hat}")
         
     def _q_unbiased_estimation(self):
         # structures
@@ -367,7 +402,7 @@ class RegularizedPG_PD(BasePG_PD):
         gamma = self.env.gamma
         end = False
         
-        # reset th environment (which sets also the initial state)
+        # reset the environment (which sets also the initial state)
         self.env.reset()
         
         # sample state and action
@@ -377,8 +412,6 @@ class RegularizedPG_PD(BasePG_PD):
         # apply the first action
         state, rew, _, info = self.env.step(action=action)
         state = self.dp.transform(state=self.env.state)
-        perf = rew
-        cost = info["costs"][0]
         end = bool(np.random.uniform(0,1) >= gamma)
         
         # execute the policy w.p. "gamma"
@@ -402,9 +435,10 @@ class RegularizedPG_PD(BasePG_PD):
             action = self.pol.draw_action(state=state)
             state, rew, _, info = self.env.step(action=action)
             state = self.dp.transform(state=self.env.state)
-            cost = info["costs"][0]
+            cost = - info["costs"][0]
+            # cost = info["costs"][0]
             # save
-            q_value += (gamma ** (0.5 * (k-h))) * (rew + self.lam * cost - self.reg * np.log(self.pol.compute_pi(state=state, action=action)))
+            q_value += (gamma ** (0.5 * (k-h))) * (rew + self.lam * (cost - self.threshold) - self.reg * np.log(self.pol.compute_pi(state=state, action=action)))
             # update
             end = bool(np.random.uniform(0,1) >= np.sqrt(gamma))
             k += 1
@@ -415,4 +449,18 @@ class RegularizedPG_PD(BasePG_PD):
         return s_h, a_h, q_value
     
     def save_results(self):
-        pass
+        """Save the results."""
+        results = {
+            "v": np.array(self.values, dtype=float).tolist(),
+            "q": np.array(self.omegas, dtype=float).tolist(),
+            "costs": np.array(self.cost_values, dtype=float).tolist(),
+            "theta_history": np.array(self.thetas, dtype=float).tolist(),
+            "lambda_history": np.array(self.lambdas, dtype=float).tolist()
+        }
+
+        # Save the json
+        name = self.directory + "/rpgpd_results.json"
+        with io.open(name, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(results, ensure_ascii=False, indent=4))
+            f.close()
+        return
