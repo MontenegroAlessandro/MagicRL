@@ -1,27 +1,1440 @@
-Fri May  3 09:56:07 2024
-WARNING: Inertia matrix is too close to singular at DOF 1. Check model. Time = 0.0000.
+Wed May  8 21:56:17 2024
+WARNING: Nan, Inf or huge value in QVEL at DOF 0. The simulation is unstable. Time = 17.7650.
 
-Fri May  3 09:56:07 2024
-WARNING: Nan, Inf or huge value in QVEL at DOF 0. The simulation is unstable. Time = 0.0200.
+Wed May  8 21:56:22 2024
+WARNING: Nan, Inf or huge value in QACC at DOF 0. The simulation is unstable. Time = 4.9650.
 
-Fri May  3 09:56:07 2024
-WARNING: Inertia matrix is too close to singular at DOF 3. Check model. Time = 0.2300.
+Wed May  8 21:56:24 2024
+WARNING: Nan, Inf or huge value in QVEL at DOF 0. The simulation is unstable. Time = 0.5050.
 
-Fri May  3 09:56:07 2024
-WARNING: Inertia matrix is too close to singular at DOF 2. Check model. Time = 0.2300.
+Wed May  8 21:56:24 2024
+WARNING: Inertia matrix is too close to singular at DOF 0. Check model. Time = 0.4950.
 
-Fri May  3 09:56:07 2024
-WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 0.2400.
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
 
-Fri May  3 09:56:07 2024
-WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 0.2400.
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
 
-Fri May  3 09:56:07 2024
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:24 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 4.1500.
+
+Wed May  8 21:56:27 2024
+WARNING: Inertia matrix is too close to singular at DOF 0. Check model. Time = 16.5200.
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:56:27 2024
+WARNING: Nan, Inf or huge value in QACC at DOF 0. The simulation is unstable. Time = 16.5200.
+
+Wed May  8 21:56:30 2024
+WARNING: Inertia matrix is too close to singular at DOF 2. Check model. Time = 6.4000.
+
+Wed May  8 21:56:30 2024
+WARNING: Inertia matrix is too close to singular at DOF 2. Check model. Time = 6.4000.
+
+Wed May  8 21:56:30 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 6.4050.
+
+Wed May  8 21:56:36 2024
+WARNING: Nan, Inf or huge value in QACC at DOF 0. The simulation is unstable. Time = 8.7450.
+
+Wed May  8 21:56:36 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 2. The simulation is unstable. Time = 8.7450.
+
+Wed May  8 21:56:36 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 2. The simulation is unstable. Time = 8.7450.
+
+Wed May  8 21:56:37 2024
+WARNING: Inertia matrix is too close to singular at DOF 0. Check model. Time = 7.4300.
+
+Wed May  8 21:56:37 2024
+WARNING: Nan, Inf or huge value in QVEL at DOF 0. The simulation is unstable. Time = 7.4250.
+
+Wed May  8 21:57:06 2024
+WARNING: Inertia matrix is too close to singular at DOF 3. Check model. Time = 8.6950.
+
+Wed May  8 21:57:06 2024
+WARNING: Inertia matrix is too close to singular at DOF 0. Check model. Time = 8.6950.
+
+Wed May  8 21:57:06 2024
+WARNING: Nan, Inf or huge value in QACC at DOF 0. The simulation is unstable. Time = 8.6950.
+
+Wed May  8 21:57:06 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 8.7100.
+
+Wed May  8 21:57:49 2024
+WARNING: Inertia matrix is too close to singular at DOF 1. Check model. Time = 0.0700.
+
+Wed May  8 21:57:49 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 0.1000.
+
+Wed May  8 21:57:49 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 0.1000.
+
+Wed May  8 21:57:49 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 0.1000.
+
+Wed May  8 21:57:49 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 0.0700.
+
+Wed May  8 21:58:56 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 20.6300.
+
+Wed May  8 21:58:56 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 20.6300.
+
+Wed May  8 21:58:57 2024
+WARNING: Inertia matrix is too close to singular at DOF 1. Check model. Time = 7.5200.
+
+Wed May  8 21:58:57 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 7.5250.
+
+Wed May  8 21:58:58 2024
+WARNING: Inertia matrix is too close to singular at DOF 0. Check model. Time = 12.5200.
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:58:58 2024
+WARNING: Nan, Inf or huge value in QACC at DOF 0. The simulation is unstable. Time = 12.5200.
+
+Wed May  8 21:59:34 2024
+WARNING: Inertia matrix is too close to singular at DOF 2. Check model. Time = 3.5350.
+
+Wed May  8 21:59:34 2024
+WARNING: Inertia matrix is too close to singular at DOF 2. Check model. Time = 3.5350.
+
+Wed May  8 21:59:34 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 3.5400.
+
+Wed May  8 21:59:34 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 3.5400.
+
+Wed May  8 21:59:34 2024
+WARNING: Nan, Inf or huge value in QACC at DOF 0. The simulation is unstable. Time = 0.5200.
+
+Wed May  8 21:59:37 2024
+WARNING: Inertia matrix is too close to singular at DOF 3. Check model. Time = 13.1250.
+
+Wed May  8 21:59:37 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 13.1300.
+
+Wed May  8 21:59:37 2024
+WARNING: Nan, Inf or huge value in CTRL at ACTUATOR 0. The simulation is unstable. Time = 0.2800.
+
+Wed May  8 21:59:41 2024
+WARNING: Nan, Inf or huge value in QVEL at DOF 0. The simulation is unstable. Time = 15.2950.
+
+Wed May  8 21:59:41 2024
+WARNING: Inertia matrix is too close to singular at DOF 0. Check model. Time = 2.7550.
+
+Wed May  8 21:59:41 2024
+WARNING: Inertia matrix is too close to singular at DOF 1. Check model. Time = 2.7550.
+
+Wed May  8 21:59:41 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 4. The simulation is unstable. Time = 2.7600.
+
+Wed May  8 21:59:41 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 4. The simulation is unstable. Time = 2.7600.
+
+Wed May  8 21:59:41 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 2.7650.
+
+Wed May  8 21:59:41 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 2.7650.
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 21:59:41 2024
+WARNING: Nan, Inf or huge value in QACC at DOF 0. The simulation is unstable. Time = 0.0300.
+
+Wed May  8 22:00:15 2024
+WARNING: Inertia matrix is too close to singular at DOF 3. Check model. Time = 17.8600.
+
+Wed May  8 22:00:15 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 17.8650.
+
+Wed May  8 22:00:17 2024
+WARNING: Inertia matrix is too close to singular at DOF 1. Check model. Time = 21.6200.
+
+Wed May  8 22:00:17 2024
+WARNING: Inertia matrix is too close to singular at DOF 1. Check model. Time = 21.6200.
+
+Wed May  8 22:00:17 2024
+WARNING: Nan, Inf or huge value in QVEL at DOF 0. The simulation is unstable. Time = 21.6250.
+
+Wed May  8 22:00:17 2024
+WARNING: Nan, Inf or huge value in QACC at DOF 0. The simulation is unstable. Time = 21.6250.
+
+Wed May  8 22:00:18 2024
+WARNING: Inertia matrix is too close to singular at DOF 1. Check model. Time = 1.9800.
+
+Wed May  8 22:00:18 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 1.9850.
+
+Wed May  8 22:00:20 2024
+WARNING: Inertia matrix is too close to singular at DOF 1. Check model. Time = 1.2350.
+
+Wed May  8 22:00:20 2024
+WARNING: Nan, Inf or huge value in QACC at DOF 0. The simulation is unstable. Time = 1.2450.
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Linesearch objective is not convex
+
+Wed May  8 22:00:33 2024
+WARNING: Nan, Inf or huge value in QACC at DOF 0. The simulation is unstable. Time = 7.0350.
+
+Wed May  8 22:00:33 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 0.2050.
+
+Wed May  8 22:00:33 2024
+WARNING: Inertia matrix is too close to singular at DOF 1. Check model. Time = 1.6100.
+
+Wed May  8 22:00:33 2024
+WARNING: Inertia matrix is too close to singular at DOF 3. Check model. Time = 1.6100.
+
+Wed May  8 22:00:33 2024
+WARNING: Nan, Inf or huge value in QACC at DOF 0. The simulation is unstable. Time = 0.0150.
+
+Wed May  8 22:00:33 2024
+WARNING: Inertia matrix is too close to singular at DOF 3. Check model. Time = 0.0250.
+
+Wed May  8 22:00:39 2024
+WARNING: Inertia matrix is too close to singular at DOF 3. Check model. Time = 5.5600.
+
+Wed May  8 22:00:39 2024
+WARNING: Nan, Inf or huge value in QVEL at DOF 0. The simulation is unstable. Time = 5.5600.
+
+Wed May  8 22:00:39 2024
+WARNING: Nan, Inf or huge value in QVEL at DOF 0. The simulation is unstable. Time = 5.5600.
+
+Wed May  8 22:01:05 2024
+WARNING: Inertia matrix is too close to singular at DOF 0. Check model. Time = 6.2200.
+
+Wed May  8 22:01:05 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 6.2200.
+
+Wed May  8 22:01:05 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 6.2200.
+
+Wed May  8 22:01:05 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 6.2200.
+
+Wed May  8 22:01:05 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 6.2200.
+
+Wed May  8 22:01:05 2024
+WARNING: Inertia matrix is too close to singular at DOF 4. Check model. Time = 0.0000.
+
+Wed May  8 22:01:05 2024
+WARNING: Nan, Inf or huge value in CTRL at ACTUATOR 0. The simulation is unstable. Time = 0.0350.
+
+Wed May  8 22:01:05 2024
+WARNING: Inertia matrix is too close to singular at DOF 1. Check model. Time = 0.0900.
+
+Wed May  8 22:01:05 2024
 WARNING: Inertia matrix is too close to singular at DOF 2. Check model. Time = 0.0900.
 
-Fri May  3 09:56:07 2024
-WARNING: Inertia matrix is too close to singular at DOF 2. Check model. Time = 0.0900.
+Wed May  8 22:01:05 2024
+WARNING: Nan, Inf or huge value in QACC at DOF 0. The simulation is unstable. Time = 0.1100.
 
-Fri May  3 09:56:07 2024
-WARNING: Inertia matrix is too close to singular at DOF 1. Check model. Time = 0.0050.
+Wed May  8 22:01:05 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 0.0950.
+
+Wed May  8 22:01:05 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 0.0900.
+
+Wed May  8 22:01:05 2024
+WARNING: Nan, Inf or huge value in QPOS at DOF 0. The simulation is unstable. Time = 0.0950.
+
+Wed May  8 22:01:05 2024
+WARNING: Inertia matrix is too close to singular at DOF 2. Check model. Time = 0.0000.
+
+Wed May  8 22:01:05 2024
+WARNING: Inertia matrix is too close to singular at DOF 2. Check model. Time = 0.0150.
 

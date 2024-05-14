@@ -122,6 +122,10 @@ class PGPE_JAX(PolicyGradients):
         self.rho_history = jnp.zeros((ite, self.dim), dtype=jnp.float64)
         self.rho_history = self.rho_history.at[self.time, :].set(copy.deepcopy(self.rho[RhoElem.MEAN]))
 
+        # compile the function to call the jacobian
+        self.jacobian_mean = jit(jacfwd(self._objective_function, argnums=0))
+        self.jacobian_std = jit(jacfwd(self._objective_function, argnums=1))
+
         return
 
     def _update_best_theta(self, current_perf: float, params: jnp.array) -> None:
@@ -196,20 +200,17 @@ class PGPE_JAX(PolicyGradients):
 
         # Take the means and the sigmas
         means = self.rho[RhoElem.MEAN, :]
-        stds= jnp.float64(jnp.exp(self.rho[RhoElem.STD, :]))
+        stds = jnp.float64(jnp.exp(self.rho[RhoElem.STD, :]))
 
         # Compute gradients using JAX grad function
-        compute_gradients_mean_jax = jit(jacrev(self._objective_function, argnums=0))
-        compute_gradients_std_jax = jit(jacrev(self._objective_function, argnums=1))
 
         # (-1) since jacfwd is inverting the sign of the gradient
-        # grad_means = batch_perf[:, jnp.newaxis] * jnp.stack([jnp.diag((-1) * compute_gradients_mean_jax(means, stds, self.thetas[i])) for i in range(len(self.thetas))])
         grad_means = batch_perf[:, jnp.newaxis] * vmap(
-            lambda theta: jnp.diag((-1) * compute_gradients_mean_jax(means, stds, theta)))(self.thetas)
+            lambda theta: jnp.diag((-1) * self.jacobian_mean(means, stds, theta)))(self.thetas)
 
         if self.learn_std:
             grad_stds = batch_perf[:, jnp.newaxis] * vmap(
-                lambda theta: jnp.diag((-1) * compute_gradients_std_jax(means, stds, theta)))(self.thetas)
+                lambda theta: jnp.diag((-1) * self.jacobian_std(means, stds, theta)))(self.thetas)
         else:
             grad_stds = jnp.zeros(len(grad_means), dtype=jnp.float64)
 

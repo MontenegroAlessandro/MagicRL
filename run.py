@@ -6,6 +6,8 @@ from algorithms.JAX_algorithms.pgpe_jax import PGPE_JAX
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
+from policies.JAX_policies.linear_policy_jax import *
+from policies.JAX_policies.gaussian_policy_jax import *
 from art import *
 import jax
 import jax.numpy as jnp
@@ -44,7 +46,7 @@ parser.add_argument(
     help="The policy used.",
     type=str,
     default="linear",
-    choices=["linear", "nn", "big_nn"]
+    choices=["linear", "gaussian", "nn", "big_nn"]
 )
 parser.add_argument(
     "--env",
@@ -113,6 +115,14 @@ parser.add_argument(
     help="Action dimension for the LQR environment.",
     type=int,
     default=2
+)
+
+parser.add_argument(
+    "--jax",
+    help="Use the JAX implementation.",
+    type=int,
+    default=1,
+    choices=[0, 1]
 )
 
 args = parser.parse_args()
@@ -192,37 +202,42 @@ for i in range(args.n_trials):
     """Policy"""
     if args.pol == "linear":
         tot_params = s_dim * a_dim
-        """pol = LinearPolicy(
-            parameters=np.zeros(tot_params),
-            dim_state=s_dim,
-            dim_action=a_dim,
-            sigma_noise=0
-        )"""
-        pol = OldLinearPolicy(
-            parameters=np.zeros(tot_params),
-            dim_state=s_dim,
-            dim_action=a_dim,
-            multi_linear=MULTI_LINEAR
-        )
+        if args.jax:
+            pol = OldLinearPolicyJAX(
+                parameters=np.zeros(tot_params),
+                dim_state=s_dim,
+                dim_action=a_dim,
+                multi_linear=MULTI_LINEAR
+            )
+        else:
+            pol = LinearPolicy(
+                parameters=np.zeros(tot_params),
+                dim_state=s_dim,
+                dim_action=a_dim,
+                sigma_noise=0
+            )
     elif args.pol == "gaussian":
         tot_params = s_dim * a_dim
-        pol = LinearGaussianPolicy(
-            parameters=np.zeros(tot_params),
-            dim_state=s_dim,
-            dim_action=a_dim,
-            std_dev=np.sqrt(args.var),
-            std_decay=0,
-            std_min=1e-5,
-            multi_linear=MULTI_LINEAR
-        )
-        """pol = LinearPolicy(
-            parameters=np.zeros(tot_params),
-            dim_state=s_dim,
-            dim_action=a_dim,
-            sigma_noise=np.sqrt(args.var),
-            sigma_decay=0,
-            sigma_min=1e-5
-        )"""
+        if args.jax:
+            pol = LinearGaussianPolicyJAX(
+                parameters=np.zeros(tot_params),
+                dim_state=s_dim,
+                dim_action=a_dim,
+                std_dev=np.sqrt(args.var),
+                std_decay=0,
+                std_min=1e-5,
+                multi_linear=MULTI_LINEAR
+            )
+        else:
+            pol = LinearGaussianPolicy(
+                parameters=np.zeros(tot_params),
+                dim_state=s_dim,
+                dim_action=a_dim,
+                std_dev=np.sqrt(args.var),
+                std_decay=0,
+                std_min=1e-5,
+                multi_linear=MULTI_LINEAR
+            )
     elif args.pol in ["nn", "deep_gaussian"]:
         if not huge:
             net = nn.Sequential(
@@ -387,7 +402,7 @@ for i in range(args.n_trials):
             verbose=False,
             natural=False,
             checkpoint_freq=100,
-            n_jobs= args.n_workers # jax do not allow for parallelism
+            n_jobs=args.n_workers
         )
         alg = PGAO(**alg_parameters)
     elif args.alg == "dpg":

@@ -5,7 +5,7 @@ Interface for Policy Gradient Algorithms implemented in JAX.
 # Libraries
 from abc import ABC, abstractmethod
 from envs.base_env import BaseEnv
-from policies import BasePolicy
+from policies.JAX_policies.base_policy_jax import BasePolicyJAX
 from data_processors import BaseProcessor, IdentityDataProcessor
 from algorithms.utils import check_directory_and_create, PolicyGradientAlgorithms
 import jax.numpy as jnp
@@ -18,7 +18,7 @@ class PolicyGradients(ABC):
                  ite: int = None,
                  batch_size: int = 1,
                  env: BaseEnv = None,
-                 policy: BasePolicy = None,
+                 policy: BasePolicyJAX = None,
                  data_processor: BaseProcessor = IdentityDataProcessor(),
                  natural: bool = False,
                  lr_strategy: str = "constant",
@@ -106,7 +106,6 @@ class PolicyGradients(ABC):
 
         return
 
-    @abstractmethod
     def _objective_function(self, **params) -> None:
         """
           Summary:

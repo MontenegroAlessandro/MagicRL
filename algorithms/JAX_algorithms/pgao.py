@@ -9,11 +9,9 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 import copy
 import jax.numpy as jnp
-from jax import grad, jit, vmap
-import jax
 
 from envs.base_env import BaseEnv
-from policies import BasePolicy
+from policies.JAX_policies.base_policy_jax import BasePolicyJAX
 from data_processors import BaseProcessor, IdentityDataProcessor
 from algorithms.JAX_algorithms.policy_gradients import PolicyGradients
 from algorithms.utils import TrajectoryResults, PolicyGradientAlgorithms
@@ -31,6 +29,7 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OMP_NUM_THREAD"] = "1"
 """
 
+
 class PGAO(PolicyGradients):
     def __init__(self,
                  alg: str = PolicyGradientAlgorithms.PG,
@@ -38,7 +37,7 @@ class PGAO(PolicyGradients):
                  ite: int = 100,
                  batch_size: int = 1,
                  env: BaseEnv = None,
-                 policy: BasePolicy = None,
+                 policy: BasePolicyJAX = None,
                  data_processor: BaseProcessor = IdentityDataProcessor(),
                  natural: bool = False,
                  lr_strategy: str = "constant",
@@ -106,39 +105,6 @@ class PGAO(PolicyGradients):
             self.adam_optimizer = Adam(self.lr, strategy="ascent")
         return
 
-    """
-    Jax function with autograd
-    """
-    def _objective_function(self) -> None:
-        """
-        Summary:
-          This function computes the objective function for the REINFORCE or GPOMDP targets.
-        """
-        if self.alg == PolicyGradientAlgorithms.REINFORCE:
-            return self._compute_reinforce_objective()
-        elif self.alg == PolicyGradientAlgorithms.GPOMDP:
-            return self._compute_gpomdp_objective()
-        else:
-            err_msg = self.estimator_type + " estimator_type not in [REINFORCE], [GPOMDP]!"
-            raise NotImplementedError(err_msg)
-
-    def _compute_reinforce_objective(self) -> None:
-        """
-        Summary:
-          This function computes the objective function for the REINFORCE target.
-        """
-        pass
-
-    def _compute_gpomdp_objective(self) -> None:
-        """
-        Summary:
-          This function computes the objective function for the GPOMDP target.
-        """
-        pass
-
-    """
-    Jax function without autograd
-    """
     def _compute_gradient(self, score_vector, perf_vector, reward_vector) -> jnp.array:
         """
         Summary:
@@ -274,10 +240,9 @@ class PGAO(PolicyGradients):
           This function learns the policy.
         """
         for i in tqdm(range(self.ite)):
-             # JAX LIBRARY DOES NOT ALLOW FOR PARALLEL COMPUTATION
-             if self.parallel_computation:
+            if self.parallel_computation:
                 # prepare the parameters
-                self.policy.set_parameters(copy.deepcopy(np.array(self.thetas, dtype=np.float64))) # It may be necessary to use np.array(self.thetas)
+                self.policy.set_parameters(np.array(copy.deepcopy(self.thetas), dtype=np.float64))
                 worker_dict = dict(
                     env=copy.deepcopy(self.env),
                     pol=copy.deepcopy(self.policy),
@@ -295,54 +260,58 @@ class PGAO(PolicyGradients):
                     delayed_functions(**worker_dict) for _ in range(self.batch_size)
                 )
 
-             else:
+            else:
                 res = []
                 for _ in range(self.batch_size):
-                    tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas)) # It may be necessary to use np.array(self.thetas)
+                    tmp_res = self.sampler.collect_trajectory(
+                        params=copy.deepcopy(self.thetas))  # It may be necessary to use np.array(self.thetas)
                     res.append(tmp_res)
 
             # Update performance
-             perf_vector = jnp.zeros(self.batch_size, dtype=jnp.float64)
-             score_vector = jnp.zeros((self.batch_size, self.env.horizon, self.dim), dtype=jnp.float64)
-             reward_vector = jnp.zeros((self.batch_size, self.env.horizon), dtype=jnp.float64)
+            perf_vector = jnp.zeros(self.batch_size, dtype=jnp.float64)
+            score_vector = jnp.zeros((self.batch_size, self.env.horizon, self.dim), dtype=jnp.float64)
+            reward_vector = jnp.zeros((self.batch_size, self.env.horizon), dtype=jnp.float64)
 
-             for j in range(self.batch_size):
-                 perf_vector = perf_vector.at[j].set(jnp.array(res[j][TrajectoryResults.PERF], dtype=jnp.float64))
-                 reward_vector = reward_vector.at[j, :].set(jnp.array(res[j][TrajectoryResults.RewList], dtype=jnp.float64))
-                 score_vector = score_vector.at[j, :, :].set(jnp.array(res[j][TrajectoryResults.ScoreList], dtype=jnp.float64))
-             self.performance_idx = self.performance_idx.at[i].set(jnp.mean(perf_vector))
+            for j in range(self.batch_size):
+                perf_vector = perf_vector.at[j].set(jnp.array(res[j][TrajectoryResults.PERF], dtype=jnp.float64))
+                reward_vector = reward_vector.at[j, :].set(
+                    jnp.array(res[j][TrajectoryResults.RewList], dtype=jnp.float64))
+                score_vector = score_vector.at[j, :, :].set(
+                    jnp.array(res[j][TrajectoryResults.ScoreList], dtype=jnp.float64))
+            self.performance_idx = self.performance_idx.at[i].set(jnp.mean(perf_vector))
 
-             # Update best rho
-             self._update_best_theta(current_perf=self.performance_idx[i])
+            # Update best rho
+            self._update_best_theta(current_perf=self.performance_idx[i])
 
-             # Compute the estimated gradient
-             #estimated_gradient = grad(self._objective_function)(score_vector=score_vector, perf_vector=perf_vector, reward_vector=reward_vector)
-             estimated_gradient = self._compute_gradient(score_vector=score_vector, perf_vector=perf_vector, reward_vector=reward_vector)
+            # Compute the estimated gradient
+            #estimated_gradient = grad(self._objective_function)(score_vector=score_vector, perf_vector=perf_vector, reward_vector=reward_vector)
+            estimated_gradient = self._compute_gradient(score_vector=score_vector, perf_vector=perf_vector,
+                                                        reward_vector=reward_vector)
 
-             # Log
-             if self.verbose:
-                 print("*" * 30)
-                 print(f"Step: {self.time}")
-                 print(f"Mean Performance: {self.performance_idx[self.time - 1]}")
-                 print(f"Estimated gradient: {estimated_gradient}")
-                 print(f"Parameter (new) values: {self.thetas}")
-                 print(f"Best performance so far: {self.best_performance_theta}")
-                 print(f"Best configuration so far: {self.best_theta}")
-                 print("*" * 30)
+            # Log
+            if self.verbose:
+                print("*" * 30)
+                print(f"Step: {self.time}")
+                print(f"Mean Performance: {self.performance_idx[self.time - 1]}")
+                print(f"Estimated gradient: {estimated_gradient}")
+                print(f"Parameter (new) values: {self.thetas}")
+                print(f"Best performance so far: {self.best_performance_theta}")
+                print(f"Best configuration so far: {self.best_theta}")
+                print("*" * 30)
 
-             # Checkpoint
-             if self.time % self.checkpoint_freq == 0:
-                 self.save_results()
+            # Checkpoint
+            if self.time % self.checkpoint_freq == 0:
+                self.save_results()
 
-             # Save theta history
-             self.theta_history = self.theta_history.at[self.time, :].set(copy.deepcopy(self.thetas))
+            # Save theta history
+            self.theta_history = self.theta_history.at[self.time, :].set(copy.deepcopy(self.thetas))
 
-             # Time update
-             self.time += 1
+            # Time update
+            self.time += 1
 
-             # Reduce the exploration factor of the policy
-             #self.policy.reduce_exploration()
+            # Reduce the exploration factor of the policy
+            #self.policy.reduce_exploration()
 
-             # Make a comparison wrt the deterministic performance
-             if self.sample_deterministic_curve:
-                 self._sample_deterministic_curve()
+            # Make a comparison wrt the deterministic performance
+            if self.sample_deterministic_curve:
+                self._sample_deterministic_curve()
