@@ -1,7 +1,7 @@
 # Libraries
 import argparse
-from algorithms import CPGPE, CPolicyGradient, NaturalPG_PD, RegularizedPG_PD
-from data_processors import IdentityDataProcessor, GWTabularProcessor
+from algorithms import CPGPE, CPolicyGradient, NaturalPG_PD, NaturalPG_PD_2
+from data_processors import IdentityDataProcessor, GWTabularProcessor, LQRTabularProcessor
 from envs import *
 from policies import *
 from art import *
@@ -25,7 +25,7 @@ parser.add_argument(
     help="The algorithm to use.",
     type=str,
     default="cpgpe",
-    choices=["cpgpe", "cpg", "npgpd", "rpgpd"]
+    choices=["cpgpe", "cpg", "npgpd", "rpgpd", "npgpd2", "rpgpd2"]
 )
 parser.add_argument(
     "--risk",
@@ -58,7 +58,7 @@ parser.add_argument(
     help="The environment.",
     type=str,
     default="lqr",
-    choices=["lqr", "gw_d"]
+    choices=["lqr", "gw_d", "swimmer", "hopper", "half_cheetah"]
 )
 parser.add_argument(
     "--horizon",
@@ -145,7 +145,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-if args.alg == "cpg":
+if args.alg != "cpgpe":
     if args.pol == "linear":
         args.pol = "gaussian"
     elif args.pol == "nn":
@@ -173,14 +173,57 @@ for i in range(args.n_trials):
     """Environment"""
     MULTI_LINEAR = False
     if args.env == "lqr":
-        env = CostLQR.generate(
+        if args.alg in ["cpgpe", "cpg", "npgpd2", "rpgpd2"]:
+            env = CostLQR.generate(
                 s_dim=args.env_param,
                 a_dim=args.env_param,
                 horizon=args.horizon,
                 gamma=args.gamma,
-                scale_matrix=0.9
+                scale_matrix=0.9,
+                max_pos=np.inf,
+                max_action=np.inf
             )
-        MULTI_LINEAR = bool(args.env_param > 1)
+            MULTI_LINEAR = bool(args.env_param > 1)
+        else:
+            env = CostLQRDiscrete.generate(
+                s_dim=args.env_param,
+                a_dim=args.env_param,
+                horizon=args.horizon,
+                gamma=args.gamma,
+                scale_matrix=0.9,
+                state_bins=5,
+                action_bins=5,
+                max_pos=10,
+                max_action=10
+            )
+            MULTI_LINEAR = bool(args.env_param > 1)
+    elif args.env == "swimmer":
+        env = CostSwimmer(
+            horizon=args.horizon,
+            gamma=args.gamma,
+            verbose=False,
+            render=False,
+            clip=True
+        )
+        MULTI_LINEAR = True
+    elif args.env == "hopper":
+        env = CostHopper(
+            horizon=args.horizon,
+            gamma=args.gamma,
+            verbose=False,
+            render=False,
+            clip=True
+        )
+        MULTI_LINEAR = True
+    elif args.env == "half_cheetah":
+        env = CostHalfCheetah(
+            horizon=args.horizon,
+            gamma=args.gamma,
+            verbose=False,
+            render=False,
+            clip=True
+        )
+        MULTI_LINEAR = True
     elif args.env == "gw_d":
         env = GridWorldEnvDisc(
             horizon=args.horizon,
@@ -192,7 +235,6 @@ for i in range(args.n_trials):
             dir=None,
             random_init=True,
             ding_flag=False
-            # ding_flag=bool(args.alg in ["rpgpd", "npgpd"])
         )
     else:
         raise ValueError(f"Invalid env name.")
@@ -202,6 +244,8 @@ for i in range(args.n_trials):
     """Data Processor"""
     if args.env == "gw_d":
         dp = GWTabularProcessor(index_map=env.grid_index)
+    elif args.env == "lqr" and args.alg in ["rpgpd", "npgpd"]:
+        dp = LQRTabularProcessor(index_map=env.state_enumeration)
     else:
         dp = IdentityDataProcessor(dim_feat=env.state_dim)
 
@@ -374,6 +418,23 @@ for i in range(args.n_trials):
             inner_loop_param=1
         )
         alg = RegularizedPG_PD(**alg_parameters)"""
+    elif args.alg in ["npgpd2", "rpgpd2"]:
+        alg_parameters = dict(
+            directory=dir_name,
+            ite=args.ite,
+            batch=args.batch,
+            pol=pol,
+            env=env,
+            lr=args.lr[:2],
+            lr_strategy=args.lr_strategy,
+            dp=dp,
+            threshold=args.c_bounds[0],
+            n_jobs=args.n_workers,
+            reg=args.reg,
+            inner_loop_param=100000,
+            inner_batch=args.batch * 5
+        )
+        alg = NaturalPG_PD_2(**alg_parameters)
     else:
         raise ValueError("Invalid algorithm name.")
 

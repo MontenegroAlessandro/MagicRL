@@ -27,8 +27,8 @@ class BaseEnv(ABC):
         self.with_costs = False
         self.how_many_costs = 0
         self.continuous_env = True
-        self.disc_state_space = None # just if discrete env
-        self.disc_action_space = None # just if discrete env
+        self.discrete_state_space = None # just if discrete env
+        self.discrete_action_space = None # just if discrete env
 
     @abstractmethod
     def step(self, action):
@@ -65,8 +65,9 @@ class MujocoBase(BaseEnv, ABC):
         self.state = None
 
     def step(self, action):
-        obs, reward, done, info, _ = self.gym_env.step(action)
+        obs, reward, done, _, _ = self.gym_env.step(action)
         self.state = copy.deepcopy(obs)
+        info = dict()
         return obs, reward, done, info
 
     def reset(self, seed=None):

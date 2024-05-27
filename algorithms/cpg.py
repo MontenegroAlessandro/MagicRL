@@ -237,7 +237,6 @@ class CPolicyGradient(PolicyGradient):
                 else:
                     self.update_lambda()
             else:
-
                 self.update_theta(
                     reward_trajectory=reward_vector,
                     score_trajectory=score_vector,
@@ -305,15 +304,26 @@ class CPolicyGradient(PolicyGradient):
             costs_trajectory = costs_trajectory[:, np.newaxis] * np.sum(score_trajectory, axis=1)
             estimated_gradient = - rew_gpomdp + np.mean(costs_trajectory, axis=0)"""
             sum_costs = np.sum(self.lambdas * costs_trajectory, axis=2)[:, :, np.newaxis] * rolling_scores
+            # half_hat = np.mean(
+            #     np.sum(gamma_seq[:, np.newaxis] * (-reward_trajectory + sum_costs), axis=1),
+            #     axis=0
+            # )
             half_hat = np.mean(
-                np.sum(gamma_seq[:, np.newaxis] * (-reward_trajectory + sum_costs), axis=1),
+                np.sum(gamma_seq[:, np.newaxis] * (-reward_trajectory + (1 - 2 * self.cost_param * self.etas) * sum_costs), axis=1),
                 axis=0
             )
             sq_costs_trajectory = self.cost_param * np.power(np.mean(costs_trajectory, axis=1), 2)
             sq_costs_trajectory = np.sum(self.lambdas * sq_costs_trajectory, axis=1)[:, np.newaxis] * np.sum(score_trajectory, axis=1)
             estimated_gradient = half_hat + np.mean(sq_costs_trajectory, axis=0)
         elif self.cost_type == "chance":
-            raise NotImplementedError(f"[CPG] laziness for the chance constraints :(")
+            # take the means over the horizon
+            costs_trajectory = np.mean(costs_trajectory, axis=1)
+            # indicator function
+            costs_trajectory = np.array(costs_trajectory >= self.cost_param, dtype=np.float64)
+            # reinforce 
+            costs_trajectory =  np.sum(self.lambdas * costs_trajectory, axis=1)[:, np.newaxis] * np.sum(score_trajectory, axis=1)
+            # compute gradient
+            estimated_gradient = - rew_gpomdp + np.mean(costs_trajectory, axis=0)
         else:
             raise NotImplementedError(f"[CPG] {self.cost_type} risk measure not implemented.")
 
