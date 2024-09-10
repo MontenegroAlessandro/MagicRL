@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from jax import vmap, jacfwd, jit
 import numpy as np
 
+
+
 # Class
 class BasePolicyJAX(ABC):
     def __init__(self) -> None:
@@ -11,10 +13,9 @@ class BasePolicyJAX(ABC):
         self.dim_state = None
         self.dim_action = None
         self.tot_params = None
-        self.jacobian = None
         self.multi_linear = None
         self.parameters = None
-    
+        self.jacobian = None
     @abstractmethod
     def draw_action(self, state):
         pass
@@ -24,7 +25,10 @@ class BasePolicyJAX(ABC):
         pass
 
     def compile_jacobian(self):
-        self.jacobian = jit(jacfwd(self._log_policy, argnums=0))
+
+        log_policy = jit(self._log_policy)
+        self.jacobian = jit(jacfwd(log_policy, argnums=0))
+
         return
 
     def _log_policy(self, parameters, state, action):
@@ -32,9 +36,10 @@ class BasePolicyJAX(ABC):
 
     def compute_score(self, state, action):
 
+        """
         if self.jacobian is None:
-            self.compile_jacobian()
-
+            self.compile_jacobian(fun)
+        """
         scores = vmap(lambda params: (-1) * self.jacobian(params, np.ravel(state), action))(self.parameters)
 
         if self.multi_linear:

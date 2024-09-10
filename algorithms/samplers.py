@@ -1,27 +1,30 @@
 """Trajectory Sampler Implementation"""
 # Libraries
 from envs import BaseEnv
-from policies import BasePolicy
+from policies.JAX_policies.base_policy_jax import BasePolicyJAX
 from data_processors import BaseProcessor
 from algorithms.utils import RhoElem, TrajectoryResults
 from joblib import Parallel, delayed
 import numpy as np
 import copy
+from algorithms.utils import PolicyGradientAlgorithms
 
 
 def pg_sampling_worker(
         env: BaseEnv = None,
-        pol: BasePolicy = None,
+        pol: BasePolicyJAX = None,
         dp: BaseProcessor = None,
         params: np.array = None,
-        starting_state: np.array = None
+        starting_state: np.array = None,
+        alg : PolicyGradientAlgorithms = None
 ) -> list:
-    """Worker collecting a single trajectory.
+    """
+    Worker collecting a single trajectory.
 
     Args:
         env (BaseEnv, optional): the env to employ. Defaults to None.
         
-        pol (BasePolicy, optional): the policy to play. Defaults to None.
+        pol (BasePolicyJAX, optional): the policy to play. Defaults to None.
         
         dp (Baseprocessor, optional): the data processor to employ. 
         Defaults to None.
@@ -35,25 +38,27 @@ def pg_sampling_worker(
     Returns:
         list: [performance, reward, scores]
     """
-    trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp)
+
+    trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp, alg=alg)
     res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state)
     return res
 
 
 def pgpe_sampling_worker(
         env: BaseEnv = None,
-        pol: BasePolicy = None,
+        pol: BasePolicyJAX = None,
         dp: BaseProcessor = None,
         params: np.array = None,
         episodes_per_theta: int = None,
-        n_jobs: int = None
+        n_jobs: int = None,
+        alg: PolicyGradientAlgorithms = None
 ) -> np.array:
     """Worker collecting trajectories for muliple sampling of parameters from the hyperpolicy.
 
     Args:
         env (BaseEnv, optional): the env to use. Defaults to None.
         
-        pol (BasePolicy, optional): the policy to play. Defaults to None.
+        pol (BasePolicyJAX, optional): the policy to play. Defaults to None.
         
         dp (BaseProcessor, optional): the data processor to use. 
         Defaults to None.
@@ -75,7 +80,8 @@ def pgpe_sampling_worker(
         pol=pol,
         data_processor=dp,
         episodes_per_theta=episodes_per_theta,
-        n_jobs=n_jobs
+        n_jobs=n_jobs,
+        alg = alg
     )
     res = parameter_sampler.collect_trajectories(params=params)
     return res
@@ -85,10 +91,11 @@ class ParameterSampler:
     """Sampler for PGPE."""
     def __init__(
             self, env: BaseEnv = None,
-            pol: BasePolicy = None,
+            pol: BasePolicyJAX = None,
             data_processor: BaseProcessor = None,
             episodes_per_theta: int = 1,
-            n_jobs: int = 1
+            n_jobs: int = 1,
+            alg: PolicyGradientAlgorithms = None
     ) -> None:
         """
         Summary:
@@ -97,7 +104,7 @@ class ParameterSampler:
         Args:
             env (BaseEnv, optional): the env to employ. Defaults to None.
             
-            pol (BasePolicy, optional): the poliy to play. Defaults to None.
+            pol (BasePolicyJAX, optional): the poliy to play. Defaults to None.
             
             data_processor (BaseProcessor, optional): the data processor to use. 
             Defaults to None.
@@ -124,9 +131,12 @@ class ParameterSampler:
         self.trajectory_sampler = TrajectorySampler(
             env=self.env,
             pol=self.pol,
-            data_processor=self.dp
+            data_processor=self.dp,
+            alg=alg
         )
         self.n_jobs = n_jobs
+
+        self.alg = alg
 
         return
 
@@ -185,8 +195,10 @@ class TrajectorySampler:
     """Trajectory sampler for PolicyGradient methods."""
     def __init__(
             self, env: BaseEnv = None,
-            pol: BasePolicy = None,
-            data_processor: BaseProcessor = None
+            pol: BasePolicyJAX = None,
+            fun = None,
+            data_processor: BaseProcessor = None,
+            alg: PolicyGradientAlgorithms = None
     ) -> None:
         """
         Summary:
@@ -195,7 +207,7 @@ class TrajectorySampler:
         Args:
             env (BaseEnv, optional): the env to use. Defaults to None.
             
-            pol (BasePolicy, optional): the policy to play. Defaults to None.
+            pol (BasePolicyJAX, optional): the policy to play. Defaults to None.
             
             data_processor (BaseProcessor, optional): the data processor to use. 
             Defaults to None.
@@ -203,6 +215,8 @@ class TrajectorySampler:
         err_msg = "[PGTrajectorySampler] no environment provided!"
         assert env is not None, err_msg
         self.env = env
+
+        self.alg = alg
 
         err_msg = "[PGTrajectorySampler] no policy provided!"
         assert pol is not None, err_msg
@@ -240,35 +254,35 @@ class TrajectorySampler:
         perf = 0
         rewards = np.zeros(self.env.horizon, dtype=np.float64)
         scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
+
+        """
         if params is not None:
             self.pol.set_parameters(thetas=params)
+        """
 
         # act
+
+        # self.pol.compile_jacobian()
+
         for t in range(self.env.horizon):
-            # retrieve the state
             state = self.env.state
-
-            # transform the state
             features = self.dp.transform(state=state)
+            action = self.pol.draw_action(state=features)
 
-            # select the action
-            a = self.pol.draw_action(state=features)
-            score = self.pol.compute_score(state=features, action=a)
+            score = self.pol.compute_score(state=features, action=action) if self.alg != PolicyGradientAlgorithms.PGPE else []
 
-            # play the action
-            _, rew, done, _ = self.env.step(action=a)
+            _, reward, done, _ = self.env.step(action=action)
 
-            # update the performance index
-            perf += (self.env.gamma ** t) * rew
+            perf += (self.env.gamma ** t) * reward
+            rewards[t] = reward
 
-            # update the vectors of rewards and scores
-            rewards[t] = rew
-            scores[t, :] = score
+            if self.alg != PolicyGradientAlgorithms.PGPE:
+                scores[t, :] = score
 
             if done:
-                if t < self.env.horizon - 1:
-                    rewards[t+1:] = 0
-                    scores[t+1:] = 0
+                rewards[t + 1:] = 0
+                if self.alg != PolicyGradientAlgorithms.PGPE:
+                    scores[t + 1:] = 0
                 break
 
         return [perf, rewards, scores]

@@ -7,6 +7,7 @@ from abc import ABC
 import numpy as np
 import copy
 import jax.numpy as jnp
+from jax import jacfwd, jit
 
 import jax
 jax.config.update("jax_enable_x64", True)
@@ -39,7 +40,6 @@ class LinearGaussianPolicyJAX(BasePolicyJAX, ABC):
         assert std_dev > 0, err_msg
         self.std_dev = std_dev
 
-
         # Additional attributes
         self.dim_state = dim_state
         self.dim_action = dim_action
@@ -49,6 +49,7 @@ class LinearGaussianPolicyJAX(BasePolicyJAX, ABC):
         self.std_min = std_min
 
         self.jacobian = None
+
         return
 
     def draw_action(self, state) -> np.array:
@@ -56,6 +57,7 @@ class LinearGaussianPolicyJAX(BasePolicyJAX, ABC):
             err_msg = "[GaussPolicy] the state has not the same dimension of the parameter vector:"
             err_msg += f"\n{len(state)} vs. {self.dim_state}"
             raise ValueError(err_msg)
+
         mean = np.array(self.parameters @ state, dtype=np.float64)
         action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
         return action
@@ -79,30 +81,17 @@ class LinearGaussianPolicyJAX(BasePolicyJAX, ABC):
             log_pol =action - jnp.dot(parameters, state)
         return (log_pol ** 2 / (2 * self.std_dev ** 2))[0]
 
+    """
+    def compile_jacobian(self):
+        log_policy = jit(self._log_policy)
+        self.jacobian = jit(jacfwd(log_policy, argnums=0))
+
+        return
+    """
+
     def compute_score(self, state, action):
         return super().compute_score(state, action)
 
-    """
-    def compile_jacobian(self):
-        self.jacobian = jit(jacfwd(self._log_policy, argnums=0))
-        return
-
-    def compute_score(self, state, action):
-        if self.std_dev == 0:
-            return super().compute_score(state, action)
-        
-        if self.jacobian is None:
-            self.compile_jacobian()
-
-        scores = vmap(lambda params: (-1) * self.jacobian(params, np.ravel(state), action))(self.parameters)
-        scores = scores[0]
-
-        if self.multi_linear:
-            scores = np.ravel(scores)
-
-        return np.array(scores, dtype=np.float64)
-
-    """
     def diff(self, state):
         raise NotImplementedError
 

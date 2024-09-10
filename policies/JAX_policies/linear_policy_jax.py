@@ -34,6 +34,11 @@ class OldLinearPolicyJAX(BasePolicyJAX, ABC):
         self.dim_action = dim_action
         self.tot_params = dim_state * dim_action
 
+
+        # Initialize the log_policy and jacobian to be compiled at runtime
+        self.log_policy = None
+        self.jacobian = None
+
         return
 
     def draw_action(self, state) -> float:

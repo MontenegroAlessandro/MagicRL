@@ -12,6 +12,7 @@ from adam.adam import Adam
 from algorithms.utils import LearnRates, check_directory_and_create, ParamSamplerResults
 from data_processors import IdentityDataProcessor
 from algorithms.samplers import *
+from policies import BasePolicy
 
 
 # Objects

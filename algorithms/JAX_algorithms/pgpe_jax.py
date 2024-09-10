@@ -18,12 +18,12 @@ from jax import grad, jit, vmap, jacfwd, jacrev
 
 class PGPE_JAX(PolicyGradients):
     def __init__(self,
-                 alg: str = PolicyGradientAlgorithms.PG,
+                 alg: str = PolicyGradientAlgorithms.PGPE,
                  lr: jnp.array = None,
                  ite: int = 100,
                  batch_size: int = 10,
                  env: BaseEnv = None,
-                 policy: BasePolicy = None,
+                 policy: BasePolicyJAX = None,
                  data_processor: BaseProcessor = IdentityDataProcessor(),
                  natural: bool = False,
                  lr_strategy: str = "constant",
@@ -296,7 +296,8 @@ class PGPE_JAX(PolicyGradients):
                     dp=copy.deepcopy(self.data_processor),
                     params=copy.deepcopy(np.array(self.rho, dtype=np.float64)),
                     episodes_per_theta=self.episodes_per_theta,
-                    n_jobs=self.n_jobs_traj
+                    n_jobs=self.n_jobs_traj,
+                    alg = self.alg
                 )
                 delayed_functions = delayed(pgpe_sampling_worker)
                 res = Parallel(n_jobs=self.n_jobs_param)(

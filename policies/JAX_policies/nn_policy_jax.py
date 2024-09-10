@@ -1,7 +1,7 @@
 """Implementation of a Linear Policy"""
 # todo make this modular and fully defined by the user
 # Libraries
-from policies import BasePolicy
+from policies.JAX_policies.base_policy_jax import BasePolicyJAX
 from abc import ABC
 from policies.utils import NetIdx
 import numpy as np
@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 
 
-class NeuralNetworkPolicy(BasePolicy, ABC):
+class NeuralNetworkPolicy(BasePolicyJAX, ABC):
     def __init__(
             self, parameters: np.array = None,
             input_size: int = 1,

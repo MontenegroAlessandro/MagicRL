@@ -239,61 +239,60 @@ class PGAO(PolicyGradients):
         Summary:
           This function learns the policy.
         """
-        policy = LinearGaussianPolicyJAX(
-            parameters=np.zeros(self.policy.tot_params, dtype=np.float64),
-            dim_state=self.policy.dim_state,
-            dim_action=self.policy.dim_action,
-            std_decay=0,
-            std_min=1e-5,
-            multi_linear=self.policy.multi_linear
-        )
-        policy.compile_jacobian()
-
         for i in tqdm(range(self.ite)):
             if self.parallel_computation:
-                # prepare the parameters
                 self.policy.set_parameters(np.array(copy.deepcopy(self.thetas), dtype=np.float64))
 
-                policy.set_parameters(np.array(copy.deepcopy(self.thetas), dtype=np.float64))
+                # Determine the number of batches per job
+                batches_per_job = self.batch_size // self.n_jobs
+                remainder_batches = self.batch_size % self.n_jobs
 
-                worker = []
-                for w in range(self.batch_size):
-                    """
+                # Create worker lists for each job
+                worker_list = []
+                start_idx = 0
+
+                for j in range(self.n_jobs):
+                    # Determine the number of batches for this job
+                    num_batches = batches_per_job + (1 if j < remainder_batches else 0)
+
+                    # Create a unique policy for each job
+                    policy = LinearGaussianPolicyJAX(
+                        parameters=np.zeros(self.policy.tot_params, dtype=np.float64),
+                        dim_state=self.policy.dim_state,
+                        dim_action=self.policy.dim_action,
+                        std_decay=0,
+                        std_min=1e-5,
+                        multi_linear=self.policy.multi_linear
+                    )
+                    policy.set_parameters(np.array(copy.deepcopy(self.thetas), dtype=np.float64))
+                    policy.compile_jacobian()
+
                     worker_dict = dict(
                         env=copy.deepcopy(self.env),
-                        pol=LinearGaussianPolicyJAX(
-                            parameters= np.zeros(self.policy.tot_params, dtype=np.float64),
-                            dim_state=self.policy.dim_state,
-                            dim_action=self.policy.dim_action,
-                            std_decay=0,
-                            std_min=1e-5,
-                            multi_linear=self.policy.multi_linear
-                         ),
+                        pol=policy,
                         dp=copy.deepcopy(self.data_processor),
                         params=np.array(self.thetas, dtype=np.float64),
                         starting_state=None,
-                        alg=self.alg
+                        alg=self.alg,
+                        batch_range=(start_idx, start_idx + num_batches)  # set the range of the batches the worker wil work on
                     )
-                    """
-                    worker_dict = dict(
-                        env=copy.deepcopy(self.env),
-                        pol=copy.deepcopy(policy),
-                        dp=copy.deepcopy(self.data_processor),
-                        params=np.array(self.thetas, dtype=np.float64),
-                        starting_state=None,
-                        alg=self.alg
-                    )
+                    worker_list.append(worker_dict)
+                    start_idx += num_batches
 
-                    worker.append(worker_dict)
+                # Define the function to call for each job
+                def pg_sampling_worker_batch(worker_dict, batch_range):
+                    results = []
+                    for i in range(*batch_range):
+                        results.append(pg_sampling_worker(**worker_dict))
+                    return results
 
+                # Build the parallel functions
+                delayed_functions = [delayed(pg_sampling_worker_batch)(worker, worker['batch_range']) for worker in
+                                     worker_list]
 
-                # build the parallel functions
-                delayed_functions = delayed(pg_sampling_worker)
+                res = Parallel(n_jobs=self.n_jobs, backend="loky")(delayed_functions)
 
-                # parallel computation
-                res = Parallel(n_jobs=self.n_jobs, backend="threading")(
-                    delayed_functions(**(worker[w])) for w in range(self.batch_size)
-                )
+                res = [item for sublist in res for item in sublist]
 
             else:
                 res = []
