@@ -15,7 +15,7 @@ class BasePolicyJAX(ABC):
         self.tot_params = None
         self.multi_linear = None
         self.parameters = None
-        self.jacobian = None
+
     @abstractmethod
     def draw_action(self, state):
         pass
@@ -25,21 +25,20 @@ class BasePolicyJAX(ABC):
         pass
 
     def compile_jacobian(self):
-
-        log_policy = jit(self._log_policy)
-        self.jacobian = jit(jacfwd(log_policy, argnums=0))
+        self.jacobian = jit(jacfwd(self._log_policy, argnums=0))
 
         return
+
 
     def _log_policy(self, parameters, state, action):
         pass
 
     def compute_score(self, state, action):
-
         """
         if self.jacobian is None:
-            self.compile_jacobian(fun)
+            self.compile_jacobian()
         """
+
         scores = vmap(lambda params: (-1) * self.jacobian(params, np.ravel(state), action))(self.parameters)
 
         if self.multi_linear:

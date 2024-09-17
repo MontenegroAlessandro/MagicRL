@@ -435,7 +435,6 @@ for i in range(args.n_trials):
         alg = DeterministicPG(**alg_parameters)
     else:
         raise ValueError("Invalid algorithm name.")
-
     print(text2art(f"== {args.alg} TEST on {args.env} =="))
     print(text2art(f"Trial {i}"))
     print(args)

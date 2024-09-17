@@ -7,7 +7,7 @@ from abc import ABC
 import numpy as np
 import copy
 import jax.numpy as jnp
-from jax import jacfwd, jit
+
 
 import jax
 jax.config.update("jax_enable_x64", True)
@@ -34,7 +34,7 @@ class LinearGaussianPolicyJAX(BasePolicyJAX, ABC):
         # Attributes with checks
         err_msg = "[GaussPolicy] parameters is None!"
         assert parameters is not None, err_msg
-        self.parameters = parameters
+        self.parameters = super().set_parameters(parameters)
 
         err_msg = "[GaussPolicy] standard deviation is negative!"
         assert std_dev > 0, err_msg
@@ -63,31 +63,24 @@ class LinearGaussianPolicyJAX(BasePolicyJAX, ABC):
         return action
 
     def reduce_exploration(self):
-        self.std_dev = np.clip(self.std_dev - self.std_decay, self.std_min, np.inf)
+        self.std_dev = jnp.clip(self.std_dev - self.std_decay, self.std_min, jnp.inf)
 
     def set_parameters(self, thetas) -> None:
         if not self.multi_linear:
             self.parameters = copy.deepcopy(thetas)
         else:
-            self.parameters = np.array(np.split(thetas, self.dim_action))
+            self.parameters = jnp.array(jnp.split(thetas, self.dim_action))
 
     def get_parameters(self):
         return self.parameters
 
     def _log_policy(self, parameters, state, action):
         if self.multi_linear:
-            log_pol = (action - jnp.dot(parameters, state))[:, np.newaxis]
+            log_pol = (action - jnp.dot(parameters, state))[:, jnp.newaxis]
         else:
             log_pol =action - jnp.dot(parameters, state)
         return (log_pol ** 2 / (2 * self.std_dev ** 2))[0]
 
-    """
-    def compile_jacobian(self):
-        log_policy = jit(self._log_policy)
-        self.jacobian = jit(jacfwd(log_policy, argnums=0))
-
-        return
-    """
 
     def compute_score(self, state, action):
         return super().compute_score(state, action)

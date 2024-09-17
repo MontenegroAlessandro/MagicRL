@@ -10,6 +10,7 @@ from tqdm import tqdm
 import copy
 import jax.numpy as jnp
 
+from envs import Swimmer
 from envs.base_env import BaseEnv
 from policies.JAX_policies.base_policy_jax import BasePolicyJAX
 from policies.JAX_policies.gaussian_policy_jax import LinearGaussianPolicyJAX
@@ -20,15 +21,14 @@ from algorithms.samplers import TrajectorySampler, pg_sampling_worker
 from adam.adam import Adam
 import io
 
-"""
-import os
-os.environ[
-    "XLA_FLAGS"
-] = "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OMP_NUM_THREAD"] = "1"
-"""
+
+def worker_process(worker_dict, num_trajectories):
+    res = []
+    # copy the memory
+    for _ in range(num_trajectories):
+        res.append(pg_sampling_worker(**worker_dict))
+    return res
+
 
 class PGAO(PolicyGradients):
     def __init__(self,
@@ -43,8 +43,8 @@ class PGAO(PolicyGradients):
                  lr_strategy: str = "constant",
                  checkpoint_freq: int = 1,
                  verbose: bool = False,
+                 directory = None,
                  sample_deterministic_curve: bool = False,
-                 directory: str = None,
                  estimator_type: str = PolicyGradientAlgorithms.REINFORCE,
                  initial_theta: jnp.array = None,
                  n_jobs: int = 1) -> None:
@@ -234,66 +234,58 @@ class PGAO(PolicyGradients):
             f.close()
         return
 
+    def shared_memory_worker(self, worker):
+        """
+        Summary:
+          This function is used to create a shared memory for the policy's Jacobian
+          and distribute trajectory collection across multiple jobs.
+        """
+        worker['pol'].compile_jacobian()
+
+        # Calculate how many trajectories each job should handle
+        trajectories_per_job = self.batch_size // self.n_jobs
+        extra_trajectories = self.batch_size % self.n_jobs
+
+        # Use joblib to run the worker processes in parallel
+        res = Parallel(n_jobs=self.n_jobs)(
+            delayed(worker_process)(
+                worker,
+                trajectories_per_job + (1 if i < extra_trajectories else 0)
+            ) for i in range(self.n_jobs)
+        )
+        res_traj = [item for sublist in res for item in sublist]
+        return list(res_traj)
+
     def learn(self) -> None:
         """
         Summary:
           This function learns the policy.
         """
-        policy = LinearGaussianPolicyJAX(
+        policy_dict = dict(
             parameters=np.zeros(self.policy.tot_params, dtype=np.float64),
             dim_state=self.policy.dim_state,
             dim_action=self.policy.dim_action,
+            std_dev=np.sqrt(self.policy.std_dev),
             std_decay=0,
             std_min=1e-5,
             multi_linear=self.policy.multi_linear
         )
-        policy.compile_jacobian()
 
         for i in tqdm(range(self.ite)):
             if self.parallel_computation:
                 # prepare the parameters
                 self.policy.set_parameters(np.array(copy.deepcopy(self.thetas), dtype=np.float64))
 
-                policy.set_parameters(np.array(copy.deepcopy(self.thetas), dtype=np.float64))
-
-                worker = []
-                for w in range(self.batch_size):
-                    """
-                    worker_dict = dict(
-                        env=copy.deepcopy(self.env),
-                        pol=LinearGaussianPolicyJAX(
-                            parameters= np.zeros(self.policy.tot_params, dtype=np.float64),
-                            dim_state=self.policy.dim_state,
-                            dim_action=self.policy.dim_action,
-                            std_decay=0,
-                            std_min=1e-5,
-                            multi_linear=self.policy.multi_linear
-                         ),
-                        dp=copy.deepcopy(self.data_processor),
-                        params=np.array(self.thetas, dtype=np.float64),
-                        starting_state=None,
-                        alg=self.alg
-                    )
-                    """
-                    worker_dict = dict(
-                        env=copy.deepcopy(self.env),
-                        pol=copy.deepcopy(policy),
-                        dp=copy.deepcopy(self.data_processor),
-                        params=np.array(self.thetas, dtype=np.float64),
-                        starting_state=None,
-                        alg=self.alg
-                    )
-
-                    worker.append(worker_dict)
-
-
-                # build the parallel functions
-                delayed_functions = delayed(pg_sampling_worker)
-
-                # parallel computation
-                res = Parallel(n_jobs=self.n_jobs, backend="threading")(
-                    delayed_functions(**(worker[w])) for w in range(self.batch_size)
+                worker_dict = dict(
+                    env=copy.deepcopy(self.env),
+                    pol=copy.deepcopy(LinearGaussianPolicyJAX(**policy_dict)),
+                    dp=copy.deepcopy(self.data_processor),
+                    params=np.array(self.thetas, dtype=np.float64),
+                    starting_state=None,
+                    alg=self.alg
                 )
+
+                res = self.shared_memory_worker(worker_dict)
 
             else:
                 res = []
@@ -345,8 +337,66 @@ class PGAO(PolicyGradients):
             self.time += 1
 
             # Reduce the exploration factor of the policy
-            #self.policy.reduce_exploration()
+            self.policy.reduce_exploration()
 
             # Make a comparison wrt the deterministic performance
             if self.sample_deterministic_curve:
                 self._sample_deterministic_curve()
+
+
+def main():
+    ite = 100
+    gamma = 1
+    env_class = Swimmer
+    horizon = 100
+    clip = 1
+    lr = 0.1
+    lr_strategy = "adam"
+    n_workers = 6
+    batch = 6
+
+    env = env_class(horizon=horizon, gamma=gamma, render=False, clip=bool(clip))
+    MULTI_LINEAR = True
+
+    s_dim = env.state_dim
+    a_dim = env.action_dim
+    tot_params = s_dim * a_dim
+    dp = IdentityDataProcessor(dim_feat=env.state_dim)
+
+    policy = LinearGaussianPolicyJAX(
+        parameters=np.zeros(tot_params),
+        dim_state=s_dim,
+        dim_action=a_dim,
+        std_dev=np.sqrt(1),
+        std_decay=0,
+        std_min=1e-5,
+        multi_linear=MULTI_LINEAR
+    )
+
+    init_theta = jnp.zeros(tot_params)
+
+    alg_parameters = dict(
+        lr=[lr],
+        lr_strategy=lr_strategy,
+        estimator_type="GPOMDP",
+        initial_theta=init_theta,
+        ite=ite,
+        batch_size=batch,
+        env=env,
+        policy=policy,
+        data_processor=dp,
+        verbose=False,
+        natural=False,
+        checkpoint_freq=100,
+        n_jobs=n_workers
+    )
+    alg = PGAO(**alg_parameters)
+
+    print("START LEARNING")
+
+    alg.learn()
+    print(alg.performance_idx)
+
+if __name__ == "__main__":
+    main()
+

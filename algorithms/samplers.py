@@ -38,7 +38,7 @@ def pg_sampling_worker(
     Returns:
         list: [performance, reward, scores]
     """
-
+    # pol = copy.deepcopy(pol)
     trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp, alg=alg)
     res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state)
     return res
@@ -249,20 +249,19 @@ class TrajectorySampler:
         if starting_state is not None:
             self.env.state = copy.deepcopy(starting_state)
 
+        if params is not None:
+            self.pol.set_parameters(thetas=params)
+
         # initialize parameters
         np.random.seed()
         perf = 0
         rewards = np.zeros(self.env.horizon, dtype=np.float64)
         scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
 
-        """
         if params is not None:
             self.pol.set_parameters(thetas=params)
-        """
 
         # act
-
-        # self.pol.compile_jacobian()
 
         for t in range(self.env.horizon):
             state = self.env.state
