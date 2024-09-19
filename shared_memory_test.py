@@ -239,13 +239,12 @@ class PGAO_shared(PolicyGradients):
           This function is used to create a shared memory for the policy's Jacobian
           and distribute trajectory collection across multiple jobs.
         """
-        worker['pol'].compile_jacobian()
 
         # Calculate how many trajectories each job should handle
         trajectories_per_job = self.batch_size // self.n_jobs
         extra_trajectories = self.batch_size % self.n_jobs
 
-        # Use joblib to run the worker processes in parallel
+        # Distribute the trajectories across the jobs
         res = Parallel(n_jobs=self.n_jobs)(
             delayed(worker_process)(
                 worker,
@@ -260,37 +259,31 @@ class PGAO_shared(PolicyGradients):
         Summary:
           This function learns the policy.
         """
-        policy_dict = dict(
-            parameters=np.zeros(self.policy.tot_params, dtype=np.float64),
-            dim_state=self.policy.dim_state,
-            dim_action=self.policy.dim_action,
-            std_dev=np.sqrt(self.policy.std_dev),
-            std_decay=0,
-            std_min=1e-5,
-            multi_linear=self.policy.multi_linear
+        worker_dict = dict(
+            env=copy.deepcopy(self.env),
+            pol=copy.deepcopy(self.policy),
+            dp=copy.deepcopy(self.data_processor),
+            params=np.array(self.thetas, dtype=np.float64),
+            starting_state=None,
+            alg=self.alg
         )
+
+        worker_dict['pol'].compile_jacobian()
+
+        self.policy.compile_jacobian()
 
         for i in tqdm(range(self.ite)):
             if self.parallel_computation:
                 # prepare the parameters
-                self.policy.set_parameters(np.array(copy.deepcopy(self.thetas), dtype=np.float64))
+                worker_dict['params'] = np.array(copy.deepcopy(self.thetas), dtype=np.float64)
 
-                worker_dict = dict(
-                    env=copy.deepcopy(self.env),
-                    pol=copy.deepcopy(LinearGaussianPolicyJAX(**policy_dict)),
-                    dp=copy.deepcopy(self.data_processor),
-                    params=np.array(self.thetas, dtype=np.float64),
-                    starting_state=None,
-                    alg=self.alg
-                )
-
+                # get the scores
                 res = self.shared_memory_worker(worker_dict)
 
             else:
                 res = []
                 for _ in range(self.batch_size):
-                    tmp_res = self.sampler.collect_trajectory(
-                        params=copy.deepcopy(self.thetas))  # It may be necessary to use np.array(self.thetas)
+                    tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas))
                     res.append(tmp_res)
 
             # Update performance
@@ -300,10 +293,8 @@ class PGAO_shared(PolicyGradients):
 
             for j in range(self.batch_size):
                 perf_vector = perf_vector.at[j].set(jnp.array(res[j][TrajectoryResults.PERF], dtype=jnp.float64))
-                reward_vector = reward_vector.at[j, :].set(
-                    jnp.array(res[j][TrajectoryResults.RewList], dtype=jnp.float64))
-                score_vector = score_vector.at[j, :, :].set(
-                    jnp.array(res[j][TrajectoryResults.ScoreList], dtype=jnp.float64))
+                reward_vector = reward_vector.at[j, :].set(jnp.array(res[j][TrajectoryResults.RewList], dtype=jnp.float64))
+                score_vector = score_vector.at[j, :, :].set(jnp.array(res[j][TrajectoryResults.ScoreList], dtype=jnp.float64))
             self.performance_idx = self.performance_idx.at[i].set(jnp.mean(perf_vector))
 
             # Update best rho
@@ -311,8 +302,7 @@ class PGAO_shared(PolicyGradients):
 
             # Compute the estimated gradient
             #estimated_gradient = grad(self._objective_function)(score_vector=score_vector, perf_vector=perf_vector, reward_vector=reward_vector)
-            estimated_gradient = self._compute_gradient(score_vector=score_vector, perf_vector=perf_vector,
-                                                        reward_vector=reward_vector)
+            estimated_gradient = self._compute_gradient(score_vector=score_vector, perf_vector=perf_vector, reward_vector=reward_vector)
 
             # Log
             if self.verbose:
@@ -351,7 +341,7 @@ def main():
     lr = 0.1
     lr_strategy = "adam"
     n_workers = 6
-    batch = 6
+    batch = 30
 
     env = env_class(horizon=horizon, gamma=gamma, render=False, clip=bool(clip))
     MULTI_LINEAR = True
@@ -397,4 +387,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

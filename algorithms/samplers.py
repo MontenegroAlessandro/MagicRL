@@ -1,4 +1,6 @@
 """Trajectory Sampler Implementation"""
+from sympy.strategies.branch.traverse import top_down
+
 # Libraries
 from envs import BaseEnv
 from policies.JAX_policies.base_policy_jax import BasePolicyJAX
@@ -8,6 +10,7 @@ from joblib import Parallel, delayed
 import numpy as np
 import copy
 from algorithms.utils import PolicyGradientAlgorithms
+from jax import jit
 
 
 def pg_sampling_worker(
@@ -261,27 +264,36 @@ class TrajectorySampler:
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
-        # act
+        # collect states and action for the whole trajectory
+        actions = []
+        states = []
 
         for t in range(self.env.horizon):
             state = self.env.state
             features = self.dp.transform(state=state)
             action = self.pol.draw_action(state=features)
 
-            score = self.pol.compute_score(state=features, action=action) if self.alg != PolicyGradientAlgorithms.PGPE else []
+            if self.alg != PolicyGradientAlgorithms.PGPE:
+                states.append(features)
+                actions.append(action)
 
             _, reward, done, _ = self.env.step(action=action)
 
             perf += (self.env.gamma ** t) * reward
             rewards[t] = reward
 
-            if self.alg != PolicyGradientAlgorithms.PGPE:
-                scores[t, :] = score
-
             if done:
                 rewards[t + 1:] = 0
-                if self.alg != PolicyGradientAlgorithms.PGPE:
-                    scores[t + 1:] = 0
                 break
+
+        states = np.array(states, dtype=np.float64)
+        actions = np.array(actions, dtype=np.float64)
+
+
+        if self.alg != PolicyGradientAlgorithms.PGPE:
+            # compute the scores for the whole trajectory
+            scores = self.pol.compute_score(state=states, action=actions)
+            # todo:  may be necessary to add a zero in the last position of the scores
+
 
         return [perf, rewards, scores]

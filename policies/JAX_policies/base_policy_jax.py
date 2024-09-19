@@ -2,6 +2,7 @@
 # Libraries
 from abc import ABC, abstractmethod
 from jax import vmap, jacfwd, jit
+import jax.numpy as jnp
 import numpy as np
 
 
@@ -19,32 +20,38 @@ class BasePolicyJAX(ABC):
     @abstractmethod
     def draw_action(self, state):
         pass
-    
+
     @abstractmethod
     def set_parameters(self, thetas):
         pass
 
     def compile_jacobian(self):
         self.jacobian = jit(jacfwd(self._log_policy, argnums=0))
+        self.state_action_score_jit = jit(self.state_action_score)
+        self.parameter_score_jit = jit(self.parameter_score)
 
         return
-
 
     def _log_policy(self, parameters, state, action):
         pass
 
-    def compute_score(self, state, action):
-        """
-        if self.jacobian is None:
-            self.compile_jacobian()
-        """
+    # Define the scoring function to map over the batch of states and actions
+    def state_action_score(self, state, action):
+        # Now vmap over parameters instead of over states/actions
+        scores = vmap(lambda params: (-1) * self.jacobian(params, state, action))(self.parameters)
 
-        scores = vmap(lambda params: (-1) * self.jacobian(params, np.ravel(state), action))(self.parameters)
+        # Apply ravel to each score vector
+        return jnp.ravel(scores)
 
-        if self.multi_linear:
-            scores = np.ravel(scores)
+    def parameter_score(self, states, actions):
+        return vmap(self.state_action_score_jit)(states, actions)
 
-        return np.array(scores, dtype=np.float64)
+    def compute_score(self, states, actions):
+        # First vmap over states and actions (batch)
+        scores = self.parameter_score_jit(states, actions)
+
+        # No need to reshape, as this order already keeps the structure you want
+        return jnp.array(scores, dtype=jnp.float64)
 
     @abstractmethod
     def diff(self, state):
@@ -53,7 +60,7 @@ class BasePolicyJAX(ABC):
     @abstractmethod
     def reduce_exploration(self):
         pass
-    
+
     @abstractmethod
     def get_parameters(self):
         pass

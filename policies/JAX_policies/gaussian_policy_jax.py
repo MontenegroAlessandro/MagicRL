@@ -7,7 +7,7 @@ from abc import ABC
 import numpy as np
 import copy
 import jax.numpy as jnp
-
+from jax import jit
 
 import jax
 jax.config.update("jax_enable_x64", True)
@@ -49,6 +49,8 @@ class LinearGaussianPolicyJAX(BasePolicyJAX, ABC):
         self.std_min = std_min
 
         self.jacobian = None
+        self.state_action_score_jit = None
+        self.parameter_score_jit = None
 
         return
 
@@ -76,14 +78,19 @@ class LinearGaussianPolicyJAX(BasePolicyJAX, ABC):
 
     def _log_policy(self, parameters, state, action):
         if self.multi_linear:
-            log_pol = (action - jnp.dot(parameters, state))[:, jnp.newaxis]
+            # Ensure proper matrix multiplication: (100, 2) = (100, 8) @ (8, 2)
+            log_pol = (action - jnp.dot(parameters, state))[:, jnp.newaxis]  # Transpose parameters for correct matmul
         else:
-            log_pol =action - jnp.dot(parameters, state)
-        return (log_pol ** 2 / (2 * self.std_dev ** 2))[0]
+            log_pol = action - jnp.dot(parameters, state)
 
+        # If log_pol is 1D, sum without specifying an axis
+        return jnp.sum((log_pol ** 2) / (2 * self.std_dev ** 2))
 
     def compute_score(self, state, action):
         return super().compute_score(state, action)
+
+    def compile_jacobian(self):
+        return super().compile_jacobian()
 
     def diff(self, state):
         raise NotImplementedError
