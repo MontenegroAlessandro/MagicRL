@@ -16,7 +16,7 @@ from policies.JAX_policies.gaussian_policy_jax import LinearGaussianPolicyJAX
 from data_processors import BaseProcessor, IdentityDataProcessor
 from algorithms.JAX_algorithms.policy_gradients import PolicyGradients
 from algorithms.utils import TrajectoryResults, PolicyGradientAlgorithms
-from algorithms.samplers import TrajectorySampler, pg_sampling_worker
+from algorithms.JAX_algorithms.samplers_jax import TrajectorySampler, pg_sampling_worker
 from adam.adam import Adam
 import io
 from envs.swimmer import Swimmer
