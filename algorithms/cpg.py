@@ -442,7 +442,7 @@ class CPolicyGradient(PolicyGradient):
                 ite_perf[j] = res[j][TrajectoryResults.PERF]
                 ite_cost[j] = np.array(
                     res[j][TrajectoryResults.CostInfo]["costs"],
-                    dtype=np.float64)[0, :]
+                    dtype=np.float64)[0, :] # sostituisci con reshape (-1, 1)
 
 
             # update the deterministic curve with the mean performance and mean cost violation per constraint in the deterministic_cost_curve
