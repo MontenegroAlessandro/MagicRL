@@ -1,395 +1,415 @@
-"""CPGPE implementation"""
-# todo -> parallelize the sampling process via joblib
-# todo -> adam in PGPE and then inherit
-# todo -> saving; resume and other stuff in PGPE
-# todo -> make CvarPGPE inherit from CPGPE
+"""
+Implementation of C-PGPE.
+"""
 # Libraries
-from algorithms.pgpe import PGPE
 import numpy as np
-from envs.base_env import BaseEnv
-from policies import BasePolicy
-from data_processors import BaseProcessor, IdentityDataProcessor
-from algorithms.utils import RhoElem, LearnRates
-import json, io, os, errno
+from copy import deepcopy
+from algorithms.pgpe import PGPE
+import io
+import json
 from tqdm import tqdm
-import copy
 from adam.adam import Adam
+from algorithms.utils import LearnRates, check_directory_and_create, ParamSamplerResults
+from data_processors import IdentityDataProcessor
+from algorithms.samplers import *
 
 
-# class implementation
 class CPGPE(PGPE):
-    """Class implementing CPGPE"""
+    """CPGPE implementation"""
+    # Macro for cost types
+    cost_types = ["tc", "cvar", "mv", "chance"]
+    # tc -> expected cost on the trajectories
+    # cvar -> conditioned value at risk (requires the parameter)
+    # mv -> mean variance (requires the parameter)
+    # chance -> probability over the cost of trajectories (requires the parameter)
 
     def __init__(
-            self, lr=None,
+            self,
+            cost_type: str = "tc",
+            cost_param: np.ndarray = None,
+            omega: float = 0,
+            thresholds: np.ndarray = None,
+            lambda_init: np.ndarray = None,
+            eta_init: np.ndarray = None,
+            alternate: bool = True,
+            lr: list = None,
             initial_rho: np.array = None,
-            ite: int = 0,
+            ite: int = 100,
             batch_size: int = 10,
             episodes_per_theta: int = 10,
             env: BaseEnv = None,
             policy: BasePolicy = None,
             data_processor: BaseProcessor = IdentityDataProcessor(),
-            directory: str = "", verbose: bool = False, natural: bool = False,
-            constraints: list = None,
-            cost_mask: np.array = None,
-            init_lambda: np.array = None,
-            learn_std: bool = True,
-            lr_strategy: str = None,
+            directory: str = "",
+            verbose: bool = False,
+            natural: bool = False,
             checkpoint_freq: int = 1,
-            resume_from: str = None
-    ) -> None:
+            lr_strategy: str = "constant",
+            learn_std: bool = False,
+            std_decay: float = 0,
+            std_min: float = 1e-4,
+            n_jobs_param: int = 1,
+            n_jobs_traj: int = 1
+    ):
         """
-        todo
+        Summary:
+            Initialization function.
+
+        Args:
+            cost_type (str): type of cost to be selected among the macro "cost_types";
+            cost_param (ndarray): the parameters for the cost measures (when necessary);
+            omega (float): the ridge-regularization term for the Lagrangian, defaults to 0;
+            thresholds (ndarray): the thresholds for the constraints;
+            lambda_init (ndarray): the initial values for the lagrangian multipliers;
+            eta_init (ndarray): the initial values for the additional learning variable;
+            alternate (bool): flag telling if alternate optimization or not.
+
+            all the other parameters have the same meaning as shown in PGPE.
         """
-        # Super class initialization
-        super().__init__(lr=lr, initial_rho=initial_rho, ite=ite,
-                         batch_size=batch_size,
-                         episodes_per_theta=episodes_per_theta, env=env,
-                         policy=policy, data_processor=data_processor,
-                         directory=directory, verbose=verbose, natural=natural,
-                         checkpoint_freq=checkpoint_freq)
-        # CPGPE arguments
-        # Learning rates
-        assert lr is not None, "[ERROR] No learning rates provided."
-        assert len(lr) == 2, "[ERROR] Expected 2 learning rates."
-        self.lr = np.array(lr)
+        # Super-class initialization
+        super(CPGPE, self).__init__(
+            lr=lr, initial_rho=initial_rho, ite=ite, batch_size=batch_size,
+            episodes_per_theta=episodes_per_theta, env=env, policy=policy,
+            data_processor=data_processor, directory=directory, verbose=verbose, natural=natural,
+            checkpoint_freq=checkpoint_freq, lr_strategy=lr_strategy, learn_std=learn_std,
+            std_decay=std_decay, std_min=std_min, n_jobs_param=n_jobs_param, n_jobs_traj=n_jobs_traj
+        )
+        # New parameters
+        self.n_constraints = self.env.how_many_costs
+        self.alternate = alternate
 
-        err_msg = "[CPGPE] invalid learning rate update strategy."
-        assert lr_strategy in ["constant", "adam"], err_msg
-        self.lr_strategy = lr_strategy
-        if self.lr_strategy == "adam":
-            self.lambda_adam = Adam(step_size=self.lr[LearnRates.LAMBDA], strategy="ascent")
+        # cost type
+        err_msg = f"[CPGPE] Cost type {cost_type} not in {CPGPE.cost_types}."
+        assert cost_type in CPGPE.cost_types, err_msg
+        self.cost_type = cost_type
 
-            self.rho_adam = [None, None]
-            self.rho_adam[RhoElem.MEAN] = Adam(step_size=self.lr[LearnRates.RHO],
-                                               strategy="descent")
-            self.rho_adam[RhoElem.STD] = Adam(step_size=self.lr[LearnRates.RHO], strategy="descent")
+        # the additional cost parameter (not always needed)
+        err_msg = f"[CPGPE] cost_param must be >= 0 ({cost_param} provided)."
+        assert cost_param >= 0 and len(cost_param) == self.n_constraints, err_msg
+        self.cost_param = cost_param
 
-        # Constraint Structures
-        err_msg = "[ERROR] Number of thresholds != Number of constraints."
-        assert len(constraints) > 0, err_msg
-        self.thresholds = np.array(constraints)
-        self.n_constraints = len(self.thresholds)
+        # regularization term
+        err_msg = f"[CPGPE] omega must be >= 0 ({omega} provided)."
+        assert omega >= 0, err_msg
+        self.omega = omega
 
-        if cost_mask is None:
-            cost_mask = np.ones(self.n_constraints, dtype=bool)
-        err_msg = "[ERROR] Number of cost mask != Number of constraints."
-        assert len(cost_mask) == self.n_constraints, err_msg
-        self.cost_mask = np.array(cost_mask)
+        # thresholds for constraints
+        err_msg = f"[CPGPE] wrong number of thresholds ({len(thresholds)} provided)."
+        assert len(thresholds) == self.n_constraints, err_msg
+        self.thresholds = np.array(thresholds, dtype=np.float64)
 
-        # Learning Targets
-        self.learn_std = learn_std
-        if init_lambda is None:
-            self.lambdas = np.ones(self.n_constraints, dtype=float) * self.cost_mask
+        # lambda and eta
+        if lambda_init is not None:
+            err_msg = f"[CPGPE] lambda_init has an incorrect length ({len(lambda_init)} provided)."
+            assert len(lambda_init) == self.n_constraints, err_msg
+            self.lambdas = np.array(lambda_init, dtype=np.float64)
         else:
-            err_msg = f"[CPGPE] init_lambda does not match {self.n_constraints}"
-            assert len(init_lambda) == self.n_constraints, err_msg
-            self.lambdas = copy.deepcopy(init_lambda) * self.cost_mask
+            self.lambdas = np.zeros(self.n_constraints, dtype=np.float64)
+        if eta_init is not None:
+            err_msg = f"[CPGPE] eta_init has an incorrect length ({len(eta_init)} provided)."
+            assert len(eta_init) == self.n_constraints, err_msg
+            self.etas = np.array(eta_init, dtype=np.float64)
+        else:
+            self.etas = np.zeros(self.n_constraints, dtype=np.float64)
 
-        # useful structures
-        self.costs_idx = np.zeros((self.n_constraints, self.ite), dtype=float)
-        self.costs_idx_theta = np.zeros((self.n_constraints, self.ite, self.batch_size))
-        self.lagrangian = np.zeros(self.ite, dtype=float)
-        self.lambda_history = np.zeros((self.ite, self.n_constraints), dtype=float)
-        self.constraints_history = np.zeros((self.ite, self.n_constraints), dtype=float)
+        # Modify already set fields
+        # Remark: adam is computed always as ascent, then we use it with + or -.
+        err_msg = f"[CPGPE] 3 step sizes needed ({len(lr)} provided)."
+        assert len(lr) == 3, err_msg
+        self.lr_rho = lr[LearnRates.PARAM]
+        self.lr_lambda = lr[LearnRates.LAMBDA]
+        self.lr_eta = lr[LearnRates.ETA]
+        if self.lr_strategy == "adam":
+            self.lambda_adam = Adam(step_size=self.lr_lambda, strategy="ascent")
+            self.eta_adam = Adam(step_size=self.lr_eta, strategy="descent")
 
-        # Resume a previous learning
-        if resume_from is not None:
-            file = open(resume_from)
-            data = json.load(file)
-            self.rho = np.array(data["final_rho"])
-            self.lambdas = np.array(data["final_lambdas"])
-        return
+        # Utility fields
+        self.use_eta = bool(self.cost_type not in ["tc", "chance"])
+        self.cost_idx = np.zeros(shape=(self.ite, self.n_constraints), dtype=np.float64)
+        self.cost_idx_theta = np.zeros(
+            shape=(self.ite, self.batch_size, self.n_constraints),
+            dtype=np.float64
+        )
+        self.risk_idx = np.zeros(shape=(self.ite, self.n_constraints), dtype=np.float64)
+        self.risk_idx_theta = np.zeros(
+            shape=(self.ite, self.batch_size, self.n_constraints),
+            dtype=np.float64
+        )
+        self.deterministic_cost_curve = np.zeros(
+            shape=(self.ite, self.n_constraints),
+            dtype=np.float64
+        )
+        self.lambda_history = np.zeros(shape=(self.ite, self.n_constraints), dtype=np.float64)
+        self.lambda_history[0, :] = deepcopy(self.lambdas)
+        self.eta_history = np.zeros((self.ite, self.n_constraints), dtype=np.float64)
+        self.eta_history[0, :] = deepcopy(self.etas)
+
+        # Env check
+        err_msg = f"[CPGPE] the provided env has not costs!"
+        assert self.env.with_costs, err_msg
 
     def learn(self) -> None:
-        sampling_args = dict(
-            strategy="sphere",
-            args=dict(
-                n_samples=self.episodes_per_theta,
-                density=3,
-                radius=2,
-                noise=0.1,
-                left_lim=0,
-                right_lim=np.pi
-            )
-        )
-        """Learning function"""
+        """Learning Function"""
         for i in tqdm(range(self.ite)):
-            starting_state = self.env.sample_state(**sampling_args)
-            for j in range(self.batch_size):
-                # Sample theta
-                self.sample_theta(index=j)
+            # Collect trajectories
+            worker_dict = dict(
+                env=copy.deepcopy(self.env),
+                pol=copy.deepcopy(self.policy),
+                dp=copy.deepcopy(self.data_processor),
+                params=copy.deepcopy(self.rho),
+                episodes_per_theta=self.episodes_per_theta,
+                n_jobs=self.n_jobs_traj
+            )
+            delayed_functions = delayed(pgpe_sampling_worker)
+            res = Parallel(n_jobs=self.n_jobs_param)(
+                delayed_functions(**worker_dict) for _ in range(self.batch_size)
+            )
 
-                # Collect Trajectories
-                sample_mean = np.zeros(self.episodes_per_theta, dtype=float)
-                cost_sample_mean = np.zeros((self.n_constraints, self.episodes_per_theta), dtype=float)
+            # Post-process data
+            performance_res = np.zeros(self.batch_size, dtype=np.float64)
+            cost_res = np.zeros(shape=(self.batch_size, self.n_constraints), dtype=np.float64)
+            for z in range(self.batch_size):
+                self.thetas[z, :] = res[z][ParamSamplerResults.THETA]
+                performance_res[z] = np.mean(res[z][ParamSamplerResults.PERF])
+                cost_res[z, :] = np.mean(res[z][ParamSamplerResults.COST], axis=0)
+            self.performance_idx_theta[i, :] = performance_res
+            self.cost_idx_theta[i, :, :] = cost_res
 
-                for z in range(self.episodes_per_theta):
-                    # collect the scores
-                    perf_target, perf_costs = self.collect_trajectory(
-                        params=self.thetas[j, :],
-                        starting_state=starting_state[z]
-                    )
-                    # update the performance score
-                    sample_mean[z] = perf_target
-                    # update the inner cvar score
-                    cost_sample_mean[:, z] = perf_costs
-
-                # save mean performances
-                perf = np.mean(sample_mean)
-                self.performance_idx_theta[i, j] = perf
-
-                # save the mean costs
-                perf_costs = np.mean(cost_sample_mean, axis=1)
-                self.costs_idx_theta[:, i, j] = perf_costs
-
-                # Try to update the best config
-                self.update_best_theta(current_perf=perf, current_costs=perf_costs, params=self.thetas[j, :])
-
-            # Update performance J(rho)
+            # Update performance
             self.performance_idx[i] = np.mean(self.performance_idx_theta[i, :])
+            self.cost_idx[i, :] = np.mean(self.cost_idx_theta[i, :, :], axis=0)
 
-            # Update the cost idx
-            self.costs_idx[:, i] = np.mean(self.costs_idx_theta[:, i, :], axis=1)
+            # compute risk measures
+            self.compute_risks()
 
-            # Update the lagrangian
-            l_cost_term = np.sum(self.lambdas * (self.costs_idx[:, i] - self.thresholds))
-            self.lagrangian[i] = -self.performance_idx[i] + l_cost_term
+            # update best rho
+            self.update_best_rho(current_perf=self.performance_idx[i], risks=self.risk_idx[i, :])
 
-            # Update best rho
-            self.update_best_rho(current_perf=-self.lagrangian[i])
+            # Perform Alternate Ascent Descent Algorithm
+            if self.alternate:
+                if not (i % 2):
+                    # update the rho vector
+                    self.update_rho()
 
-            """Update history"""
-            self.lambda_history[self.time, :] = self.lambdas
-            self.constraints_history[self.time, :] = self.costs_idx[:, self.time] - self.thresholds
-
-            """Update parameters"""
-            # compute gradients
-            lambda_grad = self.update_lambda(current_ite=i) * self.cost_mask
-            rho_grad_mean, rho_grad_std = self.update_rho()
-
-            if self.lr_strategy == "constant":
-                # update lambda
-                self.lambdas = self.lambdas + self.lr[LearnRates.LAMBDA] * lambda_grad
-                self.lambdas = np.where(self.lambdas >= 0, self.lambdas, 0)
-                # update rho
-                self.rho[RhoElem.MEAN] = self.rho[RhoElem.MEAN] - self.lr[
-                    LearnRates.RHO] * rho_grad_mean
-                self.rho[RhoElem.STD] = self.rho[RhoElem.STD] - self.lr[
-                    LearnRates.RHO] * rho_grad_std
-            elif self.lr_strategy == "adam":
-                self.lambdas = self.lambdas + self.lambda_adam.compute_gradient(lambda_grad)
-                self.lambdas = np.where(self.lambdas >= 0, self.lambdas, 0)
-                self.rho[RhoElem.MEAN] = self.rho[RhoElem.MEAN] - self.rho_adam[
-                    RhoElem.MEAN].compute_gradient(rho_grad_mean)
-                self.rho[RhoElem.STD] = self.rho[RhoElem.STD] - self.rho_adam[
-                    RhoElem.STD].compute_gradient(rho_grad_std)
+                    # (if needed) update the eta parameter
+                    if self.use_eta:
+                        self.update_eta()
+                else:
+                    # update lambda
+                    self.update_lambda()
+            # Perform Ascent Descent Algorithm
             else:
-                raise NotImplementedError(f"[CPGPE] {self.lr_strategy} not implemented.")
+                self.update_rho()
+                self.update_lambda()
+                if self.use_eta:
+                    self.update_eta()
 
-            print(f"******* BATCH {i} *******")
-            print(f"LAMBDAs: {self.lambda_history[self.time, :]}")
-            print(f"RHO: {self.rho}")
-            print(f"CONSTRAINTS: {self.constraints_history[self.time, :]}")
-            print(f"BEST PERF Theta: {self.best_performance_theta}")
-            print(f"BEST PERF Rho: {self.best_performance_rho}")
-            print("****************************")
+            # Save the history of the parameters
+            self.rho_history[self.time, :] = deepcopy(self.rho[RhoElem.MEAN])
+            self.lambda_history[self.time, :] = deepcopy(self.lambdas)
+            if self.use_eta:
+                self.eta_history[self.time] = deepcopy(self.etas)
 
             # Update time counter
             self.time += 1
-            if self.time % self.checkpoint_freq == 0:
+
+            # (when needed) print and save the info
+            if self.verbose:
+                print(f"rho perf: {self.performance_idx}")
+                print(f"cost perf: {self.cost_idx}")
+                print(f"theta perf: {self.performance_idx_theta}")
+            if not (self.time % self.checkpoint_freq):
                 self.save_results()
-            if self.verbose:
-                print(f"***************END OF BATCH {i}***************")
-                print(f"Lagrangian: {self.lagrangian[i]}\n")
-                print(f"rho perf: {self.performance_idx}\n")
-                print(f"theta perf: {self.performance_idx_theta}\n")
-                print(f"rho cvar: {self.costs_idx}\n")
-                print(f"theta cvar: {self.costs_idx_theta}\n")
-                print(f"**********************************************\n")
 
-        print("==== Learning End ====")
-        print(f"RHO: {self.rho}")
-        print(f"LAMBDA: {self.lambdas}")
+            # std_decay
+            if not self.learn_std:
+                std = np.float64(np.exp(self.rho[RhoElem.STD]))
+                std = np.clip(std - self.std_decay, self.std_min, np.inf)
+                self.rho[RhoElem.STD, :] = np.log(std)
+
+        # Sample the deterministic curve
+        self.sample_deterministic_curve()
+
         return
 
-    def collect_trajectory(self, params: np.array,
-                           starting_state=None) -> tuple:
-        """
-        Summary:
-            Function collecting a trajectory reward for a particular theta
-            configuration.
-        Args:
-            params (np.array): the current sampling of theta values
-            starting_state (any): the starting state for the iterations
-        Returns:
-            float: the discounted reward of the trajectory
-            list (float): the discounted costs from the env (masked as the
-            user declares)
-        """
-        # Reset the environment
-        self.env.reset()
-        if starting_state is not None:
-            self.env.state = copy.deepcopy(starting_state)
+    def update_rho(self) -> None:
+        # Compute the gradient
+        m_grad_hat = None
+        s_grad_hat = None
 
-        # Initialize parameters
-        perf = 0
-        perf_costs = np.zeros(self.n_constraints, dtype=float)
-        self.policy.set_parameters(thetas=params)
+        # Take the performance of the whole batch: R(tau_i)
+        batch_perf = self.performance_idx_theta[self.time, :]
 
-        # act
-        for t in range(self.env.horizon):
-            # retrieve the state
-            state = self.env.state
-
-            # transform the state
-            features = self.data_processor.transform(state=state)
-
-            # select the action
-            a = self.policy.draw_action(state=features)
-
-            # play the action
-            _, rew, abs, costs = self.env.step(action=a)
-
-            # update the performance index
-            perf += (self.env.gamma ** t) * rew
-            perf_costs += (self.env.gamma ** t) * costs
-
-            if self.verbose:
-                print("******************************************************")
-                print(f"ACTION: {a.radius} - {a.theta}")
-                print(f"FEATURES: {features}")
-                print(f"REWARD: {rew}")
-                print(f"PERFORMANCE: {perf}")
-                print(f"COSTS: {perf_costs}")
-                print("******************************************************")
-            if abs:
-                break
-
-        return perf, self.cost_mask * perf_costs
-
-    def update_rho(self) -> tuple:
-        """
-        Summary:
-            this function updates the rho vector via gradient descent
-        Returns:
-            The gradient to apply to rho_mu vector.
-            The gradient to apply to rho_std vector.
-        """
-        """build the vector of sigma**2"""
-        sigma_squared = np.exp(np.float64(self.rho[RhoElem.STD])) ** 2
-        # sigma = np.exp(np.float64(self.rho[RhoElem.STD]))
-
-        """build the scores vectors"""
-        if self.natural:
-            mu_score = (self.thetas - self.rho[RhoElem.MEAN])
-            sigma_score = ((self.thetas - self.rho[RhoElem.MEAN]) ** 2 - sigma_squared) / (2 * sigma_squared)
+        if self.cost_type in ["tc", "chance"]:
+            batch_cum_cost = self.risk_idx_theta[self.time, :, :]
+        elif self.cost_type == "cvar":
+            batch_cum_cost = self.risk_idx_theta[self.time, :, :] - self.etas
+        elif self.cost_type == "mv":
+            batch_cum_cost = self.risk_idx_theta[self.time, :, :] - self.cost_param * np.power(self.etas, 2)
         else:
-            mu_score = (self.thetas - self.rho[RhoElem.MEAN]) / sigma_squared
-            sigma_score = ((self.thetas - self.rho[RhoElem.MEAN]) ** 2 - sigma_squared) / sigma_squared
-        # remember that we want to update the log(sigma), not the normal sigma
+            raise NotImplementedError
 
-        """build a utility performance vector"""
-        perf = np.ones((self.batch_size, self.dim), dtype=float)
-        for i in range(self.batch_size):
-            perf[i, :] = self.performance_idx_theta[self.time, i] * perf[i, :]
+        # Compute the batch cost
+        batch_cost = np.sum(self.lambdas * batch_cum_cost, axis=1)
 
-        """compute the gradient pieces"""
-        mu_perf_term = - np.mean(mu_score * perf, axis=0)
-        sigma_perf_term = - np.mean(sigma_score * perf, axis=0)
-        mu_cost_term = np.zeros(self.dim)
-        sigma_cost_term = np.zeros(self.dim)
+        # Combine costs and performances
+        batch_mixed_index = - batch_perf + batch_cost
 
-        # fixme -> vectorize this part
-        for u in range(self.n_constraints):
-            # utility cost vector
-            cost = np.ones((self.batch_size, self.dim), dtype=float)
-            for i in range(self.batch_size):
-                cost[i, :] = self.costs_idx_theta[u, self.time, i] * cost[i, :]
+        # take the means and the sigmas
+        means = self.rho[RhoElem.MEAN, :]
+        stds = np.float64(np.exp(self.rho[RhoElem.STD, :]))
 
-            mu_cost_term += self.lambdas[u] * np.mean(mu_score * cost, axis=0)
-            sigma_cost_term += self.lambdas[u] * np.mean(sigma_score * cost, axis=0)
-
-        """compute the gradients"""
-        rho_grad_mu = mu_perf_term + mu_cost_term
-        if self.learn_std:
-            rho_grad_std = sigma_perf_term + sigma_cost_term
+        # compute the scores
+        if not self.natural:
+            log_nu_means = (self.thetas - means) / (stds ** 2)
+            log_nu_stds = (((self.thetas - means) ** 2) - (stds ** 2)) / (stds ** 2)
         else:
-            rho_grad_std = 0
-        return rho_grad_mu, rho_grad_std
+            log_nu_means = self.thetas - means
+            log_nu_stds = (((self.thetas - means) ** 2) - (stds ** 2)) / (2 * (stds ** 2))
 
-    def update_lambda(self, current_ite: int) -> np.array:
-        """
-        Summary:
-            this function updates the lambda vector via gradient ascent
-        Args:
-            current_ite (int): index of the current iteration of the algorithm.
-            It is useful to access rapidly the recording structures.
-        Returns:
-            The gradient to apply to lambda vector.
-        """
-        # gradient and update
-        lambda_grad = self.costs_idx[:, current_ite] - self.thresholds
-        return lambda_grad
+        # compute the gradients
+        m_grad_hat = np.mean(batch_mixed_index[:, np.newaxis] * log_nu_means, axis=0)
+        s_grad_hat = np.mean(batch_mixed_index[:, np.newaxis] * log_nu_stds, axis=0)
 
-    def update_best_rho(self, current_perf: float):
-        """The best rho is the one having the highest value of lagrangian
-        function."""
-        super().update_best_rho(current_perf=current_perf)
+        # update the variable
+        if self.lr_strategy == "constant":
+            self.rho[RhoElem.MEAN, :] = self.rho[RhoElem.MEAN, :] - self.lr_rho * m_grad_hat
+            if self.learn_std:
+                self.rho[RhoElem.STD, :] = self.rho[RhoElem.STD, :] - self.lr * s_grad_hat
+        elif self.lr_strategy == "adam":
+            self.rho[RhoElem.MEAN, :] = self.rho[RhoElem.MEAN, :] - self.rho_adam[RhoElem.MEAN].compute_gradient(m_grad_hat)
+            if self.learn_std:
+                self.rho[RhoElem.STD, :] = self.rho[RhoElem.STD, :] - self.rho_adam[RhoElem.STD].compute_gradient(s_grad_hat)
+        else:
+            raise NotImplementedError
 
-    def update_best_theta(self, current_perf: float, current_costs: np.array,
-                          params: np.array) -> None:
-        """
-        Summary:
-            this function updates the best theta configuration, defined as the
-            one respecting all the constraints and having the highest value of
-            performance index.
-
-        Args:
-            current_perf (float): the performance index of the considered
-            parameter configuration.
-
-            current_costs (np.array): array with length "self.n_constraints"
-            having all the mean cvar terms for a single trajectory.
-
-            params (np.array): array storing the parameter configuration that
-            is candidate to be the best one.
-        """
-        """Constraints evaluation"""
-        constraints = current_costs - self.thresholds
-        violating_ids = np.where(constraints > 0)[0]
-        if len(violating_ids) == 0:
-            """Check if the theta configuration is the best one"""
-            # all the constraints are respected
-            super().update_best_theta(current_perf=current_perf, params=params)
         return
+
+    def update_lambda(self) -> None:
+        # Compute the gradient
+        grad_hat = self.risk_idx[self.time, :] - self.thresholds - self.omega * self.lambdas
+
+        # update the variable
+        if self.lr_strategy == "constant":
+            self.lambdas = np.clip(self.lambdas + self.lr_lambda * grad_hat, 0, np.inf)
+        elif self.lr_strategy == "adam":
+            self.lambdas = np.clip(self.lambdas + self.lambda_adam.compute_gradient(grad_hat), 0, np.inf)
+        else:
+            raise NotImplementedError
+        return
+
+    def update_eta(self) -> None:
+        # Compute the gradient
+        if self.cost_type in ["tc", "chance"]:
+            return
+        elif self.cost_type == "cvar":
+            grad_hat = self.lambdas - self.lambdas * np.power(1 - self.cost_param, -1) * np.mean(
+                np.array(self.cost_idx_theta[self.time, :, :] >= self.etas, dtype=np.float64),
+                axis=0
+            )
+        elif self.cost_type == "mv":
+            grad_hat = np.mean(
+                2 * self.cost_param * self.lambdas * (self.etas - self.cost_idx_theta[self.time, :, :]),
+                axis=0
+            )
+        else:
+            raise NotImplementedError
+
+        # update the variable
+        if self.lr_strategy == "constant":
+            self.etas = self.etas - self.lr_eta * grad_hat
+        elif self.lr_strategy == "adam":
+            self.etas = self.etas - self.eta_adam.compute_gradient(grad_hat)
+        else:
+            raise NotImplementedError
+        return
+
+    def compute_risks(self) -> None:
+        if self.cost_type == "tc":
+            tmp_risk = deepcopy(self.cost_idx_theta[self.time, :, :])
+        elif self.cost_type == "cvar":
+            tmp_risk = np.clip(
+                a=deepcopy(self.cost_idx_theta[self.time, :, :]) - self.etas,
+                a_min=0,
+                a_max=np.inf
+            )
+            tmp_risk = tmp_risk * np.power(1 - self.cost_param, -1) + self.etas
+        elif self.cost_type == "mv":
+            tmp_risk = self.cost_param * np.power(self.etas, 2)
+            tmp_risk = tmp_risk + (1 - 2 * self.cost_param * self.etas) * self.cost_idx_theta[self.time, :, :]
+            tmp_risk = tmp_risk + self.cost_param * np.power(self.cost_idx_theta[self.time, :, :], 2)
+        elif self.cost_type == "chance":
+            tmp_risk = np.array(
+                self.cost_idx_theta[self.time, :, :] >= self.cost_param,
+                dtype=np.float64
+            )
+        else:
+            raise NotImplementedError(f"[CPGPE] {self.cost_type} not expected.")
+        # save
+        self.risk_idx_theta[self.time, :, :] = deepcopy(tmp_risk)
+        self.risk_idx[self.time, :] = np.mean(self.risk_idx_theta[self.time, :, :], axis=0)
+
+    def update_best_rho(
+            self, current_perf: float, risks: np.array = None, *args, **kwargs
+    ) -> None:
+        """
+        Save the best value of theta, that is the one in which all the constraints are respected
+        """
+        violation = risks - self.thresholds
+        query = np.where(violation > 0)[0]
+        if (current_perf > self.best_performance_rho) and (len(query) == 0):
+            self.best_rho = deepcopy(self.rho)
+            self.best_performance_rho = current_perf
+
+            msg_1 = f"[CPGPE] New best RHO: {self.best_rho[RhoElem.MEAN]}"
+            msg_2 = f"[CPGPE] New best PERFORMANCE: {self.best_performance_rho}"
+            msg_3 = f"[CPGPE] CONSTRAINT VIOLATION: {violation}"
+            max_len = max([len(msg_1), len(msg_2), len(msg_3)])
+
+            print("#" * (max_len + 2))
+            print("* " + msg_1)
+            print("* " + msg_2)
+            print("* " + msg_3)
+            print("#" * (max_len + 2))
+
+            # Save the best rho configuration
+            if self.directory != "":
+                file_name = self.directory + "/best_rho"
+            else:
+                file_name = "best_rho"
+            np.save(file_name, self.best_rho)
+
+    def update_best_theta(
+            self, current_perf: float, params: np.ndarray, costs: np.ndarray = None,
+            *args, **kwargs
+    ) -> None:
+        pass
 
     def save_results(self) -> None:
         """Function saving the results of the training procedure"""
         # Create the dictionary with the useful info
         results = {
-            "performance_rho": self.performance_idx.tolist(),
-            "performance_thetas_per_rho": self.performance_idx_theta.tolist(),
-            "costs_rho": self.costs_idx.tolist(),
-            "costs_theta": self.costs_idx_theta.tolist(),
-            "best_theta": self.best_theta.tolist(),
-            "best_rho": self.best_rho.tolist(),
-            "lagrangian": self.lagrangian.tolist(),
-            "final_rho": self.rho.tolist(),
-            "final_lambdas": self.lambdas.tolist(),
-            "lambda_history": self.lambda_history.tolist(),
-            "constraint_history": self.constraints_history.tolist()
+            "performance_rho": np.array(self.performance_idx, dtype=float).tolist(),
+            "costs_rho": np.array(self.cost_idx, dtype=float).tolist(),
+            "risks_rho": np.array(self.risk_idx, dtype=float).tolist(),
+            # "performance_thetas_per_rho": np.array(self.performance_idx_theta, dtype=float).tolist(),
+            # "costs_thetas_per_rho": np.array(self.cost_idx_theta, dtype=float).tolist(),
+            # "risks_thetas_per_rho": np.array(self.risk_idx_theta, dtype=float).tolist(),
+            "best_theta": np.array(self.best_theta, dtype=float).tolist(),
+            "best_rho": np.array(self.best_rho, dtype=float).tolist(),
+            "thetas_history": np.array(self.thetas, dtype=float).tolist(),
+            "rho_history": np.array(self.rho_history, dtype=float).tolist(),
+            "lambda_history": np.array(self.lambda_history, dtype=float).tolist(),
+            "eta_history": np.array(self.eta_history, dtype=float).tolist(),
+            "deterministic_res": np.array(self.deterministic_curve, dtype=float).tolist()
         }
 
         # Save the json
         name = self.directory + "/cpgpe_results.json"
-        if not os.path.exists(os.path.dirname(name)):
-            try:
-                os.makedirs(os.path.dirname(name))
-            except OSError as exc:  # Guard against race condition
-                if exc.errno != errno.EEXIST:
-                    raise
         with io.open(name, 'w', encoding='utf-8') as f:
             f.write(json.dumps(results, ensure_ascii=False, indent=4))
             f.close()
         return
+
+    def sample_deterministic_curve(self):
+        pass

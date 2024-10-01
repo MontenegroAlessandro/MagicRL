@@ -16,7 +16,7 @@ class BasePolicy(ABC):
         pass
     
     @abstractmethod
-    def set_parameters(self, thetas):
+    def set_parameters(self, thetas, *args, **kwargs):
         pass
 
     @abstractmethod

@@ -1,19 +1,10 @@
 # Libraries
 import argparse
-from algorithms import PGPE, PolicyGradient, DeterministicPG
-from algorithms.JAX_algorithms.pgao import PGAO
-from algorithms.JAX_algorithms.pgpe_jax import PGPE_JAX
+from algorithms import PGPE, PolicyGradient, DeterministicPG, CPGPE
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
-from policies.JAX_policies.linear_policy_jax import *
-from policies.JAX_policies.gaussian_policy_jax import *
 from art import *
-import jax
-import jax.numpy as jnp
-jax.config.update("jax_enable_x64", True)
-
-np.random.seed(42)
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -33,7 +24,7 @@ parser.add_argument(
     help="The algorithm to use.",
     type=str,
     default="pgpe",
-    choices=["pgpe", "pg", "dpg", "pg_jax", "pgpe_jax"]
+    choices=["pgpe", "pg", "dpg", "cpgpe"]
 )
 parser.add_argument(
     "--var",
@@ -46,7 +37,7 @@ parser.add_argument(
     help="The policy used.",
     type=str,
     default="linear",
-    choices=["linear", "gaussian", "nn", "big_nn"]
+    choices=["linear", "nn", "big_nn"]
 )
 parser.add_argument(
     "--env",
@@ -54,6 +45,13 @@ parser.add_argument(
     type=str,
     default="swimmer",
     choices=["swimmer", "half_cheetah", "reacher", "humanoid", "ant", "hopper", "lqr"]
+)
+parser.add_argument(
+    "--costs",
+    help="Flag to ensure the usage of the costly-version of the environment.",
+    type=int,
+    default=0,
+    choices=[0, 1]
 )
 parser.add_argument(
     "--horizon",
@@ -96,7 +94,8 @@ parser.add_argument(
     "--clip",
     help="Whether to clip the action in the environment.",
     type=int,
-    default=1
+    default=1,
+    choices=[0, 1]
 )
 parser.add_argument(
     "--n_trials",
@@ -117,14 +116,6 @@ parser.add_argument(
     default=2
 )
 
-parser.add_argument(
-    "--jax",
-    help="Use the JAX implementation.",
-    type=int,
-    default=1,
-    choices=[0, 1]
-)
-
 args = parser.parse_args()
 
 huge = False
@@ -132,7 +123,7 @@ if args.pol == "big_nn":
     huge = True
     args.pol = "nn"
 
-if args.alg == "pg" or args.alg == "pg_jax":
+if args.alg == "pg":
     if args.pol == "linear":
         args.pol = "gaussian"
     elif args.pol == "nn":
@@ -158,38 +149,56 @@ for i in range(args.n_trials):
     """Environment"""
     MULTI_LINEAR = False
     if args.env == "swimmer":
-        env_class = Swimmer
-        env = Swimmer(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = Swimmer
+            env = Swimmer(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "half_cheetah":
-        env_class = HalfCheetah
-        env = HalfCheetah(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = HalfCheetah
+            env = HalfCheetah(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "reacher":
-        env_class = Reacher
-        env = Reacher(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = Reacher
+            env = Reacher(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "humanoid":
-        env_class = Humanoid
-        env = Humanoid(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = Humanoid
+            env = Humanoid(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "ant":
-        env_class = Ant
-        env = Ant(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = Ant
+            env = Ant(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "hopper":
-        env_class = Hopper
-        env = Hopper(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = Hopper
+            env = Hopper(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
     elif args.env == "lqr":
-        env_class = LQR
-        env = LQR.generate(
-            s_dim=args.lqr_state_dim,
-            a_dim=args.lqr_action_dim,
-            horizon=args.horizon,
-            gamma=args.gamma,
-            scale_matrix=0.9
-        )
+        env_class = CostLQR if args.costs else LQR
+        env = env_class.generate(
+                s_dim=args.lqr_state_dim,
+                a_dim=args.lqr_action_dim,
+                horizon=args.horizon,
+                gamma=args.gamma,
+                scale_matrix=0.9
+            )
         MULTI_LINEAR = bool(args.lqr_action_dim > 1)
     else:
         raise ValueError(f"Invalid env name.")
@@ -202,42 +211,37 @@ for i in range(args.n_trials):
     """Policy"""
     if args.pol == "linear":
         tot_params = s_dim * a_dim
-        if args.jax:
-            pol = OldLinearPolicyJAX(
-                parameters=np.zeros(tot_params),
-                dim_state=s_dim,
-                dim_action=a_dim,
-                multi_linear=MULTI_LINEAR
-            )
-        else:
-            pol = LinearPolicy(
-                parameters=np.zeros(tot_params),
-                dim_state=s_dim,
-                dim_action=a_dim,
-                sigma_noise=0
-            )
+        """pol = LinearPolicy(
+            parameters=np.zeros(tot_params),
+            dim_state=s_dim,
+            dim_action=a_dim,
+            sigma_noise=0
+        )"""
+        pol = OldLinearPolicy(
+            parameters=np.zeros(tot_params),
+            dim_state=s_dim,
+            dim_action=a_dim,
+            multi_linear=MULTI_LINEAR
+        )
     elif args.pol == "gaussian":
         tot_params = s_dim * a_dim
-        if args.jax:
-            pol = LinearGaussianPolicyJAX(
-                parameters=np.zeros(tot_params),
-                dim_state=s_dim,
-                dim_action=a_dim,
-                std_dev=np.sqrt(args.var),
-                std_decay=0,
-                std_min=1e-5,
-                multi_linear=MULTI_LINEAR
-            )
-        else:
-            pol = LinearGaussianPolicy(
-                parameters=np.zeros(tot_params),
-                dim_state=s_dim,
-                dim_action=a_dim,
-                std_dev=np.sqrt(args.var),
-                std_decay=0,
-                std_min=1e-5,
-                multi_linear=MULTI_LINEAR
-            )
+        pol = LinearGaussianPolicy(
+            parameters=np.zeros(tot_params),
+            dim_state=s_dim,
+            dim_action=a_dim,
+            std_dev=np.sqrt(args.var),
+            std_decay=0,
+            std_min=1e-5,
+            multi_linear=MULTI_LINEAR
+        )
+        """pol = LinearPolicy(
+            parameters=np.zeros(tot_params),
+            dim_state=s_dim,
+            dim_action=a_dim,
+            sigma_noise=np.sqrt(args.var),
+            sigma_decay=0,
+            sigma_min=1e-5
+        )"""
     elif args.pol in ["nn", "deep_gaussian"]:
         if not huge:
             net = nn.Sequential(
@@ -324,21 +328,25 @@ for i in range(args.n_trials):
             n_jobs_traj=1
         )
         alg = PGPE(**alg_parameters)
-    elif args.alg == "pgpe_jax":
+    elif args.alg == "cpgpe":
         if args.var == 1:
             var_term = 1.001
         else:
             var_term = args.var
-        hp = jnp.zeros((2, tot_params), dtype=jnp.float64)
+        hp = np.zeros((2, tot_params))
         if args.pol == "linear":
-            hp = hp.at[0].set([0] * tot_params)
+            hp[0] = [0] * tot_params
         else:
-            rnd_mean = np.random.normal(0, 1, tot_params)
-            hp = hp.at[0].set(jnp.array(rnd_mean, dtype=jnp.float64))
-        hp = hp.at[1].set([jnp.log(jnp.sqrt(var_term))] * tot_params)
-
+            hp[0] = np.random.normal(0, 1, tot_params)
+        hp[1] = [np.log(np.sqrt(var_term))] * tot_params
         alg_parameters = dict(
-            lr=[args.lr],
+            cost_type="tc",
+            cost_param=0,
+            omega=.1,
+            thresholds=np.array([0.5]),
+            lambda_init=np.array([0]),
+            eta_init=0,
+            lr=[args.lr, args.lr * 10, args.lr],
             initial_rho=hp,
             ite=args.ite,
             batch_size=args.batch,
@@ -355,11 +363,9 @@ for i in range(args.n_trials):
             std_decay=0,
             std_min=1e-6,
             n_jobs_param=args.n_workers,
-            n_jobs_traj=1,
-            sample_deterministic_curve = False
+            n_jobs_traj=1
         )
-        alg = PGPE_JAX(**alg_parameters)
-
+        alg = CPGPE(**alg_parameters)
     elif args.alg == "pg":
         if args.pol == "gaussian":
             init_theta = [0] * tot_params
@@ -382,29 +388,6 @@ for i in range(args.n_trials):
             n_jobs=args.n_workers
         )
         alg = PolicyGradient(**alg_parameters)
-    elif args.alg == "pg_jax":
-        if args.pol == "gaussian":
-            init_theta = jnp.zeros(tot_params)
-        else:
-            key = jax.random.PRNGKey(0)
-            init_theta = jax.random.normal(key, (tot_params,))
-        alg_parameters = dict(
-            lr=[args.lr],
-            lr_strategy=args.lr_strategy,
-            estimator_type="GPOMDP",
-            initial_theta=init_theta,
-            ite=args.ite,
-            batch_size=args.batch,
-            env=env,
-            policy=pol,
-            data_processor=dp,
-            directory=dir_name,
-            verbose=False,
-            natural=False,
-            checkpoint_freq=100,
-            n_jobs=args.n_workers
-        )
-        alg = PGAO(**alg_parameters)
     elif args.alg == "dpg":
         if args.pol == "linear":
             init_theta = [0] * tot_params
@@ -435,6 +418,7 @@ for i in range(args.n_trials):
         alg = DeterministicPG(**alg_parameters)
     else:
         raise ValueError("Invalid algorithm name.")
+
     print(text2art(f"== {args.alg} TEST on {args.env} =="))
     print(text2art(f"Trial {i}"))
     print(args)
@@ -443,3 +427,5 @@ for i in range(args.n_trials):
     alg.save_results()
     if args.alg != "dpg":
         print(alg.performance_idx)
+    if args.alg == "cpgpe":
+        print(alg.cost_idx)

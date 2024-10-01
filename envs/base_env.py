@@ -24,6 +24,11 @@ class BaseEnv(ABC):
         self.clip = clip
         self.action_space = None
         self.observation_space = None
+        self.with_costs = False
+        self.how_many_costs = 0
+        self.continuous_env = True
+        self.discrete_state_space = None # just if discrete env
+        self.discrete_action_space = None # just if discrete env
 
     @abstractmethod
     def step(self, action):
@@ -36,6 +41,14 @@ class BaseEnv(ABC):
 
     @abstractmethod
     def sample_state(self, args: dict = None):
+        pass
+    
+    @abstractmethod
+    def sample_action(self, args: dict = None):
+        pass
+    
+    @abstractmethod
+    def set_state(self, state):
         pass
 
 
@@ -54,7 +67,8 @@ class MujocoBase(BaseEnv, ABC):
     def step(self, action):
         obs, reward, done, _, _ = self.gym_env.step(action)
         self.state = copy.deepcopy(obs)
-        return obs, reward, done, None
+        info = dict()
+        return obs, reward, done, info
 
     def reset(self, seed=None):
         obs = self.gym_env.reset(seed=seed)
@@ -72,3 +86,6 @@ class MujocoBase(BaseEnv, ABC):
 
     def sample_state(self, args: dict = None):
         return self.gym_env.observation_space.sample()
+    
+    def set_state(self, state):
+        pass

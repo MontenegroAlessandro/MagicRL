@@ -64,6 +64,12 @@ class LinearGaussianPolicy(BasePolicy, ABC):
             
     def get_parameters(self):
         return self.parameters
+    
+    def compute_pi(self, state, action):
+        mean = np.array(self.parameters @ state, dtype=np.float64)
+        fact = 1 / (np.sqrt(2 * np.pi) + self.std_dev)
+        prob = fact * np.exp(- (action - mean) / (2 * (self.std_dev ** 2)))
+        return prob
 
     def compute_score(self, state, action) -> np.array:
         if self.std_dev == 0:

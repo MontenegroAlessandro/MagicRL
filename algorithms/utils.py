@@ -12,7 +12,7 @@ class RhoElem:
 
 
 class LearnRates:
-    RHO = 0
+    PARAM = 0
     LAMBDA = 1
     ETA = 2
 
@@ -21,19 +21,14 @@ class TrajectoryResults:
     PERF = 0
     RewList = 1
     ScoreList = 2
+    CostInfo = 3
 
 
 class ParamSamplerResults:
     THETA = 0
     PERF = 1
+    COST = 2
 
-class PolicyGradientAlgorithms:
-    PG = "PG"
-    PGPE = "PGPE"
-    CPG = "CPG"
-    CPGPE = "CPGPE"
-    REINFORCE = "REINFORCE"
-    GPOMDP = "GPOMDP"
 
 def check_directory_and_create(dir_name: str = None) -> None:
     """
@@ -73,4 +68,3 @@ def numpy_to_tensor(arr: np.ndarray) -> torch.Tensor:
     if is_tensor(arr):
         return arr
     return torch.tensor(arr)
-
