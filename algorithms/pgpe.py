@@ -31,7 +31,7 @@ class PGPE:
             lr_strategy: str = "constant",
             learn_std: bool = False,
             std_decay: float = 0,
-            std_min:float = 1e-4,
+            std_min: float = 1e-4,
             n_jobs_param: int = 1,
             n_jobs_traj: int = 1
     ) -> None:
@@ -91,7 +91,7 @@ class PGPE:
         """
         # Arguments with checks
         assert lr is not None, "[ERROR] No Learning rate provided"
-        self.lr = lr[LearnRates.RHO]
+        self.lr = lr[LearnRates.PARAM]
 
         assert initial_rho is not None, "[ERROR] No initial hyperpolicy."
         self.rho = np.array(initial_rho, dtype=np.float64)
@@ -287,7 +287,7 @@ class PGPE:
             the best hyperparameter configuration found so far.
 
         Returns:
-            np.array: the sampeld parameter vector.
+            np.array: the sampled parameter vector.
         """
         thetas = []
         for id in range(len(self.best_rho[RhoElem.MEAN])):
@@ -347,7 +347,7 @@ class PGPE:
 
         return perf
 
-    def update_best_rho(self, current_perf: float):
+    def update_best_rho(self, current_perf: float, *args, **kwargs) -> None:
         """
         Summary:
             Function updating the best configuration found so far
@@ -370,7 +370,7 @@ class PGPE:
             np.save(file_name, self.best_rho)
         return
 
-    def update_best_theta(self, current_perf: float, params: np.array) -> None:
+    def update_best_theta(self, current_perf: float, params: np.array, *args, **kwargs) -> None:
         """
         Summary:
             Function updating the best configuration found so far

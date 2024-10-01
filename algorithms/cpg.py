@@ -47,8 +47,12 @@ class CPolicyGradient(PolicyGradient):
             verbose: bool = False,
             natural: bool = False,
             checkpoint_freq: int = 1,
+<<<<<<< HEAD
             n_jobs: int = 1,
             deterministic_curve: bool = False
+=======
+            n_jobs: int = 1
+>>>>>>> main
     ):
         """
         Summary:
@@ -152,8 +156,11 @@ class CPolicyGradient(PolicyGradient):
         self.eta_history = np.zeros((self.ite, self.n_constraints), dtype=np.float64)
         self.eta_history[0, :] = deepcopy(self.etas)
 
+<<<<<<< HEAD
         self._deterministic_curve = deterministic_curve
 
+=======
+>>>>>>> main
         # Env check
         err_msg = f"[CPGPE] the provided env has not costs!"
         assert self.env.with_costs, err_msg
@@ -266,9 +273,13 @@ class CPolicyGradient(PolicyGradient):
 
             # reduce the exploration factor of the policy
             self.policy.reduce_exploration()
+<<<<<<< HEAD
 
         if self._deterministic_curve:
             self.sample_deterministic_curve()
+=======
+        self.sample_deterministic_curve()
+>>>>>>> main
         return
 
     def update_theta(
@@ -404,6 +415,7 @@ class CPolicyGradient(PolicyGradient):
         return risk
 
     def sample_deterministic_curve(self) -> None:
+<<<<<<< HEAD
         """
         Summary:
             Switch-off the noise and collect the deterministic performance
@@ -450,6 +462,9 @@ class CPolicyGradient(PolicyGradient):
             self.deterministic_cost_curve[i, 1:] = np.mean(ite_cost, axis=0)
 
         return
+=======
+        pass
+>>>>>>> main
 
     def update_best_theta(
             self,
@@ -481,6 +496,7 @@ class CPolicyGradient(PolicyGradient):
         results = {
             "performance": np.array(self.performance_idx, dtype=float).tolist(),
             "costs": np.array(self.cost_idx, dtype=float).tolist(),
+<<<<<<< HEAD
             #"risks": np.array(self.risk_idx, dtype=float).tolist(),
             #"best_theta": np.array(self.best_theta, dtype=float).tolist(),
             #"thetas_history": np.array(self.theta_history, dtype=float).tolist(),
@@ -489,6 +505,16 @@ class CPolicyGradient(PolicyGradient):
             #"last_theta": np.array(self.thetas, dtype=float).tolist(),
             #"best_perf": float(self.best_performance_theta),
             "performance_det": np.array(self.deterministic_cost_curve, dtype=float).tolist()
+=======
+            "risks": np.array(self.risk_idx, dtype=float).tolist(),
+            "best_theta": np.array(self.best_theta, dtype=float).tolist(),
+            "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
+            "lambda_history": np.array(self.lambda_history, dtype=float).tolist(),
+            "eta_history": np.array(self.eta_history, dtype=float).tolist(),
+            "last_theta": np.array(self.thetas, dtype=float).tolist(),
+            "best_perf": float(self.best_performance_theta),
+            "performance_det": np.array(self.deterministic_curve, dtype=float).tolist()
+>>>>>>> main
         }
 
         # Save the json

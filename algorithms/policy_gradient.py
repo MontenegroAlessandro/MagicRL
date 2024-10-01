@@ -7,7 +7,7 @@ import numpy as np
 from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
-from algorithms.utils import TrajectoryResults, check_directory_and_create
+from algorithms.utils import TrajectoryResults, check_directory_and_create, LearnRates
 from algorithms.samplers import TrajectorySampler, pg_sampling_worker
 from joblib import Parallel, delayed
 import json
@@ -44,7 +44,7 @@ class PolicyGradient:
             lr (np.array, optional): learning rate. Defaults to None.
             
             lr_strategy (str, optional): how to update the learning rate. 
-            Choises in "constant" or "adam". Defaults to "constant".
+            Choices in "constant" or "adam". Defaults to "constant".
             
             estimator_type (str, optional): how to update the parameters.
             Choices in "REINFORCE" and "GPOMDP". Defaults to "REINFORCE".
@@ -52,7 +52,7 @@ class PolicyGradient:
             initial_theta (np.array, optional): initialization for the parameter
             vector. Defaults to None.
             
-            ite (int, optional): how many iteraiton to run the algorithm. 
+            ite (int, optional): how many iteration to run the algorithm.
             Defaults to 100.
             
             batch_size (int, optional): how many trajectories to try for each 
@@ -81,8 +81,8 @@ class PolicyGradient:
         """
         # Class' parameter with checks
         err_msg = "[PG] lr must be positive!"
-        assert lr[0] > 0, err_msg
-        self.lr = lr[0]
+        assert lr[LearnRates.PARAM] > 0, err_msg
+        self.lr = lr[LearnRates.PARAM]
 
         err_msg = "[PG] lr_strategy not valid!"
         assert lr_strategy in ["constant", "adam"], err_msg
@@ -183,7 +183,7 @@ class PolicyGradient:
                 score_vector[j, :, :] = res[j][TrajectoryResults.ScoreList]
             self.performance_idx[i] = np.mean(perf_vector)
 
-            # Update best rho
+            # Update best theta
             self.update_best_theta(current_perf=self.performance_idx[i])
 
             # Compute the estimated gradient
@@ -263,7 +263,7 @@ class PolicyGradient:
             axis=0)
         return estimated_gradient
 
-    def update_best_theta(self, current_perf: np.float64) -> None:
+    def update_best_theta(self, current_perf: np.float64, *args, **kwargs) -> None:
         """
         Summary:
             Updates the best theta configuration.
@@ -287,7 +287,7 @@ class PolicyGradient:
         """
         Summary:
             Switch-off the noise and collect the deterministic performance 
-            associated to the sequence of parameter configuratios seen during 
+            associated to the sequence of parameter configurations seen during
             the learning.
         """
         # make the policy deterministic

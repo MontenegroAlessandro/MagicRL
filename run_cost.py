@@ -1,5 +1,6 @@
 # Libraries
 import argparse
+<<<<<<< HEAD
 from algorithms.cpgpe import CPGPE
 from algorithms.cpg import CPolicyGradient
 from algorithms.policy_gradient_pd import NaturalPG_PD, NaturalPG_PD_2
@@ -12,6 +13,14 @@ from policies import *
 from art import *
 from algorithms.utils import LearnRates
 from policies.softmax_policy import TabularSoftmax
+=======
+from algorithms import CPGPE, CPolicyGradient, NaturalPG_PD, NaturalPG_PD_2
+from data_processors import IdentityDataProcessor, GWTabularProcessor, LQRTabularProcessor
+from envs import *
+from policies import *
+from art import *
+from algorithms.utils import LearnRates
+>>>>>>> main
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -149,6 +158,7 @@ parser.add_argument(
     choices=[0, 1]
 )
 
+<<<<<<< HEAD
 parser.add_argument(
     "--deterministic",
     help="Enable sampling of the deterministic performance.",
@@ -157,6 +167,8 @@ parser.add_argument(
     choices=[0, 1]
 )
 
+=======
+>>>>>>> main
 args = parser.parse_args()
 
 if args.alg != "cpgpe":
@@ -384,8 +396,12 @@ for i in range(args.n_trials):
             verbose=False,
             natural=False,
             checkpoint_freq=1000,
+<<<<<<< HEAD
             n_jobs=args.n_workers,
             deterministic_curve = bool(args.deterministic)
+=======
+            n_jobs=args.n_workers
+>>>>>>> main
         )
         alg = CPolicyGradient(**alg_parameters)
     elif args.alg == "npgpd":

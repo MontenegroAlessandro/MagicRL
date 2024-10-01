@@ -1,7 +1,8 @@
 art==6.1
-gym~=0.21.0
-gymnasium~=0.28.1
+gym==0.21.0
+gymnasium==0.28.1
 imageio==2.31.1
+<<<<<<< HEAD
 joblib~=1.4.0
 matplotlib~=3.6.2
 mujoco==2.3.7
@@ -15,3 +16,16 @@ adam~=0.0.0.dev0
 scipy~=1.13.0
 argparse~=1.4.0
 jax~=0.4.26
+=======
+joblib==1.1.1
+matplotlib==3.6.2
+mujoco==2.3.7
+mushroom-rl==1.10.0.post2
+numpy==1.23.4
+Pillow==9.4.0
+torch==1.11.0
+tqdm==4.43.0
+adam==0.0.0.dev0
+scipy==1.11.1
+argparse==1.4.0
+>>>>>>> main
