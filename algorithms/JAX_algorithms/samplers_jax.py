@@ -1,29 +1,33 @@
 """Trajectory Sampler Implementation"""
+from sympy.strategies.branch.traverse import top_down
+
 # Libraries
 from envs import BaseEnv
-from policies import BasePolicy
+from policies.JAX_policies.base_policy_jax import BasePolicyJAX
 from data_processors import BaseProcessor
 from algorithms.utils import RhoElem, TrajectoryResults
 from joblib import Parallel, delayed
 import numpy as np
 import copy
+from algorithms.utils import PolicyGradientAlgorithms
+from jax import jit
 
 
 def pg_sampling_worker(
         env: BaseEnv = None,
-        pol: BasePolicy = None,
+        pol: BasePolicyJAX = None,
         dp: BaseProcessor = None,
-        params: np.ndarray = None,
-        starting_state: np.ndarray = None,
-        starting_action: np.ndarray = None,
-        pol_values: bool = False
+        params: np.array = None,
+        starting_state: np.array = None,
+        alg : PolicyGradientAlgorithms = None
 ) -> list:
-    """Worker collecting a single trajectory.
+    """
+    Worker collecting a single trajectory.
 
     Args:
         env (BaseEnv, optional): the env to employ. Defaults to None.
         
-        pol (BasePolicy, optional): the policy to play. Defaults to None.
+        pol (BasePolicyJAX, optional): the policy to play. Defaults to None.
         
         dp (Baseprocessor, optional): the data processor to employ. 
         Defaults to None.
@@ -37,25 +41,27 @@ def pg_sampling_worker(
     Returns:
         list: [performance, reward, scores]
     """
-    trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp, pol_values=pol_values)
-    res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state, starting_action=starting_action)
+    # pol = copy.deepcopy(pol)
+    trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp, alg=alg)
+    res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state)
     return res
 
 
 def pgpe_sampling_worker(
         env: BaseEnv = None,
-        pol: BasePolicy = None,
+        pol: BasePolicyJAX = None,
         dp: BaseProcessor = None,
         params: np.array = None,
         episodes_per_theta: int = None,
-        n_jobs: int = None
+        n_jobs: int = None,
+        alg: PolicyGradientAlgorithms = None
 ) -> np.array:
     """Worker collecting trajectories for muliple sampling of parameters from the hyperpolicy.
 
     Args:
         env (BaseEnv, optional): the env to use. Defaults to None.
         
-        pol (BasePolicy, optional): the policy to play. Defaults to None.
+        pol (BasePolicyJAX, optional): the policy to play. Defaults to None.
         
         dp (BaseProcessor, optional): the data processor to use. 
         Defaults to None.
@@ -77,7 +83,8 @@ def pgpe_sampling_worker(
         pol=pol,
         data_processor=dp,
         episodes_per_theta=episodes_per_theta,
-        n_jobs=n_jobs
+        n_jobs=n_jobs,
+        alg = alg
     )
     res = parameter_sampler.collect_trajectories(params=params)
     return res
@@ -87,10 +94,11 @@ class ParameterSampler:
     """Sampler for PGPE."""
     def __init__(
             self, env: BaseEnv = None,
-            pol: BasePolicy = None,
+            pol: BasePolicyJAX = None,
             data_processor: BaseProcessor = None,
             episodes_per_theta: int = 1,
-            n_jobs: int = 1
+            n_jobs: int = 1,
+            alg: PolicyGradientAlgorithms = None
     ) -> None:
         """
         Summary:
@@ -99,13 +107,13 @@ class ParameterSampler:
         Args:
             env (BaseEnv, optional): the env to employ. Defaults to None.
             
-            pol (BasePolicy, optional): the poliy to play. Defaults to None.
+            pol (BasePolicyJAX, optional): the poliy to play. Defaults to None.
             
             data_processor (BaseProcessor, optional): the data processor to use. 
             Defaults to None.
             
             episodes_per_theta (int, optional): how many trajectories to 
-            evaluate for each sampled theta. Defaults to 1.
+            evalluate for each sampled theta. Defaults to 1.
             
             n_jobs (int, optional): how many theta sample (and evaluate) 
             in parallel. Defaults to 1.
@@ -126,9 +134,12 @@ class ParameterSampler:
         self.trajectory_sampler = TrajectorySampler(
             env=self.env,
             pol=self.pol,
-            data_processor=self.dp
+            data_processor=self.dp,
+            alg=alg
         )
         self.n_jobs = n_jobs
+
+        self.alg = alg
 
         return
 
@@ -176,30 +187,21 @@ class ParameterSampler:
             )
 
         # keep just the performance over each trajectory
-        # if it is the case keep also the costs
-        perf_res = np.zeros(self.episodes_per_theta, dtype=np.float64)
-        cum_costs = np.zeros(
-            shape=(self.episodes_per_theta, self.env.how_many_costs),
-            dtype=np.float64
-        )
+        res = np.zeros(self.episodes_per_theta, dtype=np.float64)
         for i, elem in enumerate(raw_res):
-            perf_res[i] = elem[TrajectoryResults.PERF]
-            if self.env.with_costs:
-                cum_costs[i, :] = np.array(
-                    elem[TrajectoryResults.CostInfo]["cost_perf"],
-                    dtype=np.float64
-                )
+            res[i] = elem[TrajectoryResults.PERF]
 
-        return [thetas, perf_res, cum_costs]
+        return [thetas, res]
 
 
 class TrajectorySampler:
     """Trajectory sampler for PolicyGradient methods."""
     def __init__(
             self, env: BaseEnv = None,
-            pol: BasePolicy = None,
+            pol: BasePolicyJAX = None,
+            fun = None,
             data_processor: BaseProcessor = None,
-            pol_values: bool = False
+            alg: PolicyGradientAlgorithms = None
     ) -> None:
         """
         Summary:
@@ -208,7 +210,7 @@ class TrajectorySampler:
         Args:
             env (BaseEnv, optional): the env to use. Defaults to None.
             
-            pol (BasePolicy, optional): the policy to play. Defaults to None.
+            pol (BasePolicyJAX, optional): the policy to play. Defaults to None.
             
             data_processor (BaseProcessor, optional): the data processor to use. 
             Defaults to None.
@@ -217,6 +219,8 @@ class TrajectorySampler:
         assert env is not None, err_msg
         self.env = env
 
+        self.alg = alg
+
         err_msg = "[PGTrajectorySampler] no policy provided!"
         assert pol is not None, err_msg
         self.pol = pol
@@ -224,13 +228,11 @@ class TrajectorySampler:
         err_msg = "[PGTrajectorySampler] no data_processor provided!"
         assert data_processor is not None, err_msg
         self.dp = data_processor
-        
-        self.pol_values = pol_values
 
         return
 
     def collect_trajectory(
-            self, params: np.array = None, starting_state=None, starting_action=None
+            self, params: np.array = None, starting_state=None
     ) -> list:
         """
         Summary:
@@ -238,7 +240,7 @@ class TrajectorySampler:
             configuration.
         Args:
             params (np.array): the current sampling of theta values
-            starting_state (any): the starting state for the iterations
+            starting_state (any): teh starting state for the iterations
         Returns:
             list of:
                 float: the discounted reward of the trajectory
@@ -248,66 +250,50 @@ class TrajectorySampler:
         # reset the environment
         self.env.reset()
         if starting_state is not None:
-            # self.env.state = copy.deepcopy(starting_state)
-            self.env.set_state(starting_state)
+            self.env.state = copy.deepcopy(starting_state)
+
+        if params is not None:
+            self.pol.set_parameters(thetas=params)
 
         # initialize parameters
         np.random.seed()
         perf = 0
-        cost_perf = np.zeros(self.env.how_many_costs)
         rewards = np.zeros(self.env.horizon, dtype=np.float64)
-        costs = np.zeros(shape=(self.env.horizon, self.env.how_many_costs), dtype=np.float64)
-        scores = np.zeros(shape=(self.env.horizon, self.pol.tot_params), dtype=np.float64)
-        pol_values = 0
+        scores = np.zeros((self.env.horizon, self.pol.tot_params), dtype=np.float64)
+
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
-        # act
+        # collect states and action for the whole trajectory
+        actions = []
+        states = []
+
         for t in range(self.env.horizon):
-            # retrieve the state
             state = self.env.state
-
-            # transform the state
             features = self.dp.transform(state=state)
+            action = self.pol.draw_action(state=features)
 
-            # select the action
-            if t == 0 and starting_action is not None:
-                a = starting_action
-            else:
-                a = self.pol.draw_action(state=features)
-            score = self.pol.compute_score(state=features, action=a)
+            if self.alg != PolicyGradientAlgorithms.PGPE:
+                states.append(features)
+                actions.append(action)
 
-            # play the action
-            _, rew, done, info = self.env.step(action=a)
+            _, reward, done, _ = self.env.step(action=action)
 
-            # update the performance index
-            perf += (self.env.gamma ** t) * rew
-            if self.env.with_costs:
-                cost_array = copy.deepcopy(np.array(info["costs"], dtype=np.float64))
-                cost_perf = cost_perf + (self.env.gamma ** t) * cost_array
-                costs[t, :] = copy.deepcopy(cost_array)
-                
-            if self.pol_values:
-                pol_values += np.log(self.pol.compute_pi(state=features, action=a))
-
-            # update the vectors of rewards and scores
-            rewards[t] = rew
-            scores[t, :] = score
+            perf += (self.env.gamma ** t) * reward
+            rewards[t] = reward
 
             if done:
-                if t < self.env.horizon - 1:
-                    rewards[t+1:] = 0
-                    scores[t+1:, :] = 0
-                    if self.env.with_costs:
-                        costs[t+1:, :] = 0
+                rewards[t + 1:] = 0
                 break
 
-        # if necessary save the info of the costs
-        info = None
-        if self.env.with_costs:
-            info = dict(
-                cost_perf=copy.deepcopy(cost_perf),
-                costs=copy.deepcopy(costs),
-                pol_values=copy.deepcopy(pol_values)
-            )
-        return [perf, rewards, scores, info]
+        states = np.array(states, dtype=np.float64)
+        actions = np.array(actions, dtype=np.float64)
+
+
+        if self.alg != PolicyGradientAlgorithms.PGPE:
+            # compute the scores for the whole trajectory
+            scores = self.pol.compute_score(state=states, action=actions)
+            # todo:  may be necessary to add a zero in the last position of the scores
+
+
+        return [perf, rewards, scores]

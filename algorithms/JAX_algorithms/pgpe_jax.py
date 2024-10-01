@@ -6,14 +6,14 @@ import json
 
 # libraries
 from algorithms.JAX_algorithms.policy_gradients import PolicyGradients
-from algorithms.utils import LearnRates, ParamSamplerResults, PolicyGradientAlgorithms
+from algorithms.utils import LearnRates, ParamSamplerResults
 from adam.adam import Adam
 from data_processors import IdentityDataProcessor
-from algorithms.samplers import *
+from algorithms.JAX_algorithms.samplers_jax import *
 import numpy as np
 from tqdm import tqdm
 import jax.numpy as jnp
-from jax import grad, jit, vmap, jacfwd, jacrev
+from jax import jit, vmap, jacfwd
 
 
 class PGPE_JAX(PolicyGradients):

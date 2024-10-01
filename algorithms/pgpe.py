@@ -1,12 +1,8 @@
 """PGPE implementation"""
 # Libraries
-import copy
-import errno
 import io
 import json
-import os
 
-import numpy as np
 from tqdm import tqdm
 from adam.adam import Adam
 from algorithms.utils import LearnRates, check_directory_and_create, ParamSamplerResults

@@ -12,7 +12,7 @@ from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
 from algorithms.utils import TrajectoryResults, check_directory_and_create
-from algorithms.samplers import TrajectorySampler, pg_sampling_worker
+from algorithms.samplers import pg_sampling_worker
 from joblib import Parallel, delayed
 import json
 import io
