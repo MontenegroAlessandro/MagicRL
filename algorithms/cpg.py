@@ -47,12 +47,8 @@ class CPolicyGradient(PolicyGradient):
             verbose: bool = False,
             natural: bool = False,
             checkpoint_freq: int = 1,
-<<<<<<< HEAD
             n_jobs: int = 1,
-            deterministic_curve: bool = False
-=======
-            n_jobs: int = 1
->>>>>>> main
+            deterministic: bool = False
     ):
         """
         Summary:
@@ -147,6 +143,7 @@ class CPolicyGradient(PolicyGradient):
             shape=(self.ite, self.batch_size, self.n_constraints),
             dtype=np.float64
         )"""
+        self.deterministic_perf_curve = np.zeros(self.ite, dtype=np.float64)
         self.deterministic_cost_curve = np.zeros(
             shape=(self.ite, self.n_constraints),
             dtype=np.float64
@@ -156,11 +153,8 @@ class CPolicyGradient(PolicyGradient):
         self.eta_history = np.zeros((self.ite, self.n_constraints), dtype=np.float64)
         self.eta_history[0, :] = deepcopy(self.etas)
 
-<<<<<<< HEAD
-        self._deterministic_curve = deterministic_curve
+        self.determimnistic = deterministic
 
-=======
->>>>>>> main
         # Env check
         err_msg = f"[CPGPE] the provided env has not costs!"
         assert self.env.with_costs, err_msg
@@ -273,13 +267,9 @@ class CPolicyGradient(PolicyGradient):
 
             # reduce the exploration factor of the policy
             self.policy.reduce_exploration()
-<<<<<<< HEAD
 
-        if self._deterministic_curve:
+        if self.determimnistic:
             self.sample_deterministic_curve()
-=======
-        self.sample_deterministic_curve()
->>>>>>> main
         return
 
     def update_theta(
@@ -336,7 +326,7 @@ class CPolicyGradient(PolicyGradient):
             costs_trajectory = np.mean(costs_trajectory, axis=1)
             # indicator function
             costs_trajectory = np.array(costs_trajectory >= self.cost_param, dtype=np.float64)
-            # reinforce 
+            # reinforce
             costs_trajectory =  np.sum(self.lambdas * costs_trajectory, axis=1)[:, np.newaxis] * np.sum(score_trajectory, axis=1)
             # compute gradient
             estimated_gradient = - rew_gpomdp + np.mean(costs_trajectory, axis=0)
@@ -415,18 +405,15 @@ class CPolicyGradient(PolicyGradient):
         return risk
 
     def sample_deterministic_curve(self) -> None:
-<<<<<<< HEAD
         """
-        Summary:
-            Switch-off the noise and collect the deterministic performance
-            associated to the sequence of parameter configuratios seen during
-            the learning.
-        """
-        # make the policy deterministic switching off the noise
+                Summary:
+                    Switch-off the noise and collect the deterministic performance
+                    associated to the sequence of parameter configurations seen during
+                    the learning.
+                """
+        # make the policy deterministic
         self.policy.std_dev = 0
         self.policy.sigma_noise = 0
-
-        print("[CPG] Sampling deterministic curve.")
 
         # sample
         for i in tqdm(range(self.ite)):
@@ -446,25 +433,18 @@ class CPolicyGradient(PolicyGradient):
             res = Parallel(n_jobs=self.n_jobs, backend="loky")(
                 delayed_functions(**worker_dict) for _ in range(self.batch_size)
             )
-
             # extract data
             ite_perf = np.zeros(self.batch_size, dtype=np.float64)
             ite_cost = np.zeros((self.batch_size, self.n_constraints), dtype=np.float64)
+
             for j in range(self.batch_size):
                 ite_perf[j] = res[j][TrajectoryResults.PERF]
-                ite_cost[j] = np.array(
-                    res[j][TrajectoryResults.CostInfo]["costs"],
-                    dtype=np.float64)[0, :] # sostituisci con reshape (-1, 1)
+                ite_cost[j] = res[j][TrajectoryResults.CostInfo]["cost_perf"]
 
+            # compute mean
+            self.deterministic_perf_curve[i] = np.mean(ite_perf)
+            self.deterministic_cost_curve[i, :] = np.mean(ite_cost)
 
-            # update the deterministic curve with the mean performance and mean cost violation per constraint in the deterministic_cost_curve
-            self.deterministic_cost_curve[i, 0] = np.mean(ite_perf)
-            self.deterministic_cost_curve[i, 1:] = np.mean(ite_cost, axis=0)
-
-        return
-=======
-        pass
->>>>>>> main
 
     def update_best_theta(
             self,
@@ -496,25 +476,15 @@ class CPolicyGradient(PolicyGradient):
         results = {
             "performance": np.array(self.performance_idx, dtype=float).tolist(),
             "costs": np.array(self.cost_idx, dtype=float).tolist(),
-<<<<<<< HEAD
-            #"risks": np.array(self.risk_idx, dtype=float).tolist(),
-            #"best_theta": np.array(self.best_theta, dtype=float).tolist(),
+            "risks": np.array(self.risk_idx, dtype=float).tolist(),
+            "best_theta": np.array(self.best_theta, dtype=float).tolist(),
             #"thetas_history": np.array(self.theta_history, dtype=float).tolist(),
             "lambda_history": np.array(self.lambda_history, dtype=float).tolist(),
             #"eta_history": np.array(self.eta_history, dtype=float).tolist(),
             #"last_theta": np.array(self.thetas, dtype=float).tolist(),
             #"best_perf": float(self.best_performance_theta),
-            "performance_det": np.array(self.deterministic_cost_curve, dtype=float).tolist()
-=======
-            "risks": np.array(self.risk_idx, dtype=float).tolist(),
-            "best_theta": np.array(self.best_theta, dtype=float).tolist(),
-            "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
-            "lambda_history": np.array(self.lambda_history, dtype=float).tolist(),
-            "eta_history": np.array(self.eta_history, dtype=float).tolist(),
-            "last_theta": np.array(self.thetas, dtype=float).tolist(),
-            "best_perf": float(self.best_performance_theta),
-            "performance_det": np.array(self.deterministic_curve, dtype=float).tolist()
->>>>>>> main
+            "deterministic_perf_res": np.array(self.deterministic_perf_curve, dtype=float).tolist(),
+            "deterministic_cost_res": np.array(self.deterministic_cost_curve, dtype=float).tolist()
         }
 
         # Save the json

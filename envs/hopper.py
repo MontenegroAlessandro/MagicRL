@@ -73,11 +73,12 @@ class CostHopper(Hopper):
             self.action_bounds[ActionBoundsIdx.ub],
             dtype=np.float64
         )
-        
         slack = action - clipped_action
         if slack.any() > 0:
             cost = np.linalg.norm(slack)
-        
+        else:
+            cost = np.linalg.norm(action)
+
         state, rew, done, info = super().step(action)
         
         info["costs"] = np.array([cost], dtype=np.float64)

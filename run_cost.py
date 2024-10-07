@@ -1,26 +1,14 @@
 # Libraries
 import argparse
-<<<<<<< HEAD
-from algorithms.cpgpe import CPGPE
-from algorithms.cpg import CPolicyGradient
-from algorithms.policy_gradient_pd import NaturalPG_PD, NaturalPG_PD_2
-from data_processors import IdentityDataProcessor
-from data_processors.gridworld_tabular import GWTabularProcessor
-from data_processors.lqr_tabular import LQRTabularProcessor
-from envs import *
-from envs.lqr_cost import CostLQR, CostLQRDiscrete
-from policies import *
-from art import *
-from algorithms.utils import LearnRates
-from policies.softmax_policy import TabularSoftmax
-=======
+
+from torch.backends.cudnn import deterministic
+
 from algorithms import CPGPE, CPolicyGradient, NaturalPG_PD, NaturalPG_PD_2
 from data_processors import IdentityDataProcessor, GWTabularProcessor, LQRTabularProcessor
 from envs import *
 from policies import *
 from art import *
 from algorithms.utils import LearnRates
->>>>>>> main
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -157,18 +145,21 @@ parser.add_argument(
     default=1,
     choices=[0, 1]
 )
-
-<<<<<<< HEAD
 parser.add_argument(
     "--deterministic",
-    help="Enable sampling of the deterministic performance.",
+    help="Enable the sampling of the deterministic performance.",
     type=int,
     default=1,
     choices=[0, 1]
 )
+parser.add_argument(
+    "--clip",
+    help="Whether to clip the action in the environment.",
+    type=int,
+    default=0,
+    choices=[0, 1]
+)
 
-=======
->>>>>>> main
 args = parser.parse_args()
 
 if args.alg != "cpgpe":
@@ -229,7 +220,7 @@ for i in range(args.n_trials):
             gamma=args.gamma,
             verbose=False,
             render=False,
-            clip=True
+            clip=args.clip
         )
         MULTI_LINEAR = True
     elif args.env == "hopper":
@@ -238,7 +229,7 @@ for i in range(args.n_trials):
             gamma=args.gamma,
             verbose=False,
             render=False,
-            clip=True
+            clip=args.clip
         )
         MULTI_LINEAR = True
     elif args.env == "half_cheetah":
@@ -247,7 +238,7 @@ for i in range(args.n_trials):
             gamma=args.gamma,
             verbose=False,
             render=False,
-            clip=True
+            clip=args.clip
         )
         MULTI_LINEAR = True
     elif args.env == "gw_d":
@@ -315,9 +306,9 @@ for i in range(args.n_trials):
         tot_params = env.state_dim * env.action_dim
         temperature = 1 if args.alg != "cpgpe" else 0.1
         pol = TabularSoftmax(
-            dim_state=env.state_dim, 
-            dim_action=env.action_dim, 
-            tot_params=tot_params, 
+            dim_state=env.state_dim,
+            dim_action=env.action_dim,
+            tot_params=tot_params,
             temperature=temperature,
             deterministic=bool(args.alg == "cpgpe")
         )
@@ -367,7 +358,8 @@ for i in range(args.n_trials):
             std_decay=0,
             std_min=1e-6,
             n_jobs_param=args.n_workers,
-            n_jobs_traj=1
+            n_jobs_traj=1,
+            deterministic=bool(args.deterministic)
         )
         alg = CPGPE(**alg_parameters)
     elif args.alg == "cpg":
@@ -396,12 +388,8 @@ for i in range(args.n_trials):
             verbose=False,
             natural=False,
             checkpoint_freq=1000,
-<<<<<<< HEAD
             n_jobs=args.n_workers,
-            deterministic_curve = bool(args.deterministic)
-=======
-            n_jobs=args.n_workers
->>>>>>> main
+            deterministic=bool(args.deterministic)
         )
         alg = CPolicyGradient(**alg_parameters)
     elif args.alg == "npgpd":

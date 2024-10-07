@@ -49,7 +49,8 @@ class CPGPE(PGPE):
             std_decay: float = 0,
             std_min: float = 1e-4,
             n_jobs_param: int = 1,
-            n_jobs_traj: int = 1
+            n_jobs_traj: int = 1,
+            deterministic: bool = False
     ):
         """
         Summary:
@@ -135,6 +136,7 @@ class CPGPE(PGPE):
             shape=(self.ite, self.batch_size, self.n_constraints),
             dtype=np.float64
         )
+        self.deterministic_perf_curve = np.zeros(self.ite, dtype=np.float64)
         self.deterministic_cost_curve = np.zeros(
             shape=(self.ite, self.n_constraints),
             dtype=np.float64
@@ -143,6 +145,8 @@ class CPGPE(PGPE):
         self.lambda_history[0, :] = deepcopy(self.lambdas)
         self.eta_history = np.zeros((self.ite, self.n_constraints), dtype=np.float64)
         self.eta_history[0, :] = deepcopy(self.etas)
+
+        self.deterministic = deterministic
 
         # Env check
         err_msg = f"[CPGPE] the provided env has not costs!"
@@ -228,7 +232,8 @@ class CPGPE(PGPE):
                 self.rho[RhoElem.STD, :] = np.log(std)
 
         # Sample the deterministic curve
-        self.sample_deterministic_curve()
+        if self.deterministic:
+            self.sample_deterministic_curve()
 
         return
 
@@ -392,16 +397,17 @@ class CPGPE(PGPE):
             "performance_rho": np.array(self.performance_idx, dtype=float).tolist(),
             "costs_rho": np.array(self.cost_idx, dtype=float).tolist(),
             "risks_rho": np.array(self.risk_idx, dtype=float).tolist(),
-            # "performance_thetas_per_rho": np.array(self.performance_idx_theta, dtype=float).tolist(),
+            #"performance_thetas_per_rho": np.array(self.performance_idx_theta, dtype=float).tolist(),
             # "costs_thetas_per_rho": np.array(self.cost_idx_theta, dtype=float).tolist(),
             # "risks_thetas_per_rho": np.array(self.risk_idx_theta, dtype=float).tolist(),
             "best_theta": np.array(self.best_theta, dtype=float).tolist(),
             "best_rho": np.array(self.best_rho, dtype=float).tolist(),
-            "thetas_history": np.array(self.thetas, dtype=float).tolist(),
-            "rho_history": np.array(self.rho_history, dtype=float).tolist(),
+            #"thetas_history": np.array(self.thetas, dtype=float).tolist(),
+            #"rho_history": np.array(self.rho_history, dtype=float).tolist(),
             "lambda_history": np.array(self.lambda_history, dtype=float).tolist(),
-            "eta_history": np.array(self.eta_history, dtype=float).tolist(),
-            "deterministic_res": np.array(self.deterministic_curve, dtype=float).tolist()
+            #"eta_history": np.array(self.eta_history, dtype=float).tolist(),
+            "deterministic_perf_res": np.array(self.deterministic_perf_curve, dtype=float).tolist(),
+            "deterministic_cost_res": np.array(self.deterministic_cost_curve, dtype=float).tolist()
         }
 
         # Save the json
@@ -412,4 +418,42 @@ class CPGPE(PGPE):
         return
 
     def sample_deterministic_curve(self):
-        pass
+        """
+        Summary:
+            Switch-off the noise and collect the deterministic performance
+            associated to the sequence of parameter configurations seen during
+            the learning.
+        """
+        # make the policy deterministic
+        self.policy.std_dev = 0
+        self.policy.sigma_noise = 0
+
+        for i in tqdm(range(self.ite)):
+            self.policy.set_parameters(thetas=self.rho_history[i, :])
+            worker_dict = dict(
+                env=copy.deepcopy(self.env),
+                pol=copy.deepcopy(self.policy),
+                dp=IdentityDataProcessor(),
+                # params=copy.deepcopy(self.rho_history[i, :]),
+                params=None,
+                starting_state=None
+            )
+            # build the parallel functions
+            delayed_functions = delayed(pg_sampling_worker)
+
+            # parallel computation
+            res = Parallel(n_jobs=self.n_jobs_param, backend="loky")(
+                delayed_functions(**worker_dict) for _ in range(self.batch_size)
+            )
+
+            # extract data
+            ite_perf = np.zeros(self.batch_size, dtype=np.float64)
+            ite_cost = np.zeros((self.batch_size, self.n_constraints), dtype=np.float64)
+
+            for j in range(self.batch_size):
+                ite_perf[j] = res[j][TrajectoryResults.PERF]
+                ite_cost[j] = res[j][TrajectoryResults.CostInfo]["cost_perf"]
+
+            # compute mean
+            self.deterministic_perf_curve[i] = np.mean(ite_perf)
+            self.deterministic_cost_curve[i, :] = np.mean(ite_cost)

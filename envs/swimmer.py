@@ -69,16 +69,15 @@ class CostSwimmer(Swimmer):
     def step(self, action):
         # compute the cost
         cost = 0
-        
         clipped_action = np.clip(
             action,
             self.action_bounds[ActionBoundsIdx.lb],
             self.action_bounds[ActionBoundsIdx.ub],
             dtype=np.float64
         )
-        
         slack = action - clipped_action
         if slack.any() > 0:
+
             cost = np.linalg.norm(slack)
         
         state, rew, done, info = super().step(action)
