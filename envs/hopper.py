@@ -15,7 +15,7 @@ class Hopper(MujocoBase):
     """Hopper Wrapper for the environment by GYM."""
     def __init__(
             self, horizon: int = 0, gamma: float = 0.99, verbose: bool = False,
-            render: bool = False,
+            render: bool = False, render_mode: str = "human",
             clip: bool = True
     ) -> None:
         super().__init__(
@@ -25,11 +25,11 @@ class Hopper(MujocoBase):
             clip=clip
         )
         self.render = render
-        render_mode = None
+        self.render_mode = None
         if self.render:
-            render_mode = "human"
+            self.render_mode = render_mode
 
-        self.gym_env = gym.make('Hopper-v4', render_mode=render_mode)
+        self.gym_env = gym.make('Hopper-v4', render_mode=self.render_mode)
         self.action_bounds = [-1, 1]
         self.state_dim = self.gym_env.observation_space.shape[0]    # 11
         self.action_dim = self.gym_env.action_space.shape[0]        # 3
@@ -60,6 +60,7 @@ class CostHopper(Hopper):
             horizon=horizon, gamma=gamma, verbose=verbose, render=render, 
             clip=clip
         )
+
         self.with_costs = True
         self.how_many_costs = 1
 
@@ -76,8 +77,10 @@ class CostHopper(Hopper):
         slack = action - clipped_action
         if slack.any() > 0:
             cost = np.linalg.norm(slack)
-        else:
-            cost = np.linalg.norm(action)
+        # else:
+            # cost = np.linalg.norm(action)
+
+        # print(f'action: {action}, clipped_action: {clipped_action}')
 
         state, rew, done, info = super().step(action)
         

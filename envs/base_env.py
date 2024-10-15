@@ -14,6 +14,7 @@ class BaseEnv(ABC):
             clip: bool = True,
     ) -> None:
         """todo"""
+        self.state = None
         self.horizon = horizon
         assert 0 <= gamma <= 1, "[ERROR] Invalid Discount Factor value."
         self.gamma = gamma
@@ -49,7 +50,7 @@ class BaseEnv(ABC):
     
     @abstractmethod
     def set_state(self, state):
-        pass
+        self.state = state
 
 
 class MujocoBase(BaseEnv, ABC):
@@ -59,6 +60,7 @@ class MujocoBase(BaseEnv, ABC):
             gamma: float = 0.99,
             verbose: bool = False,
             clip: bool = True,
+            render_mode: str = "human"
     ) -> None:
         super().__init__(horizon=horizon, gamma=gamma, verbose=verbose, clip=clip)
         self.gym_env = None
