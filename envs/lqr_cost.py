@@ -234,3 +234,213 @@ class CostLQRDiscrete(LQRDiscrete):
         info["costs"] = copy.deepcopy(np.array([cost], dtype=np.float64))
 
         return self.state, reward, absorbing, info
+
+
+class RobotWorld(LQR):
+    def __init__(
+            self,
+            Q: np.ndarray = None,
+            R: np.ndarray = None,
+            max_pos: float = np.inf,
+            max_action: float = np.inf,
+            random_init: bool = False,
+            episodic: bool = False,
+            gamma: float = 0.9,
+            horizon: int = 50,
+            initial_state: np.ndarray = None,
+            dt: float = 0.05,
+            tau: float = 0.1,
+            range_pos: np.ndarray = np.array([40, 50]),
+            range_vel: np.ndarray = np.array([-0.1, 0.1])
+    ) -> None:
+        """
+        Initialize the RobotWorld environment in a way similar to CostLQR.
+        """
+
+        # Time step size
+        self.dt = dt
+
+        A, B = self.generate_dynamics()
+
+        super(RobotWorld, self).__init__(
+            A=A, B=B, Q=Q, R=None, max_pos=max_pos, max_action=max_action, random_init=random_init,
+            episodic=episodic, gamma=gamma, horizon=horizon, initial_state=initial_state, dt=dt
+        )
+
+        # Define the cost matrix (the one related to the action)
+        self.C = R
+
+        # Additional parameters specific to RobotWorld
+        self.tau = tau
+        self.with_costs = True
+        self.how_many_costs = 1
+
+        # random variable
+        self.rng = np.random.default_rng()
+
+        # Define the cost matrices
+        self.G1 = - np.array([1.0, 1.0, 0.001, 0.001])
+        self.G2 = - np.array([0.001, 0.001, 1.0, 1.0])
+        self.R1 = - np.array([0.01, 0.01])
+        self.R2 = - np.array([0.01, 0.01])
+
+        # State bounds
+        self.range_pos = range_pos
+        self.range_vel = range_vel
+
+    @staticmethod
+    def generate(
+            s_dim: int = None,
+            a_dim: int = None,
+            max_pos: float = np.inf,
+            max_action: float = np.inf,
+            scale_matrix: float = 1.0,
+            eps: float = 0.1,
+            index: int = 0,
+            scale: float = 1.0,
+            random_init: bool = True,
+            episodic: bool = False,
+            gamma: float = 0.99,
+            horizon: int = 50,
+            dt: float = 0.05,
+            tau: float = 0.1,
+            initial_state: np.ndarray = None,
+            range_pos: np.ndarray = np.array([40, 50]),
+            range_vel: np.ndarray = np.array([-0.1, 0.1])
+    ):
+        """
+        Generate a new RobotWorld environment with random dynamics matrices and cost matrices.
+
+        :param dimensions: The dimension for both the state and action (s_dim and a_dim).
+        :param s_dim: Dimension of the state space (optional if dimensions is given).
+        :param a_dim: Dimension of the action space (optional if dimensions is given).
+        :param max_pos: Maximum position constraint.
+        :param max_action: Maximum action constraint.
+        :param scale_matrix: Scaling factor for the system matrices A and B.
+        :param eps: Scaling factor for cost matrices Q and R.
+        :param index: Index for modifying specific values in Q and R.
+        :param scale: General scale for Q and R.
+        :param random_init: Whether the system should initialize states randomly.
+        :param episodic: Whether the environment is episodic.
+        :param gamma: Discount factor.
+        :param horizon: Planning horizon.
+        :param dt: Time step for the dynamics.
+        :param tau: Regularization parameter for the reward.
+        :param initial_state: Initial state of the environment.
+        :return: A new RobotWorld instance with generated dynamics and cost matrices.
+        """
+
+        # Generate state cost matrix Q and action cost matrix R
+        Q = eps * np.eye(s_dim) * scale
+        R = (1.0 - eps) * np.eye(a_dim) * scale
+
+        # Modify specific entries of Q and R
+        Q[index, index] = (1.0 - eps) * scale
+        R[index, index] = eps * scale
+
+        # Return a new RobotWorld instance with the generated matrices
+        return RobotWorld(
+            Q=Q, R=R, max_pos=max_pos, max_action=max_action, random_init=random_init,
+            episodic=episodic, gamma=gamma, horizon=horizon, dt=dt, tau=tau, initial_state=initial_state,
+            range_pos = range_pos, range_vel = range_vel
+        )
+
+    def generate_dynamics(self):
+        """
+        Generate system dynamics matrices A and B based on the time step.
+
+        :param dt: The time step used in the dynamics.
+        :return: A and B matrices for the system dynamics.
+        """
+        A = np.array(
+            [
+                [1., 0, self.dt, 0],
+                [0, 1., 0, self.dt],
+                [0, 0, 1., 0],
+                [0, 0, 0, 1.],
+            ]
+        )
+
+        B = np.array(
+            [
+                [self.dt ** 2 / 2, 0.0],
+                [0.0, self.dt ** 2 / 2],
+                [self.dt, 0.0],
+                [0.0, self.dt],
+            ]
+        )
+
+        return A, B
+
+    def reset(self, state=None):
+        """
+        Reset the environment to a random or predefined initial state.
+
+        :param n_samples: Number of samples (initial states) to generate.
+        :return: The initial state of the environment.
+        """
+        if state is not None:
+            self.state = state
+        else:
+            s = np.array([
+                self.rng.uniform(self.range_pos[0], self.range_pos[1]),
+                self.rng.uniform(self.range_pos[0], self.range_pos[1]),
+                self.rng.uniform(self.range_vel[0], self.range_vel[1]),
+                self.rng.uniform(self.range_vel[0], self.range_vel[1]),
+            ])
+
+            self.state = s
+        return self.state
+
+    def generate_noise(self, size):
+        """
+        Generate random noise for the system.
+
+        :param size: Shape of the noise to be generated.
+        :return: An array containing the generated noise.
+        """
+        return self.rng.normal(
+            scale=np.array([
+                1.0,  # noise for position
+                1.0,  # noise for position
+                1.0,  # noise for velocity
+                1.0  # noise for velocity
+            ]) * self.dt,  # scale the noise by the time step
+            size=size
+        )
+
+    def step(self, action):
+        """
+        Perform a step in the environment by applying the action 'u'.
+
+        :param u: The action applied in the environment.
+        :return: The next state, reward, done flag, additional info, and costs.
+        """
+        # Preprocess the action (clipping it to the action bounds)
+        u = np.clip(
+            action,
+            self.action_bounds[ActionBoundsIdx.lb],
+            self.action_bounds[ActionBoundsIdx.ub]
+        )
+
+        # Apply state transition dynamics
+        s_noiseless = self.state @ self.A.T + u @ self.B.T
+
+        noise = self.generate_noise(self.state.shape)
+        self.state = s_noiseless + noise
+
+        # Compute reward
+        reward = (np.abs(self.state).T @ self.G1).sum(axis=0) + (np.abs(u).T @ self.R1).sum(axis=0)
+        reward += - (self.tau / 2) * (u.T @ u).sum(axis=0)
+
+        # Compute cost
+        cost = ((self.state ** 2) * self.G2).sum(axis=0) + (self.tau / 2) + ((u ** 2) * self.R2).sum(axis=0)
+
+        # Info dictionary with costs
+        info = {"costs": cost}
+
+        #
+        done = False
+
+        # Return the next state, reward, done flag, info, and costs
+        return self.state, reward.sum(), done, info

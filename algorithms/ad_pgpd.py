@@ -4,13 +4,12 @@ Implementation of the AD-PGPD algorithm from Ding et. al 2024
 
 from copy import deepcopy
 import io
-import json
 from joblib import Parallel, delayed
-from scipy.odr import multilinear
-from sympy.physics.units import action
-from torch.ao.nn.quantized.functional import threshold
 from tqdm import tqdm
 import numpy as np
+import json
+
+import matplotlib.pyplot as plt
 
 from policies import BasePolicy, LinearPolicy, OldLinearPolicy, LinearGaussianPolicy
 from envs import BaseEnv, CostSwimmer
@@ -124,7 +123,11 @@ class ADPGPD(BasePG_PD):
 
         assert reg >= 0
         self.reg = reg
-        self.obj_name = "AD-PGPD"
+        self.obj_name = "ADPGPD"
+
+        err_msg = f"[{self.obj_name}]  adam lr strategy not yet implemented."
+        if lr_strategy == "adam":
+            raise NotImplementedError(err_msg)
 
         # structures: running
         # policy parameters
@@ -190,11 +193,13 @@ class ADPGPD(BasePG_PD):
 
                 # update the actor
                 # phi is defined as a column vector built repeating the state "dim_action" times over the same dimension
+                id = np.eye(self.pol.tot_params)
+
                 phi = np.array(np.tile(deepcopy(s), self.pol.dim_action))
                 term1 = phi.T @  self.omega_r
                 term2 = (s @ self.pol.parameters.T) @ a
 
-                self.omega_r = self.omega_r - 2 * alpha * (term1 - Qr - term2 / self.lr_theta) * phi
+                self.omega_r = self.omega_r - 2 * alpha * (term1 - Qr - term2 * self.lr_theta) * phi
 
                 # save vectors
                 self.omega_r_batch[k, :] = deepcopy(self.omega_r)
@@ -209,10 +214,12 @@ class ADPGPD(BasePG_PD):
                 dp=deepcopy(self.dp),
                 state=None
             )
+
             delayed_functions = delayed(value_estimation)
             res = Parallel(n_jobs=self.n_jobs, backend="loky")(
                 delayed_functions(**value_dict) for _ in range(self.batch)
             )
+
             for i in range(self.batch):
                 rews[i] = res[i][V_RES.Vr]
                 costs[i] = res[i][V_RES.Vg]
@@ -242,11 +249,8 @@ class ADPGPD(BasePG_PD):
                 # dual update
                 self.lam = np.clip(self.lam - self.lr_lambda*(self.cost_values[t] - self.threshold + self.reg * self.lam), 0, np.inf)
             else:
-                # primal update
-                self.theta = self.theta + self.theta_adam.compute_gradient(omega_hat_r)
-
-                # dual update
-                self.lam = np.clip(self.lam - self.lambda_adam.compute_gradient(self.cost_values[t] - self.threshold + self.reg * self.lam), 0, np.inf)
+                # adam lr strategy (NOT YET IMPLEMENTED)
+                pass
 
             if self.values[t] > self.best_perf:
                 print(f'\n{self.obj_name} - New best performance found at iteration {t}')
@@ -260,8 +264,6 @@ class ADPGPD(BasePG_PD):
             # save
             if not (t % self.checkpoint_freq):
                 self.save_results()
-
-
 
     def save_results(self):
         """Save the results."""
@@ -281,19 +283,19 @@ class ADPGPD(BasePG_PD):
             f.close()
         return
 
-def main():
-    ite = 300
+def train():
+    ite = 301
     gamma = 0.99
     batch = 100
     env_class = CostSwimmer
     horizon = 100
     clip = 1
     reg = 0.0001
-    lr = [0.01, 0.1]
+    lr = [0.001, 0.01]
     lr_strategy = "constant"
     n_workers = 6
     directory  ='/Users/leonardo/Desktop/Thesis/Data'
-    b = 50
+    b = 100
 
     env = env_class(horizon=horizon, gamma=gamma, render=False, clip=bool(clip))
 
@@ -320,7 +322,8 @@ def main():
         n_jobs=n_workers,
         reg = reg,
         directory=directory,
-        threshold = b
+        threshold = b,
+        checkpoint_freq = 100
     )
     alg = ADPGPD(**alg_parameters)
 
@@ -328,6 +331,17 @@ def main():
 
     alg.learn()
 
+def plot():
+
+    with open('/Users/leonardo/Desktop/Thesis/Data/ADPGPD_results.json') as f:
+        data = json.load(f)
+
+    # pot the "values" column of data
+    plt.plot(data['values'])
+
+    plt.show()
+
+
 if __name__ == "__main__":
-    main()
+    train()
 

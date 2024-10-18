@@ -61,7 +61,7 @@ parser.add_argument(
     help="The environment.",
     type=str,
     default="lqr",
-    choices=["lqr", "gw_d", "swimmer", "hopper", "half_cheetah"]
+    choices=["lqr", "gw_d", "swimmer", "hopper", "half_cheetah", "robot_world"]
 )
 parser.add_argument(
     "--horizon",
@@ -253,6 +253,17 @@ for i in range(args.n_trials):
             random_init=True,
             ding_flag=False
         )
+    elif args.env == "robot_world":
+        env = RobotWorld.generate(
+            s_dim = 2 * args.env_param,
+            a_dim = args.env_param,
+            horizon=args.horizon,
+            gamma=args.gamma,
+            max_pos=10,
+            max_action=10,
+            scale_matrix=0.9
+        )
+        MULTI_LINEAR = True
     else:
         raise ValueError(f"Invalid env name.")
     s_dim = env.state_dim
