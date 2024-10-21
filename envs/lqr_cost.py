@@ -417,30 +417,30 @@ class RobotWorld(LQR):
         :return: The next state, reward, done flag, additional info, and costs.
         """
         # Preprocess the action (clipping it to the action bounds)
-        u = np.clip(
+        clipped_action = np.clip(
             action,
             self.action_bounds[ActionBoundsIdx.lb],
             self.action_bounds[ActionBoundsIdx.ub]
         )
 
         # Apply state transition dynamics
-        s_noiseless = self.state @ self.A.T + u @ self.B.T
+        s_noiseless = self.state @ self.A.T + clipped_action @ self.B.T
 
         noise = self.generate_noise(self.state.shape)
         self.state = s_noiseless + noise
 
         # Compute reward
-        reward = (np.abs(self.state).T @ self.G1).sum(axis=0) + (np.abs(u).T @ self.R1).sum(axis=0)
-        reward += - (self.tau / 2) * (u.T @ u).sum(axis=0)
+        reward = (np.abs(self.state).T @ self.G1).sum(axis=0) + (np.abs(clipped_action).T @ self.R1).sum(axis=0)
+        reward += - (self.tau / 2) * (clipped_action.T @ clipped_action).sum(axis=0)
 
         # Compute cost
-        cost = ((self.state ** 2) * self.G2).sum(axis=0) + (self.tau / 2) + ((u ** 2) * self.R2).sum(axis=0)
+        cost = ((self.state ** 2) * self.G2).sum(axis=0) + (self.tau / 2) + ((clipped_action ** 2) * self.R2).sum(axis=0)
 
         # Info dictionary with costs
         info = {"costs": cost}
 
-        #
+        # set done flag only to keep the interface of the step() function
         done = False
 
         # Return the next state, reward, done flag, info, and costs
-        return self.state, reward.sum(), done, info
+        return self.state, reward, done, info

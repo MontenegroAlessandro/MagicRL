@@ -183,46 +183,6 @@ class InventoryControl():
 
         return self.s
 
-
-class BurgersDynamics:
-    def __init__(self, num_points, viscosity, dt, dx) -> None:
-        self.num_points = num_points
-        self.viscosity = viscosity
-        self.dt = dt
-        self.dx = dx
-        self.u = torch.zeros(num_points).double()
-        self.A, self.B = self.generate_dynamics()
-        self.D = self.generate_difference_matrix()
-
-    def generate_dynamics(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        A = torch.eye(self.num_points).double()
-        for i in range(1, self.num_points - 1):
-            A[i, i-1] = self.viscosity * self.dt / self.dx**2
-            A[i, i] = 1 - 2 * self.viscosity * self.dt / self.dx**2
-            A[i, i+1] = self.viscosity * self.dt / self.dx**2
-        B = torch.eye(self.num_points).double() * (self.dt / self.dx)
-        return A, B
-
-    def generate_difference_matrix(self) -> torch.Tensor:
-        D = torch.zeros(self.num_points, self.num_points).double()
-        for i in range(1, self.num_points-1):
-            D[i, i-1] = -0.5 * self.dt / self.dx
-            D[i, i+1] = 0.5 * self.dt / self.dx
-        return D
-
-    def reset(self, n_samples: int = 1) -> torch.Tensor:
-        x = torch.linspace(0, 1, self.num_points).double()
-        self.u = torch.sin(np.pi * x).repeat(n_samples, 1)
-        noise = torch.normal(0, 0.001, size=self.u.shape).double()
-        self.u += noise
-        return self.u
-
-    def step(self, u: torch.Tensor) -> torch.Tensor:
-        noise = torch.normal(0, 0.01, size=self.u.shape).double()
-        self.u = self.u @ self.A.T + u * (self.dt / self.dx) - (self.u ** 2) @ self.D.T + noise
-        return self.u
-
-
 # This class implements the sample-based version of AD-PGPD
 class ADpgpdSampled:
     def __init__(
