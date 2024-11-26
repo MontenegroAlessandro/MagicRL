@@ -5,7 +5,7 @@ import copy
 # Libraries
 import numpy as np
 from envs.base_env import BaseEnv
-from envs.utils import Position, GWContMove, Obstacle
+from envs.utils import Position, GWContMove, Obstacle, design_u_obstacle
 from copy import deepcopy
 import json, os, io, errno
 import matplotlib.pyplot as plt
@@ -29,6 +29,8 @@ class GridWorldState:
             x (int): x-axis coordinate of the agent (default 0)
             y (int): y-axis coordinate of the agent (default 0)
         """
+        self.x = x
+        self.y = y
         self.agent_pos = Position(x=x, y=y)
 
 
@@ -44,21 +46,21 @@ class GridWorldEnvDisc(BaseEnv):
     ) -> None:
         """
         Summary: Initialization function
-        Args: 
+        Args:
             horizon (int): look BaseEnv.
-            
+
             gamma (float): look BaseEnv.
-            
+
             grid_size (int): the size of the grid (default to 0).
-            
-            reward_type (str): how to shape the rewards, legal values in 
+
+            reward_type (str): how to shape the rewards, legal values in
             LEGAL_REWARDS (default "linear").
 
             env_type (str): if and which obstacles to embody in the environment,
             legal values in LEGAL_ENV_CONFIG (default "empty").
-            
+
             render (bool): flag indicating whether to save graphically the results.
-            
+
             dir (str): directory in which save the results.
         """
         # Super class initialization
@@ -93,7 +95,7 @@ class GridWorldEnvDisc(BaseEnv):
 
         assert reward_type in LEGAL_REWARDS, "[ERROR] Illegal reward type."
         self._load_env_reward(reward_type=reward_type)
-        
+
         # costs stuff
         if env_type != "empty":
             self.with_costs = True
@@ -170,11 +172,11 @@ class GridWorldEnvDisc(BaseEnv):
         }
         if self.render:
             self.save_single_image()
-        
+
         # save cost
         info = dict(costs=deepcopy(np.array([cost], dtype=np.float64)))
-        
-        # we can access to the index of the position with: 
+
+        # we can access to the index of the position with:
         # env.state_index[new_pos.x, new_pos.y]
         return new_pos, reward, isNewAbs, info
 
@@ -209,7 +211,7 @@ class GridWorldEnvDisc(BaseEnv):
 
     def sample_state(self):
         pass
-    
+
     def sample_action(self, args: dict = None):
         return np.random.choice(ACTIONS)
 
@@ -281,7 +283,7 @@ class GridWorldEnvDisc(BaseEnv):
         Simple walls or room can be added.
 
         Args:
-            env_type (str): specifies the configuration to use. Accepted 
+            env_type (str): specifies the configuration to use. Accepted
             values in LEGAL_ENV_CONFIG.
         """
         if env_type == "empty":
@@ -336,7 +338,7 @@ class GridWorldEnvDisc(BaseEnv):
         Linear or sparse reward.
 
         Args:
-            reward_type (str): specifies the configuration to use. Accepted 
+            reward_type (str): specifies the configuration to use. Accepted
             values in LEGAL_REWARDS.
         """
         if reward_type == "linear":
@@ -373,13 +375,7 @@ class GridWorldEnvDisc(BaseEnv):
             bool: True if "position" is an absorbing state, False otherwise
         """
         return position.x == self.goal_pos.x and position.y == self.goal_pos.y
-    
-    def set_state(self, state):
-        """state index expected"""
-        query = np.where(self.grid_index == state)
-        x = query[0][0]
-        y = query[1][0]
-        self.state = GridWorldState(x=x, y=y)
+
 
 
 class GridWorldEnvCont(BaseEnv):
@@ -390,39 +386,40 @@ class GridWorldEnvCont(BaseEnv):
             reward_type: str = "linear",
             render: bool = False, dir: str = None, init_state: list = None,
             obstacles: list = None, verbose: bool = False, pacman: bool = False,
-            goal_tol: float = 0, obstacles_strict_flag: bool = False,
-            use_costs: bool = False, sampling_strategy: str = "random", sampling_args: dict = None
+            goal_tol: float = 0, obstacles_strict_flag: bool =  False,
+            use_costs: bool = False, sampling_strategy: str = "random", sampling_args: dict = None,
+            threshold: float = 0.1
     ) -> None:
         """
         Summary: Initialization function
-        Args: 
+        Args:
             horizon (int): look BaseEnv.
-            
+
             gamma (float): look BaseEnv.
-            
+
             grid_size (int): the size of the grid (default to 0).
-            
-            reward_type (str): how to shape the rewards, legal values in 
+
+            reward_type (str): how to shape the rewards, legal values in
             LEGAL_REWARDS (default "linear").
 
             env_type (str): if and which obstacles to embody in the environment,
             legal values in LEGAL_ENV_CONFIG (default "empty").
-            
+
             render (bool): flag indicating whether to save graphically the results.
-            
+
             dir (str): directory in which save the results.
-            
+
             init_state (list): a list of 2 coordinates stating how to initialize
             the state. If not passed, the state will be initialized randomly.
             Defaults to None.
-            
-            obstacles (list): list of Obstacles to put in the environment. 
+
+            obstacles (list): list of Obstacles to put in the environment.
             Defaults to empty list [].
-            
+
             verbose (bool): tells whether to print more information.
-            
+
             pacman (bool): tells whether to employ the pacman effect in the env.
-            
+
             goal_tol (float): degree of tolerance to be in the goal position.
             The absorbing state will be considered if the distance between the
             goal and the agent is epsilon.
@@ -445,15 +442,13 @@ class GridWorldEnvCont(BaseEnv):
             the states.
         """
         # Super class initialization
-        super().__init__(horizon=horizon, gamma=gamma,
-                         verbose=verbose)  # self.horizon, self.gamma, self.time
+        super().__init__(horizon=horizon, gamma=gamma,verbose=verbose)  # self.horizon, self.gamma, self.time
 
         # Map initialization
-        if obstacles is None:
-            obstacles = []
         self.grid_size = grid_size
-        self.goal_pos = Position(x=self.grid_size / 2,
-                                 y=self.grid_size / 2)
+        self.goal_pos = GridWorldState(x=self.grid_size / 2, y=self.grid_size / 2)
+        self.goal = self.goal_area()
+        self.threshold = threshold
         self.pacman = pacman
         self.epsilon = goal_tol
 
@@ -462,23 +457,26 @@ class GridWorldEnvCont(BaseEnv):
         assert sampling_strategy in ["random", "sphere"], err_msg
         self.sampling_strategy = sampling_strategy
         self.sampling_args = sampling_args
-        print(self.sampling_args)
+        # print(self.sampling_args)
         self.init_state = init_state
         if init_state is not None:
             self.state = GridWorldState(x=init_state[0], y=init_state[1])
         else:
-            self.state = self.sample_state(strategy=self.sampling_strategy,
-                                           args=copy.deepcopy(self.sampling_args))[0]
+            # self.state = self.sample_state(strategy="init", args=copy.deepcopy(self.sampling_args))[0]
+            self.state = GridWorldState(x = 0.5, y = 0.5)
+
+        self.state_dim = 2
+        self.action_dim = 2
 
         # Reward
         assert reward_type in LEGAL_REWARDS, "[ERROR] Illegal reward type."
         self.reward_type = reward_type
 
         # Obstacles
-        self.obstacles = obstacles
+        self.obstacles = design_u_obstacle(grid_size, 0.5)
         self.obstacles_strict_flag = obstacles_strict_flag
-        self.use_costs = use_costs
-        self.n_costs = 2  # todo -> change this
+        self.use_costs  =self.with_costs = use_costs
+        self.n_costs = self.how_many_costs = 1
 
         # Saving parameters
         self.render = render
@@ -488,13 +486,28 @@ class GridWorldEnvCont(BaseEnv):
             print("[Error] No directory provided.")
             quit(-1)
         self.history = {"0": {
-            "pos_x": self.state.agent_pos.x,
-            "pos_y": self.state.agent_pos.y,
-            "r": self.reward(),
-            "abs": int(False)
+            "pos_x": round(self.state.agent_pos.x, 1),
+            "pos_y": round(self.state.agent_pos.y, 1)
         }}
         if self.render:
             self.save_single_image()
+
+    def goal_area(self):
+        goal_center_x = self.goal_pos.x
+        goal_center_y = self.goal_pos.y
+        goal_width = 1.0 # Width of the rectangular goal region
+        goal_height = 0.5  # Height of the rectangular goal region
+
+        # Calculate the four corner vertices of the rectangular goal region, with goal_pos at the top center
+        top_left = Position(goal_center_x - goal_width / 2, goal_center_y)
+        top_right = Position(goal_center_x + goal_width / 2, goal_center_y)
+        bottom_left = Position(goal_center_x - goal_width / 2, goal_center_y - goal_height)
+        bottom_right = Position(goal_center_x + goal_width / 2, goal_center_y - goal_height)
+
+        # Ensure the vertices are ordered counterclockwise
+        goal = [bottom_left, top_left, top_right, bottom_right]
+
+        return goal
 
     def sample_state(self, strategy: str = "random", args=None):
         if args is None:
@@ -503,6 +516,11 @@ class GridWorldEnvCont(BaseEnv):
             return self.sample_random_state(**args)
         elif strategy == "sphere":
             return self.sample_state_from_sphere(**args)
+        elif strategy == "init":
+            x = np.random.uniform(self.threshold, self.grid_size - self.threshold)
+            y = np.random.uniform(self.threshold, self.grid_size / 5 - self.threshold)
+
+            return [GridWorldState(x=x, y=y)]
         else:
             err_msg = f"[GridWorld] strategy {strategy} is not implemented to sample states!"
             raise NotImplementedError(err_msg)
@@ -591,8 +609,7 @@ class GridWorldEnvCont(BaseEnv):
                                              replace=False)
             states = []
             for i in range(n_samples):
-                states.append(GridWorldState(x=x_coordinates[i],
-                                             y=y_coordinates[i]))
+                states.append(GridWorldState(x=x_coordinates[i],y=y_coordinates[i]))
             return states
 
     def step(self, action: GWContMove = None) -> tuple:
@@ -605,16 +622,16 @@ class GridWorldEnvCont(BaseEnv):
             (Occasionally, when self.use_costs, it returns also the np.array of
             costs).
         """
-        # Update of self.time
+
         self.time += 1
         outside_flag = False
 
         # Compute the next state
-        new_pos = deepcopy(self.state.agent_pos)
-        new_pos.x = action.radius * np.cos(
-            np.deg2rad(action.theta)) + self.state.agent_pos.x
-        new_pos.y = action.radius * np.sin(
-            np.deg2rad(action.theta)) + self.state.agent_pos.y
+        new_pos = deepcopy(self.state)
+
+        new_pos.x = action.radius * np.cos(np.deg2rad(action.theta)) + self.state.agent_pos.x
+        new_pos.y = action.radius * np.sin(np.deg2rad(action.theta)) + self.state.agent_pos.y
+
         if self.pacman:
             new_pos.x = new_pos.x % self.grid_size
             new_pos.y = new_pos.y % self.grid_size
@@ -628,13 +645,17 @@ class GridWorldEnvCont(BaseEnv):
 
         # Check if the new position is forbidden
         isAbs = self.is_absorbing(self.state.agent_pos)
+        isNewAbs = self.is_absorbing(new_pos.agent_pos)
         forbidden = 0
         for obs in self.obstacles:
             if obs.is_in(pos=new_pos):
                 forbidden += 1
                 break
-        if (not forbidden and not isAbs) or \
-                (forbidden and not self.obstacles_strict_flag):
+
+        # Compute the reward
+        reward = self.reward(position=new_pos, outside=outside_flag, forbidden=forbidden)
+
+        if (not forbidden and not isAbs) or (forbidden and not self.obstacles_strict_flag):
             # Update state
             self.state.agent_pos = deepcopy(new_pos)
         else:
@@ -642,29 +663,22 @@ class GridWorldEnvCont(BaseEnv):
             new_pos = deepcopy(self.state.agent_pos)
 
         # Save results
-        reward = self.reward(outside=outside_flag, forbidden=forbidden)
-        isNewAbs = self.is_absorbing(position=new_pos)
         self.history[str(self.time)] = {
-            "pos_x": int(new_pos.x),
-            "pos_y": int(new_pos.y),
-            "r": int(reward),
-            "abs": int(isNewAbs)
+            "pos_x": round(new_pos.x, 1),
+            "pos_y": round(new_pos.y, 1)
         }
         if self.render:
             self.save_single_image()
 
         # Costs computation
         if self.use_costs:
-            cost_values = np.array(
-                [self.cost_obstacle(forbidden=forbidden),
-                 self.cost_boundary()],
-                dtype=float
-            )
+            info = dict(costs = self.cost_obstacle(forbidden))
 
             if isNewAbs:
-                return new_pos, (self.horizon - self.time) * reward, True, cost_values
+                # self.reset()
+                return new_pos, (self.horizon - self.time) * reward, True,  info
             else:
-                return new_pos, reward, isNewAbs, cost_values
+                return new_pos, reward, isNewAbs, info
         # No costs have to be included
         else:
             if isNewAbs:
@@ -672,65 +686,77 @@ class GridWorldEnvCont(BaseEnv):
             else:
                 return new_pos, reward, isNewAbs
 
-    def reset(self) -> None:
-        # self.time init
-        super().reset()
-
-        # State initialization
-        if self.init_state is not None:
-            self.state = GridWorldState(x=self.init_state[0],
-                                        y=self.init_state[1])
+    def reset(self, state = None)-> None:
+        if state is not None:
+            self.state = state
         else:
-            self.state = self.sample_state(strategy=self.sampling_strategy,
-                                           args=copy.deepcopy(self.sampling_args))[0]
+
+            # self.time init
+            super().reset()
+
+            # State initialization
+            if self.init_state is not None:
+                self.state = GridWorldState(x=self.init_state[0], y=self.init_state[1])
+            else:
+                # self.state = self.sample_state(strategy="init",args=copy.deepcopy(self.sampling_args))[0]
+                self.state = GridWorldState(x = 0.5, y = 0.5)
 
         # Save results
         if self.dir is not None:
             self.save_history()
             if self.render:
                 self.save_gif()
-        self.episode_counter += 1
 
+        self.episode_counter += 1
         # History
-        self.history = {"0": {
-            "pos_x": self.state.agent_pos.x,
-            "pos_y": self.state.agent_pos.y,
-            "r": self.reward(),
-            "abs": int(False)
+        self.history = {'0': {
+            "pos_x": round(self.state.agent_pos.x, 1),
+            "pos_y": round(self.state.agent_pos.y, 1),
         }}
+
         if self.render:
             self.save_single_image()
 
-    def reward(self, outside=False, forbidden=0):
+        self.time = 0
+
+    def reward(self, position, outside: int = False, forbidden: int = False) -> float:
         if forbidden and not self.use_costs:
             # If the agent is in a forbidden zone, punish it with a super
             # negative reward
             return -(self.grid_size ** 2) * forbidden
         else:
             # Distance computation
-            dist = (self.state.agent_pos.x - self.goal_pos.x) ** 2
-            dist += (self.state.agent_pos.y - self.goal_pos.y) ** 2
+            dist = (position.x -self.goal_pos.x) ** 2
+            dist += (position.y -self.goal_pos.y) ** 2
             dist = np.sqrt(dist)
 
             # Penalization if the policy said to go outside
             dist += self.grid_size if outside else 0
 
             # Give reward
-            if dist <= self.epsilon:
-                # todo -> place 1
+            if self.is_absorbing(position):
+                #print(f'[GridWorld] Goal reached.')
                 return 0
             if self.reward_type == "linear":
                 return -dist
             elif self.reward_type == "sparse":
+                if forbidden or outside:
+                    return -self.grid_size
                 return -1
             else:
                 raise NotImplementedError
 
     def is_absorbing(self, position: Position):
-        dist = np.sqrt((self.goal_pos.x - position.x) ** 2 + (
-                self.goal_pos.y - position.y) ** 2)
-        # return position.x == self.goal_pos.x and position.y == self.goal_pos.y
-        return dist <= self.epsilon
+        """
+        Check if the agent's position is inside the goal area defined by a rectangle.
+        """
+        bottom_left, top_left, top_right, bottom_right = self.goal
+
+        # Ensure that you use the correct bounds from the rectangle corners
+        within_x_bounds = bottom_left.x <= position.x <= top_right.x
+        within_y_bounds = bottom_left.y <= position.y <= top_left.y
+
+        return within_x_bounds and within_y_bounds
 
     def save_history(self) -> None:
         """Save json of the history"""
@@ -742,13 +768,13 @@ class GridWorldEnvCont(BaseEnv):
                 if exc.errno != errno.EEXIST:
                     raise
 
-        with io.open(name, 'w', encoding='utf-8') as f:
+        with io.open(name, 'a', encoding='utf-8') as f:
             f.write(json.dumps(self.history, ensure_ascii=False, indent=4))
             f.close()
 
     def save_single_image(self) -> None:
         """Save an image of the current state of the environment"""
-        # clear plot
+        # Clear plot
         plt.clf()
         fig, ax = plt.subplots(figsize=(8, 8))
         ax.set_xlim(0, self.grid_size)
@@ -756,48 +782,61 @@ class GridWorldEnvCont(BaseEnv):
         ax.set_xticks(np.arange(self.grid_size + 1))
         ax.set_yticks(np.arange(self.grid_size + 1))
 
-        # goal pos
-        ax.plot(self.goal_pos.x, self.goal_pos.y, "o", color="green",
-                label="GOAL")
+        # Goal position (goal center point)
+        ax.plot(self.goal_pos.x, self.goal_pos.y, "o", color="green", label="GOAL")
 
-        # agent
-        ax.plot(self.state.agent_pos.x, self.state.agent_pos.y, "o",
-                color="blue", label="AGENT")
+        # Agent position
+        ax.plot(self.state.agent_pos.x, self.state.agent_pos.y, "o", color="blue", label="AGENT")
 
-        # plot walls
+        # Plot walls (obstacles)
+        i = 0
         for obs in self.obstacles:
             if obs.type == "square":
                 x = obs.features["p1"].x
                 y = obs.features["p1"].y
                 w = obs.features["p2"].x - obs.features["p1"].x
                 h = obs.features["p4"].y - obs.features["p1"].y
-                ax.add_patch(plt.Rectangle((x, y), w, h, alpha=0.3, color="red",
-                                           label="obstacle"))
+                if i == 0:
+                    ax.add_patch(plt.Rectangle((x, y), w, h, alpha=0.3, color="red", label="obstacle"))
+                    i += 1
+                else:
+                    ax.add_patch(plt.Rectangle((x, y), w, h, alpha=0.3, color="red"))
             elif obs.type == "circle":
                 x = obs.features["center"].x
                 y = obs.features["center"].y
                 r = obs.features["radius"]
-                ax.add_patch(plt.Circle((x, y), r, alpha=0.3, color="orange",
-                                        label="obstacle"))
+                ax.add_patch(plt.Circle((x, y), r, alpha=0.3, color="orange", label="obstacle"))
 
-        # plot positions
+        # Plot the goal area as a filled rectangle
+        if hasattr(self, 'goal') and len(self.goal) == 4:
+            goal_points = [[p.x, p.y] for p in self.goal]
+            goal_polygon = plt.Polygon(goal_points, closed=True, edgecolor="green", facecolor="lime", alpha=0.3,
+                                       label="Goal Area")
+            ax.add_patch(goal_polygon)
+
+        # Plot positions and settings
         plt.grid()
         plt.legend(loc="best")
-        plt.title(f"GridWorld EPISODE{self.episode_counter} FRAME {self.time}")
+        plt.title(f"GridWorld EPISODE {self.episode_counter} FRAME {self.time}")
 
+        # Construct file name for saving
         if self.time < 10:
-            name = self.dir + f"/frames_{self.episode_counter}" + f"/GridWorldFrame_{self.episode_counter}_00{self.time}.jpeg"
+            name = self.dir + f"/frames_{self.episode_counter}/GridWorldFrame_{self.episode_counter}_00{self.time}.jpeg"
         elif self.time < 100:
-            name = self.dir + f"/frames_{self.episode_counter}" + f"/GridWorldFrame_{self.episode_counter}_0{self.time}.jpeg"
+            name = self.dir + f"/frames_{self.episode_counter}/GridWorldFrame_{self.episode_counter}_0{self.time}.jpeg"
         else:
-            name = self.dir + f"/frames_{self.episode_counter}" + f"/GridWorldFrame_{self.episode_counter}_{self.time}.jpeg"
+            name = self.dir + f"/frames_{self.episode_counter}/GridWorldFrame_{self.episode_counter}_{self.time}.jpeg"
+
+        # Ensure directory exists
         if not os.path.exists(os.path.dirname(name)):
             try:
                 os.makedirs(os.path.dirname(name))
             except OSError as exc:  # Guard against race condition
                 if exc.errno != errno.EEXIST:
                     raise
-        plt.savefig(name, format="jpeg")
+
+        # Save the figure
+        plt.savefig(name, format="jpeg", dpi=300)
         plt.close(fig)
 
     def save_gif(self) -> None:
@@ -814,15 +853,47 @@ class GridWorldEnvCont(BaseEnv):
         """When the agent is in a forbidden zone, it has a cost."""
         return forbidden
 
-    def cost_boundary(self):
+    def cost_boundary(self, state: Position =  None):
         """When the agent is near to the boundary, it has a cost."""
-        threshold = 0.5
-        cond_near_x = (self.state.agent_pos.x <= threshold) or (
-                self.state.agent_pos.x - self.grid_size <= threshold)
-        cond_near_y = (self.state.agent_pos.y <= threshold) or (
-                self.state.agent_pos.y - self.grid_size <= threshold)
+
+        if state is None:
+            state = self.state.agent_pos
+
+        cond_near_x = (state.x <= self.threshold) or (self.grid_size - state.x <= self.threshold)
+        cond_near_y = (state.y <= self.threshold) or (self.grid_size - state.y <= self.threshold)
+
+        # print(f'[GridWorld] Agent is near to the boundary: {cond_near_x or cond_near_y} at position {self.state.agent_pos.x, self.state.agent_pos.y}')
         if cond_near_x or cond_near_y:
             # return self.grid_size / 2
             return 1
         else:
             return 0
+
+    def sample_action(self, args: dict = None):
+        return GWContMove(radius=1, theta=np.random.uniform(0, 2 * np.pi))
+
+    def set_state(self, state):
+        x = state.x
+        y = state.y
+        self.state = GridWorldState(x=x, y=y)
+
+
+def main():
+    horizon = 100
+    gamma = 0.99
+
+    env = GridWorldEnvCont(
+        horizon=horizon,
+        gamma=gamma,
+        grid_size=7,
+        reward_type="linear",
+        render=True,
+        dir="/Users/leonardo/Desktop/Thesis/MagicRL/images",
+    )
+
+    # env.reset()
+    # env.save_single_image()
+
+
+if __name__ == "__main__":
+    main()

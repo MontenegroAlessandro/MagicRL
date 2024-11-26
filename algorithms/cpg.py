@@ -421,7 +421,7 @@ class CPolicyGradient(PolicyGradient):
             worker_dict = dict(
                 env=copy.deepcopy(self.env),
                 pol=copy.deepcopy(self.policy),
-                dp=IdentityDataProcessor(),
+                dp=self.data_processor,
                 # params=copy.deepcopy(self.theta_history[i, :]),
                 params=None,
                 starting_state=None

@@ -103,28 +103,46 @@ class Obstacle:
         return res
 
 
-def design_u_obstacle(grid_size: int):
+def design_u_obstacle(grid_size: int, size: float = 0.1) -> list:
+    # Define the barycenter of the U-shape
+    center_x = grid_size / 2
+    center_y = grid_size / 2
+
+    # Set dimensions for the U-shape
+    horizontal_width = 3  # Width of the horizontal bottom edge
+    vertical_height = 2   # Height of each vertical edge
+
+    # Bottom horizontal edge of the U-shape, centered horizontally on the barycenter
     edge1 = Obstacle(
         type="square",
-        features={"p1": Position(grid_size / 2 - 1, grid_size / 2 - 1),
-                  "p2": Position(grid_size / 2 + 1, grid_size / 2 - 1),
-                  "p3": Position(grid_size / 2 + 1, grid_size / 2 - .5),
-                  "p4": Position(grid_size / 2 - 1, grid_size / 2 - .5)}
+        features={
+            "p1": Position(center_x - horizontal_width / 2, center_y - vertical_height / 2 - size),
+            "p2": Position(center_x + horizontal_width / 2, center_y - vertical_height / 2 - size),
+            "p3": Position(center_x + horizontal_width / 2, center_y - vertical_height / 2),
+            "p4": Position(center_x - horizontal_width / 2, center_y - vertical_height / 2)
+        }
     )
 
+    # Left vertical edge of the U-shape, positioned to the left of the barycenter
     edge2 = Obstacle(
         type="square",
-        features={"p1": Position(grid_size / 2 - 1, grid_size / 2 - 1),
-                  "p2": Position(grid_size / 2 - .5, grid_size / 2 - 1),
-                  "p3": Position(grid_size / 2 - .5, grid_size / 2 + 1),
-                  "p4": Position(grid_size / 2 - 1, grid_size / 2 + 1)}
+        features={
+            "p1": Position(center_x - horizontal_width / 2, center_y - vertical_height / 2),
+            "p2": Position(center_x - horizontal_width / 2 + size, center_y - vertical_height / 2),
+            "p3": Position(center_x - horizontal_width / 2 + size, center_y + vertical_height / 2),
+            "p4": Position(center_x - horizontal_width / 2, center_y + vertical_height / 2)
+        }
     )
 
+    # Right vertical edge of the U-shape, positioned to the right of the barycenter
     edge3 = Obstacle(
         type="square",
-        features={"p1": Position(grid_size / 2 + .5, grid_size / 2 - 1),
-                  "p2": Position(grid_size / 2 + 1, grid_size / 2 - 1),
-                  "p3": Position(grid_size / 2 + 1, grid_size / 2 + 1),
-                  "p4": Position(grid_size / 2 + .5, grid_size / 2 + 1)}
+        features={
+            "p1": Position(center_x + horizontal_width / 2 - size, center_y - vertical_height / 2),
+            "p2": Position(center_x + horizontal_width / 2, center_y - vertical_height / 2),
+            "p3": Position(center_x + horizontal_width / 2, center_y + vertical_height / 2),
+            "p4": Position(center_x + horizontal_width / 2 - size, center_y + vertical_height / 2)
+        }
     )
+
     return [edge1, edge2, edge3]

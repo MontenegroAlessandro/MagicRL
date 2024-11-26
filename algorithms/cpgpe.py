@@ -192,7 +192,7 @@ class CPGPE(PGPE):
             # update best theta
             max_batch_perf = np.max(performance_res)
             best_theta_batch_index = np.where(performance_res == max_batch_perf)[0]
-            self.update_best_theta(current_perf=self.performance_idx[i], params=self.thetas[best_theta_batch_index, :])
+            self.update_best_theta(current_perf=self.performance_idx[i], params=self.thetas[best_theta_batch_index, :], risks=self.risk_idx[i, :])
 
             # Perform Alternate Ascent Descent Algorithm
             if self.alternate:
@@ -390,25 +390,34 @@ class CPGPE(PGPE):
             np.save(file_name, self.best_rho)
 
     def update_best_theta(
-            self, current_perf: float, params: np.ndarray, costs: np.ndarray = None,
+            self, current_perf: float, params: np.ndarray, risks: np.ndarray = None,
             *args, **kwargs
     ) -> None:
+        """
+        Save the best value of theta, when the current performance is higher than the best performance.
+        """
+        violation = risks - self.thresholds
         if current_perf > self.best_performance_theta:
             self.best_theta = params
             self.best_performance_theta = current_perf
-            print("*" * 30)
-            print(f"New best THETA: {self.best_theta}")
-            print(f"New best PERFORMANCE: {self.best_performance_theta}")
-            print("*" * 30)
+
+            msg_1 = f"[CPGPE] New best THETA: {self.best_theta}"
+            msg_2 = f"[CPGPE] New best PERFORMANCE: {self.best_performance_theta}"
+            msg_3 = f"[CPGPE] CONSTRAINT VIOLATION: {violation}"
+            max_len = max([len(msg_1), len(msg_2), len(msg_3)])
+
+            print("#" * (max_len + 2))
+            print("* " + msg_1)
+            print("* " + msg_2)
+            print("* " + msg_3)
+            print("#" * (max_len + 2))
 
             # Save the best theta configuration
             if self.directory != "":
                 file_name = self.directory + "/best_theta"
-
             else:
                 file_name = "best_theta"
             np.save(file_name, self.best_theta)
-        return
 
     def save_results(self) -> None:
         """Function saving the results of the training procedure"""
@@ -453,7 +462,7 @@ class CPGPE(PGPE):
             worker_dict = dict(
                 env=copy.deepcopy(self.env),
                 pol=copy.deepcopy(self.policy),
-                dp=IdentityDataProcessor(),
+                dp=self.data_processor,
                 # params=copy.deepcopy(self.rho_history[i, :]),
                 params=None,
                 starting_state=None

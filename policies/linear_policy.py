@@ -61,7 +61,7 @@ class OldLinearPolicy(BasePolicy, ABC):
         return state
     
     def diff(self, state):
-        raise NotImplementedError 
+        raise NotImplementedError
 
 
 class LinearPolicy(BasePolicy, ABC):

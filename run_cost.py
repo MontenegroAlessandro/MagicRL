@@ -1,10 +1,8 @@
 # Libraries
 import argparse
-
-from torch.backends.cudnn import deterministic
-
 from algorithms import CPGPE, CPolicyGradient, NaturalPG_PD, NaturalPG_PD_2
-from data_processors import IdentityDataProcessor, GWTabularProcessor, LQRTabularProcessor
+from data_processors import IdentityDataProcessor, GWTabularProcessor, LQRTabularProcessor, GWDataProcessorRBF
+from data_processors.robot_world_processor import RobotWorldProcessor
 from envs import *
 from policies import *
 from art import *
@@ -54,14 +52,14 @@ parser.add_argument(
     help="The policy used.",
     type=str,
     default="linear",
-    choices=["linear", "nn", "big_nn", "softmax"]
+    choices=["linear", "nn", "big_nn", "softmax", "gw_pol", "gaussian_rbf"]
 )
 parser.add_argument(
     "--env",
     help="The environment.",
     type=str,
     default="lqr",
-    choices=["lqr", "gw_d", "swimmer", "hopper", "half_cheetah", "robot_world"]
+    choices=["lqr", "gw_d", "gw_c", "swimmer", "hopper", "half_cheetah", "robot_world"]
 )
 parser.add_argument(
     "--horizon",
@@ -253,6 +251,18 @@ for i in range(args.n_trials):
             random_init=True,
             ding_flag=False
         )
+    elif args.env == "gw_c":
+        env = GridWorldEnvCont(
+            horizon=args.horizon,
+            gamma=args.gamma,
+            grid_size=7,
+            reward_type="linear",
+            use_costs = True,
+            render = False,
+            threshold=0.0,
+            sampling_args  = { "n_samples": 1, "radius": 0.1},
+            # dir = "/Users/leonardo/Desktop/Thesis/Data/GridWorld"
+        )
     elif args.env == "robot_world":
         env = RobotWorld.generate(
             s_dim = 2 * args.env_param,
@@ -270,10 +280,16 @@ for i in range(args.n_trials):
     a_dim = env.action_dim
 
     """Data Processor"""
+    basis = 5
     if args.env == "gw_d":
         dp = GWTabularProcessor(index_map=env.grid_index)
     elif args.env == "lqr" and args.alg in ["rpgpd", "npgpd"]:
         dp = LQRTabularProcessor(index_map=env.state_enumeration)
+    elif args.env == "gw_c":
+        dp = GWDataProcessorRBF(num_basis=basis, grid_size=7, std_dev=0.75)
+    elif args.env == "robot_world":
+        dp =  RobotWorldProcessor()
+        s_dim = 1 + 3 * s_dim
     else:
         dp = IdentityDataProcessor(dim_feat=env.state_dim)
 
@@ -323,6 +339,14 @@ for i in range(args.n_trials):
             temperature=temperature,
             deterministic=bool(args.alg == "cpgpe")
         )
+    elif args.pol == "gw_pol":
+        tot_params = basis * s_dim
+        pol = GWPolicy(
+            dim_state=env.state_dim,
+            thetas=np.zeros(tot_params).tolist(),
+            std_dev=np.sqrt(args.var),
+            alg=args.alg
+        )
     else:
         raise ValueError(f"Invalid policy name.")
     # dir_name += f"{tot_params}_var_{string_var}_trial_{i}"
@@ -363,7 +387,7 @@ for i in range(args.n_trials):
             directory=dir_name,
             verbose=False,
             natural=False,
-            checkpoint_freq=1000,
+            checkpoint_freq=250,
             lr_strategy=args.lr_strategy,
             learn_std=False,
             std_decay=0,
@@ -398,7 +422,7 @@ for i in range(args.n_trials):
             directory=dir_name,
             verbose=False,
             natural=False,
-            checkpoint_freq=1000,
+            checkpoint_freq=250,
             n_jobs=args.n_workers,
             deterministic=bool(args.deterministic)
         )

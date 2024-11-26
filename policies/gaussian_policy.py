@@ -20,7 +20,6 @@ class LinearGaussianPolicy(BasePolicy, ABC):
             dim_state: int = 1,
             dim_action: int = 1,
             multi_linear: bool = False
-
     ) -> None:
         # Superclass initialization
         super().__init__()
@@ -86,4 +85,4 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         return scores
     
     def diff(self, state):
-        raise NotImplementedError 
+        raise NotImplementedError

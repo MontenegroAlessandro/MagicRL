@@ -249,9 +249,10 @@ class RobotWorld(LQR):
             horizon: int = 50,
             initial_state: np.ndarray = None,
             dt: float = 0.05,
-            tau: float = 0.1,
+            tau: float = 0.2,
             range_pos: np.ndarray = np.array([40, 50]),
-            range_vel: np.ndarray = np.array([-0.1, 0.1])
+            range_vel: np.ndarray = np.array([-0.1, 0.1]),
+            action_range = np.array([-10, 10])
     ) -> None:
         """
         Initialize the RobotWorld environment in a way similar to CostLQR.
@@ -266,9 +267,6 @@ class RobotWorld(LQR):
             A=A, B=B, Q=Q, R=None, max_pos=max_pos, max_action=max_action, random_init=random_init,
             episodic=episodic, gamma=gamma, horizon=horizon, initial_state=initial_state, dt=dt
         )
-
-        # Define the cost matrix (the one related to the action)
-        self.C = R
 
         # Additional parameters specific to RobotWorld
         self.tau = tau
@@ -287,6 +285,7 @@ class RobotWorld(LQR):
         # State bounds
         self.range_pos = range_pos
         self.range_vel = range_vel
+        self.action_range = action_range
 
     @staticmethod
     def generate(
@@ -303,10 +302,11 @@ class RobotWorld(LQR):
             gamma: float = 0.99,
             horizon: int = 50,
             dt: float = 0.05,
-            tau: float = 0.1,
+            tau: float = 0.2,
             initial_state: np.ndarray = None,
             range_pos: np.ndarray = np.array([40, 50]),
-            range_vel: np.ndarray = np.array([-0.1, 0.1])
+            range_vel: np.ndarray = np.array([-0.1, -0.1]),
+            action_range = np.array([-10, 10])
     ):
         """
         Generate a new RobotWorld environment with random dynamics matrices and cost matrices.
@@ -342,7 +342,7 @@ class RobotWorld(LQR):
         return RobotWorld(
             Q=Q, R=R, max_pos=max_pos, max_action=max_action, random_init=random_init,
             episodic=episodic, gamma=gamma, horizon=horizon, dt=dt, tau=tau, initial_state=initial_state,
-            range_pos = range_pos, range_vel = range_vel
+            range_pos = range_pos, range_vel = range_vel, action_range = action_range
         )
 
     def generate_dynamics(self):
@@ -388,7 +388,6 @@ class RobotWorld(LQR):
                 self.rng.uniform(self.range_vel[0], self.range_vel[1]),
                 self.rng.uniform(self.range_vel[0], self.range_vel[1]),
             ])
-
             self.state = s
         return self.state
 
@@ -410,34 +409,23 @@ class RobotWorld(LQR):
         )
 
     def step(self, action):
-        """
-        Perform a step in the environment by applying the action 'u'.
-
-        :param u: The action applied in the environment.
-        :return: The next state, reward, done flag, additional info, and costs.
-        """
-        # Preprocess the action (clipping it to the action bounds)
-        clipped_action = np.clip(
-            action,
-            self.action_bounds[ActionBoundsIdx.lb],
-            self.action_bounds[ActionBoundsIdx.ub]
-        )
 
         # Apply state transition dynamics
-        s_noiseless = self.state @ self.A.T + clipped_action @ self.B.T
+        s_noiseless = self.state @ self.A.T + action @ self.B.T
 
         noise = self.generate_noise(self.state.shape)
         self.state = s_noiseless + noise
 
+
         # Compute reward
-        reward = (np.abs(self.state).T @ self.G1).sum(axis=0) + (np.abs(clipped_action).T @ self.R1).sum(axis=0)
-        reward += - (self.tau / 2) * (clipped_action.T @ clipped_action).sum(axis=0)
+        reward = (np.abs(self.state).T @ self.G1).sum(axis=0) + (np.abs(action).T @ self.R1).sum(axis=0)
+        reward -= (self.tau / 2) * (action.T @ action).sum(axis=0)
 
         # Compute cost
-        cost = ((self.state ** 2) * self.G2).sum(axis=0) + (self.tau / 2) + ((clipped_action ** 2) * self.R2).sum(axis=0)
+        cost = ((self.state ** 2) * self.G2).sum(axis=0) + (self.tau / 2) + ((action ** 2) * self.R2).sum(axis=0)
 
         # Info dictionary with costs
-        info = {"costs": cost}
+        info = {"costs": -cost}
 
         # set done flag only to keep the interface of the step() function
         done = False
