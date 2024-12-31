@@ -258,7 +258,9 @@ class TrajectorySampler:
         rewards = np.zeros(self.env.horizon, dtype=np.float64)
         costs = np.zeros(shape=(self.env.horizon, self.env.how_many_costs), dtype=np.float64)
         scores = np.zeros(shape=(self.env.horizon, self.pol.tot_params), dtype=np.float64)
+
         pol_values = 0
+
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
@@ -308,6 +310,79 @@ class TrajectorySampler:
             info = dict(
                 cost_perf=copy.deepcopy(cost_perf),
                 costs=copy.deepcopy(costs),
-                pol_values=copy.deepcopy(pol_values)
+                pol_values=copy.deepcopy(pol_values),
             )
         return [perf, rewards, scores, info]
+    
+    def collect_off_policy_trajectory(
+            self, params: np.array = None, starting_state=None, starting_action=None, 
+    ) -> list:
+        """
+        Summary:
+            Function collecting a trajectory reward for a particular theta
+            configuration.
+        Args:
+            params (np.array): the current sampling of theta values
+            starting_state (any): the starting state for the iterations
+        Returns:
+            list of:
+                float: the discounted reward of the trajectory
+                np.array: vector of all the rewards
+                np.array: vector of all the scores
+        """
+        # reset the environment
+        self.env.reset()
+        if starting_state is not None:
+            # self.env.state = copy.deepcopy(starting_state)
+            self.env.set_state(starting_state)
+
+        # initialize parameters
+        np.random.seed()
+        perf = 0
+        rewards = np.zeros(self.env.horizon, dtype=np.float64)
+        scores = np.zeros(shape=(self.env.horizon, self.pol.tot_params), dtype=np.float64)
+        states = np.zeros(shape=(self.env.horizon, self.env.state_dim), dtype=np.float64)
+        actions = np.zeros(shape=(self.env.horizon, self.env.action_dim), dtype=np.float64)
+
+        pol_values = 0
+        if params is not None:
+            self.pol.set_parameters(thetas=params[-1])
+
+        # act
+        for t in range(self.env.horizon):
+            # retrieve the state
+            state = self.env.state
+            states[t, :] = state
+
+            # transform the state
+            features = self.dp.transform(state=state)
+
+            # select the action
+            if t == 0 and starting_action is not None:
+                a = starting_action
+            else:
+                a = self.pol.draw_action(state=features)
+            score = self.pol.compute_score(state=features, action=a)
+            actions[t, :] = a
+
+            # play the action
+            _, rew, done, info = self.env.step(action=a)
+
+            # update the performance index
+            perf += (self.env.gamma ** t) * rew
+
+            if self.pol_values:
+                pol_values += np.log(self.pol.compute_pi(state=features, action=a))
+
+            # update the vectors of rewards and scores
+            rewards[t] = rew
+            scores[t, :] = score
+
+
+            if done:
+                if t < self.env.horizon - 1:
+                    rewards[t+1:] = 0
+                    scores[t+1:, :] = 0
+                break
+
+        return [perf, rewards, scores, states, actions]

@@ -23,6 +23,12 @@ class TrajectoryResults:
     ScoreList = 2
     CostInfo = 3
 
+class OffPolicyTrajectoryResults:
+    PERF = 0
+    RewList = 1
+    ScoreList = 2
+    States = 3
+    Actions = 4
 
 class ParamSamplerResults:
     THETA = 0
