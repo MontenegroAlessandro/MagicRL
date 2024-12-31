@@ -7,7 +7,7 @@ import numpy as np
 from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
-from algorithms.utils import TrajectoryResults, check_directory_and_create, LearnRates
+from algorithms.utils import OffPolicyTrajectoryResults, check_directory_and_create, LearnRates
 from algorithms.samplers import TrajectorySampler, pg_sampling_worker
 from joblib import Parallel, delayed
 import json
@@ -34,7 +34,8 @@ class PolicyGradient:
             verbose: bool = False,
             natural: bool = False,
             checkpoint_freq: int = 1,
-            n_jobs: int = 1
+            n_jobs: int = 1,
+            window_length: int = 10
     ) -> None:
         """
         Summary:
@@ -122,6 +123,7 @@ class PolicyGradient:
         self.parallel_computation = bool(self.n_jobs != 1)
         self.dim_action = self.env.action_dim
         self.dim_state = self.env.state_dim
+        self.window_size = np.max([self.ite, self.batch_size * self.window_length])
 
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
@@ -136,6 +138,10 @@ class PolicyGradient:
 
         # init the theta history
         self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
+
+        # init the states and actions vectors
+        self.states_vector = np.zeros((self.window_size, self.env.horizon, self.env.state_dim), dtype=np.float64)
+        self.actions_vector = np.zeros((self.window_size, self.env.horizon, self.env.action_dim), dtype=np.float64)
 
         # create the adam optimizers
         self.adam_optimizer = None
@@ -178,9 +184,11 @@ class PolicyGradient:
                                     dtype=np.float64)
             reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float64)
             for j in range(self.batch_size):
-                perf_vector[j] = res[j][TrajectoryResults.PERF]
-                reward_vector[j, :] = res[j][TrajectoryResults.RewList]
-                score_vector[j, :, :] = res[j][TrajectoryResults.ScoreList]
+                perf_vector[j] = res[j][OffPolicyTrajectoryResults.PERF]
+                reward_vector[j, :] = res[j][OffPolicyTrajectoryResults.RewList]
+                score_vector[j, :, :] = res[j][OffPolicyTrajectoryResults.ScoreList]
+                states_vector[j, :, :] = res[j][OffPolicyTrajectoryResults.States]
+                actions_vector[j, :, :] = res[j][OffPolicyTrajectoryResults.Actions]
             self.performance_idx[i] = np.mean(perf_vector)
 
             # Update best theta
