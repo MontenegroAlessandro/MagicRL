@@ -346,7 +346,7 @@ class TrajectorySampler:
 
         pol_values = 0
         if params is not None:
-            self.pol.set_parameters(thetas=params[-1])
+            self.pol.set_parameters(thetas=params)
 
         # act
         for t in range(self.env.horizon):

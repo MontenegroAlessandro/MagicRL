@@ -1,6 +1,6 @@
 # Libraries
 import argparse
-from algorithms import PGPE, PolicyGradient, DeterministicPG, CPGPE
+from algorithms import PGPE, PolicyGradient, DeterministicPG, CPGPE, OffPolicyGradient
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
@@ -24,7 +24,7 @@ parser.add_argument(
     help="The algorithm to use.",
     type=str,
     default="pgpe",
-    choices=["pgpe", "pg", "dpg", "cpgpe"]
+    choices=["pgpe", "pg", "dpg", "cpgpe", "off_pg"]
 )
 parser.add_argument(
     "--var",
@@ -123,7 +123,7 @@ if args.pol == "big_nn":
     huge = True
     args.pol = "nn"
 
-if args.alg == "pg":
+if args.alg in ["pg", "off_pg"]:
     if args.pol == "linear":
         args.pol = "gaussian"
     elif args.pol == "nn":
@@ -416,8 +416,32 @@ for i in range(args.n_trials):
             update_b_pol=True
         )
         alg = DeterministicPG(**alg_parameters)
+    elif args.alg == "off_pg":
+        if args.pol == "gaussian":
+            init_theta = [0] * tot_params
+        else:
+            init_theta = np.random.normal(0, 1, tot_params)
+        alg_parameters = dict(
+            lr=[args.lr],
+            lr_strategy=args.lr_strategy,
+            estimator_type="GPOMDP",
+            initial_theta=init_theta,
+            ite=args.ite,
+            batch_size=args.batch,
+            env=env,
+            policy=pol,
+            data_processor=dp,
+            directory=dir_name,
+            verbose=False,
+            natural=False,
+            checkpoint_freq=100,
+            n_jobs=args.n_workers,
+            window_length=20
+        )
+        alg = OffPolicyGradient(**alg_parameters)
     else:
         raise ValueError("Invalid algorithm name.")
+    
 
     print(text2art(f"== {args.alg} TEST on {args.env} =="))
     print(text2art(f"Trial {i}"))
