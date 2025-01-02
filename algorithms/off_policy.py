@@ -123,6 +123,7 @@ class OffPolicyGradient:
         self.parallel_computation = bool(self.n_jobs != 1)
         self.dim_action = self.env.action_dim
         self.dim_state = self.env.state_dim
+        self.window_length = window_length
 
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
@@ -151,8 +152,11 @@ class OffPolicyGradient:
         """Learning function"""
         action_queue = collections.deque(maxlen=self.window_size)
         state_queue = collections.deque(maxlen=self.window_size)
+        thetas_queue = collections.deque(maxlen=self.window_length)
 
         for i in tqdm(range(self.ite)):
+            thetas_queue.append(self.thetas)
+
             if self.parallel_computation:
                 # prepare the parameters
                 self.policy.set_parameters(copy.deepcopy(self.thetas))
@@ -194,7 +198,6 @@ class OffPolicyGradient:
                 state_queue.append(res[j][OffPolicyTrajectoryResults.StateList])
 
             self.performance_idx[i] = np.mean(perf_vector)
-
             # Update best theta
             self.update_best_theta(current_perf=self.performance_idx[i])
 
@@ -205,6 +208,12 @@ class OffPolicyGradient:
             elif self.estimator_type == "GPOMDP":
                 estimated_gradient = self.update_g(
                     reward_trajectory=reward_vector, score_trajectory=score_vector
+                )
+            elif self.estimator_type == "GPOMDP_off_policy":
+                estimated_gradient = self.update_g_off_policy(
+                    reward_trajectory=reward_vector, score_trajectory=score_vector,
+                    action_trajectory=action_queue, state_trajectory=state_queue,
+                    thetas_trajectory=thetas_queue
                 )
             else:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
@@ -272,6 +281,39 @@ class OffPolicyGradient:
             np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
             axis=0)
         return estimated_gradient
+    
+    def calculate_importance_sampling_ratio(self, action_trajectory: collections.deque,
+                                            state_trajectory: collections.deque, thetas_queue: collections.deque) -> np.array:
+        """
+        Summary:
+            Calculate the importance sampling ratio.
+        Args:
+            action_trajectory (collections.deque): the action trajectory.
+            state_trajectory (collections.deque): the state trajectory.
+            thetas_queue (collections.deque): the thetas trajectory.
+        Returns:
+            np.array: the importance sampling ratio.
+        """
+        # initialize matrix of size num trajectories x batch updates in the window
+        pi_thetas = np.zeros((self.window_length, self.window_size))
+
+        for i in range(self.window_length):
+            self.policy.set_parameters(thetas=thetas_queue[i])
+            pi_thetas[i, :] = self.policy.compute_pi(state_trajectory[i], action_trajectory[i])
+
+        
+        return np.array([])
+    
+    def update_g_off_policy(self, reward_trajectory: np.array,
+                            score_trajectory: np.array,
+                            action_trajectory: collections.deque,
+                            state_trajectory: collections.deque) -> np.array:
+        """
+        Summary:
+            Update the gradient estimate accoring to balance off-policy.
+        """
+        importance_sampling_ratio = self.calculate_importance_sampling_ratio(action_trajectory, state_trajectory)
+        return np.array([])
 
     def update_best_theta(self, current_perf: np.float64, *args, **kwargs) -> None:
         """
@@ -325,7 +367,7 @@ class OffPolicyGradient:
             # extract data
             ite_perf = np.zeros(self.batch_size, dtype=np.float64)
             for j in range(self.batch_size):
-                ite_perf[j] = res[j][TrajectoryResults.PERF]
+                ite_perf[j] = res[j][OffPolicyTrajectoryResults.PERF]
 
             # compute mean
             self.deterministic_curve[i] = np.mean(ite_perf)
