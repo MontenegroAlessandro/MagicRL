@@ -27,8 +27,8 @@ class OffPolicyTrajectoryResults:
     PERF = 0
     RewList = 1
     ScoreList = 2
-    States = 3
-    Actions = 4
+    StateList = 3
+    ActList = 4
 
 class ParamSamplerResults:
     THETA = 0
