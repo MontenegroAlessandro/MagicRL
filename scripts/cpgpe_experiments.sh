@@ -20,7 +20,7 @@ taskset -ca 0-11 python3 run_cost.py --dir /data1/montenegro_cesani/ --ite 3000 
 
 
 # robot world
-taskset -ca 12-23 python3 run_cost.py --dir /data1/montenegro_cesani/ding/ --ite 10000 --alg cpgpe --risk tc --risk_param 0 --reg 0.0001 --var 0.000001 --pol linear --env robot_world --horizon 400 --gamma 0.99 --lr 0.000005 0.05 0.01 --lr_strategy adam --n_workers 12 --batch 100 --n_trials 5 --env_param 2 --c_bounds 1000 --l_init 0 --eta_init 0 --clip 0 --deterministic 1
+taskset -ca 74-85 python3 run_cost.py --dir /data1/montenegro_cesani/ding/ --ite 10000 --alg cpgpe --risk tc --risk_param 0 --reg 0.0001 --var 0.000001 --pol linear --env robot_world --horizon 400 --gamma 0.99 --lr 0.000005 0.05 0.01 --lr_strategy adam --n_workers 12 --batch 100 --n_trials 5 --env_param 2 --c_bounds 1000 --l_init 0 --eta_init 0 --clip 0 --deterministic 1
 
 # Gridwold
 taskset -ca 0-17 python3 run_cost.py --dir /data1/montenegro_cesani/ --ite 12000 --alg cpgpe --risk tc --risk_param 0 --reg 0.0001 --var 0.025 --pol gw_pol --env gw_c --horizon 100  --gamma 1 --lr 0.0025 0.25 0.01 --lr_strategy adam --n_workers 18 --batch 100 --n_trials 1 --env_param 2 --c_bounds 3 --l_init 0 --eta_init 0.0 --clip 0 --deterministic 1 --l_init 0.0

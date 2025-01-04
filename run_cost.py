@@ -286,7 +286,7 @@ for i in range(args.n_trials):
     elif args.env == "lqr" and args.alg in ["rpgpd", "npgpd"]:
         dp = LQRTabularProcessor(index_map=env.state_enumeration)
     elif args.env == "gw_c":
-        dp = GWDataProcessorRBF(num_basis=basis, grid_size=7, std_dev=0.75)
+        dp = GWDataProcessorRBF(num_basis=basis, grid_size=7, std_dev=0.75) # basis = 7, std_dev = 0.6
     elif args.env == "robot_world":
         dp =  RobotWorldProcessor()
         s_dim = 1 + 3 * s_dim

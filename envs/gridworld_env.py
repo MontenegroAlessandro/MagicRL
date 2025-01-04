@@ -629,8 +629,11 @@ class GridWorldEnvCont(BaseEnv):
         # Compute the next state
         new_pos = deepcopy(self.state)
 
-        new_pos.x = action.radius * np.cos(np.deg2rad(action.theta)) + self.state.agent_pos.x
-        new_pos.y = action.radius * np.sin(np.deg2rad(action.theta)) + self.state.agent_pos.y
+        # new_pos.x = action.radius * np.cos(np.deg2rad(action.theta)) + self.state.agent_pos.x
+        new_pos.x = action.radius * np.cos(action.theta) + self.state.agent_pos.x
+        # new_pos.y = action.radius * np.sin(np.deg2rad(action.theta)) + self.state.agent_pos.y
+        new_pos.y = action.radius * np.sin(action.theta) + self.state.agent_pos.y
+        new_pos.agent_pos = Position(x=new_pos.x, y=new_pos.y)
 
         if self.pacman:
             new_pos.x = new_pos.x % self.grid_size
@@ -642,6 +645,7 @@ class GridWorldEnvCont(BaseEnv):
                 outside_flag = True
                 new_pos.x = clipped_x
                 new_pos.y = clipped_y
+                new_pos.agent_pos = Position(x=new_pos.x, y=new_pos.y)
 
         # Check if the new position is forbidden
         isAbs = self.is_absorbing(self.state.agent_pos)
@@ -673,6 +677,14 @@ class GridWorldEnvCont(BaseEnv):
         # Costs computation
         if self.use_costs:
             info = dict(costs = self.cost_obstacle(forbidden))
+            """
+            if forbidden:
+                cost = self.cost_obstacle_lipshitz(new_pos.agent_pos)
+            else:
+                cost = 0
+            info = dict(costs=deepcopy(np.array([cost], dtype=np.float64)))
+            # info = dict(costs=deepcopy(np.array([0], dtype=np.float64)))
+            """
 
             if isNewAbs:
                 # self.reset()
@@ -852,6 +864,46 @@ class GridWorldEnvCont(BaseEnv):
     def cost_obstacle(self, forbidden: int = 0):
         """When the agent is in a forbidden zone, it has a cost."""
         return forbidden
+
+    def cost_obstacle_lipshitz(self, position: Position) -> float:
+        """
+        Compute the cost for a given position relative to the U-shaped obstacle.
+        The cost is 1 at the axis of the obstacle and decreases smoothly to 0 at the obstacle's boundary.
+        The U_axis is treated as continuous line segments.
+        """
+        # Define the U-axis as line segments
+        U_axis = [
+            [(2.25, 4.25), (2.25, 2.25)],  # Left vertical wall
+            [(2.25, 2.25), (4.75, 2.25)],  # Bottom horizontal wall
+            [(4.75, 2.25), (4.75, 4.25)]  # Right vertical wall
+        ]
+
+        is_in_obstacle = False
+        costs = []
+
+        for segment in U_axis:
+            (x1, y1), (x2, y2) = segment
+
+            # Compute the projection of the position onto the line segment
+            px, py = position.x, position.y
+            dx, dy = x2 - x1, y2 - y1
+            segment_length_squared = dx ** 2 + dy ** 2
+
+            if segment_length_squared > 0:
+                t = max(0, min(1, ((px - x1) * dx + (py - y1) * dy) / segment_length_squared))
+                proj_x = x1 + t * dx
+                proj_y = y1 + t * dy
+            else:
+                proj_x, proj_y = x1, y1  # If the segment is degenerate (zero length), use one endpoint
+
+            # Compute the distance from the position to the closest point on the segment
+            distance = np.sqrt((px - proj_x) ** 2 + (py - proj_y) ** 2)
+
+            # Calculate the cost as a smooth decrease based on distance
+            cost = max(1 - distance / 0.25, 0)  # Ensure cost is non-negative
+            costs.append(cost)
+
+        return max(costs) if costs else 0
 
     def cost_boundary(self, state: Position =  None):
         """When the agent is near to the boundary, it has a cost."""

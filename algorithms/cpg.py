@@ -481,7 +481,7 @@ class CPolicyGradient(PolicyGradient):
             #"thetas_history": np.array(self.theta_history, dtype=float).tolist(),
             "lambda_history": np.array(self.lambda_history, dtype=float).tolist(),
             #"eta_history": np.array(self.eta_history, dtype=float).tolist(),
-            #"last_theta": np.array(self.thetas, dtype=float).tolist(),
+            "last_theta": np.array(self.thetas, dtype=float).tolist(),
             #"best_perf": float(self.best_performance_theta),
             "deterministic_perf_res": np.array(self.deterministic_perf_curve, dtype=float).tolist(),
             "deterministic_cost_res": np.array(self.deterministic_cost_curve, dtype=float).tolist()

@@ -305,7 +305,7 @@ class RobotWorld(LQR):
             tau: float = 0.2,
             initial_state: np.ndarray = None,
             range_pos: np.ndarray = np.array([40, 50]),
-            range_vel: np.ndarray = np.array([-0.1, -0.1]),
+            range_vel: np.ndarray = np.array([-0.1, 0.1]),
             action_range = np.array([-10, 10])
     ):
         """

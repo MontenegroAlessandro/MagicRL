@@ -31,7 +31,7 @@ taskset -ca 0-11 python3 run_cost.py --dir /data1/montenegro_cesani/ --ite 3000 
 taskset -ca 0-11 python3 run_cost.py --dir /data1/montenegro_cesani/ --ite 3000 --alg cpg --risk tc --risk_param 0 --reg 0.0001 --var 0.075 --pol linear --env swimmer --horizon 100 --gamma 1 --lr 0.001 0.01 0.1 --lr_strategy adam --n_workers 12 --batch 100 --n_trials 5 --env_param 2 --c_bounds 5 --l_init 0 --eta_init 0
 
 # RobotWorld Experiments Server
-taskset -ca 0-11 python3 run_cost.py --dir /data1/montenegro_cesani/ --ite 10000 --alg cpg --risk tc --risk_param 0 --reg 0.0001 --var 0.05 --pol linear --env robot_world --horizon 400 --gamma 0.99 --lr 0.000005 0.001  0.01 --lr_strategy adam --n_workers 12 --batch 100 --n_trials 5 --env_param 2 --c_bounds 1000 --l_init 0 --eta_init 0 --clip 0 --deterministic 1
+taskset -ca 62-79 python3 run_cost.py --dir /data1/montenegro_cesani/ --ite 10000 --alg cpg --risk tc --risk_param 0 --reg 0.0001 --var 0.05 --pol linear --env robot_world --horizon 400 --gamma 0.99 --lr 0.000005 0.001  0.01 --lr_strategy adam --n_workers 12 --batch 100 --n_trials 1 --env_param 2 --c_bounds 1000 --l_init 0 --eta_init 0 --clip 0 --deterministic 1
 
 
 # GridWorld Experiments
