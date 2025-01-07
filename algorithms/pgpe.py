@@ -36,7 +36,8 @@ class PGPE:
             std_decay: float = 0,
             std_min: float = 1e-4,
             n_jobs_param: int = 1,
-            n_jobs_traj: int = 1
+            n_jobs_traj: int = 1,
+            save_det: int = 0
     ) -> None:
         """
         Args:
@@ -110,7 +111,9 @@ class PGPE:
         self.data_processor = data_processor
 
         self.directory = directory
-        check_directory_and_create(self.directory)
+        if self.directory is not None:
+            check_directory_and_create(self.directory)
+        self.save_det = save_det
 
         err_msg = "[PGPE] The lr_strategy is not valid."
         assert lr_strategy in ["constant", "adam"], err_msg
@@ -212,7 +215,7 @@ class PGPE:
             if self.verbose:
                 print(f"rho perf: {self.performance_idx}")
                 print(f"theta perf: {self.performance_idx_theta}")
-            if self.time % self.checkpoint_freq == 0:
+            if self.time % self.checkpoint_freq == 0 and self.directory is not None:
                 self.save_results()
 
             # std_decay
@@ -222,7 +225,8 @@ class PGPE:
                 self.rho[RhoElem.STD, :] = np.log(std)
 
         # Sample the deterministic curve
-        self.sample_deterministic_curve()
+        if self.save_det:
+            self.sample_deterministic_curve()
 
         return
 
@@ -366,11 +370,12 @@ class PGPE:
             print("-" * 30)
 
             # Save the best rho configuration
-            if self.directory != "":
-                file_name = self.directory + "/best_rho"
-            else:
-                file_name = "best_rho"
-            np.save(file_name, self.best_rho)
+            if self.directory is not None:
+                if self.directory != "":
+                    file_name = self.directory + "/best_rho"
+                else:
+                    file_name = "best_rho"
+                np.save(file_name, self.best_rho)
         return
 
     def update_best_theta(self, current_perf: float, params: np.array, *args, **kwargs) -> None:
@@ -390,12 +395,13 @@ class PGPE:
             print("*" * 30)
 
             # Save the best theta configuration
-            if self.directory != "":
-                file_name = self.directory + "/best_theta"
-                
-            else:
-                file_name = "best_theta"
-            np.save(file_name, self.best_theta)
+            if self.directory is not None:
+                if self.directory != "":
+                    file_name = self.directory + "/best_theta"
+                    
+                else:
+                    file_name = "best_theta"
+                np.save(file_name, self.best_theta)
         return
 
     def sample_deterministic_curve(self):

@@ -34,7 +34,8 @@ class PolicyGradient:
             verbose: bool = False,
             natural: bool = False,
             checkpoint_freq: int = 1,
-            n_jobs: int = 1
+            n_jobs: int = 1,
+            save_det: int = 0
     ) -> None:
         """
         Summary:
@@ -109,8 +110,10 @@ class PolicyGradient:
         assert data_processor is not None, err_msg
         self.data_processor = data_processor
 
-        check_directory_and_create(dir_name=directory)
         self.directory = directory
+        if self.directory is not None:
+            check_directory_and_create(dir_name=directory)
+        self.save_det = 0
 
         # Other class' parameters
         self.ite = ite
@@ -220,7 +223,7 @@ class PolicyGradient:
                 print("*" * 30)
 
             # Checkpoint
-            if self.time % self.checkpoint_freq == 0:
+            if self.time % self.checkpoint_freq == 0 and self.directory is not None:
                 self.save_results()
 
             # save theta history
@@ -231,7 +234,8 @@ class PolicyGradient:
 
             # reduce the exploration factor of the policy
             self.policy.reduce_exploration()
-        self.sample_deterministic_curve()
+        if(self.save_det):
+            self.sample_deterministic_curve()
         return
 
     def update_g(

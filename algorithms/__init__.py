@@ -8,3 +8,4 @@ from algorithms.policy_gradient import *
 from algorithms.samplers import *
 from algorithms.dpg import *
 from algorithms.policy_gradient_pd import *
+from algorithms.pes import *

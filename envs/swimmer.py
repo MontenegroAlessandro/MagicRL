@@ -29,7 +29,7 @@ class Swimmer(MujocoBase):
             render_mode = "human"
 
         self.gym_env = gym.make(
-            'Swimmer-v4',
+            'Swimmer-v5',
             render_mode=render_mode
         )
         self.action_bounds = [-1, 1]
