@@ -16,7 +16,9 @@ def pg_sampling_worker(
         params: np.ndarray = None,
         starting_state: np.ndarray = None,
         starting_action: np.ndarray = None,
-        pol_values: bool = False
+        pol_values: bool = False,
+        learn_std: bool = False,
+        e_parameterization_score = None
 ) -> list:
     """Worker collecting a single trajectory.
 
@@ -37,7 +39,7 @@ def pg_sampling_worker(
     Returns:
         list: [performance, reward, scores]
     """
-    trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp, pol_values=pol_values)
+    trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp, pol_values=pol_values, learn_std=learn_std, e_parameterization_score=e_parameterization_score)
     res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state, starting_action=starting_action)
     return res
 
@@ -199,7 +201,9 @@ class TrajectorySampler:
             self, env: BaseEnv = None,
             pol: BasePolicy = None,
             data_processor: BaseProcessor = None,
-            pol_values: bool = False
+            pol_values: bool = False,
+            e_parameterization_score = None,
+            learn_std: bool = False
     ) -> None:
         """
         Summary:
@@ -226,6 +230,10 @@ class TrajectorySampler:
         self.dp = data_processor
         
         self.pol_values = pol_values
+
+        # Learning the exploration
+        self.learn_std = learn_std
+        self.e_parameterization_score = e_parameterization_score
 
         return
 
@@ -259,6 +267,10 @@ class TrajectorySampler:
         costs = np.zeros(shape=(self.env.horizon, self.env.how_many_costs), dtype=np.float64)
         scores = np.zeros(shape=(self.env.horizon, self.pol.tot_params), dtype=np.float64)
         pol_values = 0
+
+        if self.learn_std:
+            e_scores = np.zeros(shape=(self.env.horizon, self.pol.dim_action), dtype=np.float64)
+
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
@@ -294,20 +306,35 @@ class TrajectorySampler:
             rewards[t] = rew
             scores[t, :] = score
 
+            # update stuff for learning the exploration
+            if self.learn_std:
+                e_score = self.pol.compute_score_exploration(
+                    state=features,
+                    action=a, 
+                    e_parameterization_score=self.e_parameterization_score
+                )
+                e_scores[t, :] = e_score
+
             if done:
                 if t < self.env.horizon - 1:
                     rewards[t+1:] = 0
                     scores[t+1:, :] = 0
                     if self.env.with_costs:
                         costs[t+1:, :] = 0
+                    if self.learn_std:
+                        e_scores[t+1,:] = 0
                 break
 
-        # if necessary save the info of the costs
+        # if necessary save the info of the costs or the exploration scores
         info = None
         if self.env.with_costs:
             info = dict(
                 cost_perf=copy.deepcopy(cost_perf),
                 costs=copy.deepcopy(costs),
                 pol_values=copy.deepcopy(pol_values)
+            )
+        if self.learn_std:
+            info = dict(
+                e_scores=copy.deepcopy(e_scores)
             )
         return [perf, rewards, scores, info]

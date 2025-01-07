@@ -23,6 +23,12 @@ class TrajectoryResults:
     ScoreList = 2
     CostInfo = 3
 
+class TrajectoryResults2:
+    PERF = 0
+    RewList = 1
+    ScoreList = 2
+    Info = 3
+
 
 class ParamSamplerResults:
     THETA = 0

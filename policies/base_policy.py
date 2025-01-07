@@ -22,6 +22,9 @@ class BasePolicy(ABC):
     @abstractmethod
     def compute_score(self, state, action):
         pass
+
+    def compute_score_exploration(self, state, action):
+        pass
     
     @abstractmethod
     def diff(self, state):

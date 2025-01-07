@@ -1,12 +1,31 @@
 # Libraries
 import argparse
-from algorithms import PGPE, PolicyGradient, DeterministicPG, CPGPE, PES
+from algorithms import PGPE, PolicyGradient, DeterministicPG, CPGPE, PES, PEL
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
 from art import *
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+parser.add_argument(
+    "--learn",
+    help="Number of phases.",
+    type=int,
+    default=1
+)
+parser.add_argument(
+    "--sigma_lr",
+    help="Number of phases.",
+    type=float,
+    default=0.01
+)
+parser.add_argument(
+    "--sigma_lr_strategy",
+    help="Number of phases.",
+    type=str,
+    choices=["constant", "adam"],
+    default="adam"
+)
 parser.add_argument(
     "--phases",
     help="Number of phases.",
@@ -157,7 +176,13 @@ base_dir = args.dir
 
 for i in range(args.n_trials):
     np.random.seed(i)
-    dir_name = f"{args.alg}_{args.ite}_{args.env}_{args.horizon}_{args.lr_strategy}_"
+    if args.learn == 1:
+        dir_name = "pel_"
+    else:
+        dir_name = "pes_"
+    dir_name += f"phases_{args.phases}_lrsigma_{args.sigma_lr_strategy}_"
+    dir_name += f"{str(args.sigma_lr).replace('.', '')}_"
+    dir_name += f"{args.alg}_{args.ite}_{args.env}_{args.horizon}_{args.lr_strategy}_"
     dir_name += f"{str(args.lr).replace('.', '')}_{args.pol}_batch_{args.batch}_"
     if args.clip:
         dir_name += "clip_"
@@ -437,15 +462,36 @@ for i in range(args.n_trials):
     else:
         raise ValueError("Invalid algorithm name.")
     
-    alg = PES(
-        phases=args.phases,
-        initial_sigma=args.sigma_init,
-        sigma_exponent=args.sigma_exponent,
-        pg_sub_name=args.alg.upper(),
-        pg_sub_dict=copy.deepcopy(alg_parameters),
-        directory=dir_name,
-        checkpoint_freq=1
-    )
+    dim_exploration = 0
+    if args.alg == "pgpe":
+        dim_explpration = tot_params
+    else:
+        dim_exploration = a_dim
+    
+    if args.learn == 0:
+        alg = PES(
+            phases=args.phases,
+            initial_sigma=args.sigma_init,
+            sigma_exponent=args.sigma_exponent,
+            pg_sub_name=args.alg.upper(),
+            pg_sub_dict=copy.deepcopy(alg_parameters),
+            directory=dir_name,
+            checkpoint_freq=1,
+            dim=dim_exploration
+        )
+    else:
+        alg = PEL(
+            lr_sigma=args.sigma_lr,
+            lr_sigma_strategy=args.sigma_lr_strategy,
+            phases=args.phases,
+            initial_sigma=args.sigma_init,
+            sigma_exponent=args.sigma_exponent,
+            pg_sub_name=args.alg.upper(),
+            pg_sub_dict=copy.deepcopy(alg_parameters),
+            directory=dir_name,
+            checkpoint_freq=1,
+            dim=dim_exploration
+        )
 
     print(text2art(f"== {args.alg} TEST on {args.env} =="))
     print(text2art(f"Trial {i}"))
@@ -454,6 +500,6 @@ for i in range(args.n_trials):
     alg.learn()
     alg.save_results()
     if args.alg != "dpg":
-        print(alg.performance_idx)
+        print(alg.performances)
     if args.alg == "cpgpe":
         print(alg.cost_idx)

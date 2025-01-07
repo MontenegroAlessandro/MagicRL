@@ -389,10 +389,10 @@ class PGPE:
         if current_perf > self.best_performance_theta:
             self.best_theta = params
             self.best_performance_theta = current_perf
-            print("*" * 30)
+            """print("*" * 30)
             print(f"New best THETA: {self.best_theta}")
             print(f"New best PERFORMANCE: {self.best_performance_theta}")
-            print("*" * 30)
+            print("*" * 30)"""
 
             # Save the best theta configuration
             if self.directory is not None:
