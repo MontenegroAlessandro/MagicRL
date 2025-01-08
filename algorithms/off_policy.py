@@ -150,8 +150,8 @@ class OffPolicyGradient:
 
     def learn(self) -> None:
         """Learning function"""
-        action_queue = collections.deque(maxlen=self.window_size)
-        state_queue = collections.deque(maxlen=self.window_size)
+        action_queue = collections.deque(maxlen=self.window_length)
+        state_queue = collections.deque(maxlen=self.window_length)
         thetas_queue = collections.deque(maxlen=self.window_length)
 
         for i in tqdm(range(self.ite)):
@@ -189,13 +189,22 @@ class OffPolicyGradient:
                                     dtype=np.float64)
             reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float64)
 
-            
+            action_batch = []
+            state_batch = []
+
+            #for each trajectory in the batch, update the action, state, reward, and score  
             for j in range(self.batch_size):
                 perf_vector[j] = res[j][OffPolicyTrajectoryResults.PERF]
                 reward_vector[j, :] = res[j][OffPolicyTrajectoryResults.RewList]
                 score_vector[j, :, :] = res[j][OffPolicyTrajectoryResults.ScoreList]
-                action_queue.append(res[j][OffPolicyTrajectoryResults.ActList])
-                state_queue.append(res[j][OffPolicyTrajectoryResults.StateList])
+
+                #append the actions and states corresponding to the trajectory
+                action_batch.append(res[j][OffPolicyTrajectoryResults.ActList])
+                state_batch.append(res[j][OffPolicyTrajectoryResults.StateList])
+
+            #append the batch of trajectories to the queues
+            action_queue.append(action_batch)
+            state_queue.append(state_batch)
 
             self.performance_idx[i] = np.mean(perf_vector)
             # Update best theta
@@ -282,8 +291,8 @@ class OffPolicyGradient:
             axis=0)
         return estimated_gradient
     
-    def calculate_importance_sampling_ratio(self, action_trajectory: collections.deque,
-                                            state_trajectory: collections.deque, thetas_queue: collections.deque) -> np.array:
+    def calculate_importance_sampling_ratio(self, action_queue: collections.deque,
+                                            state_queue: collections.deque, thetas_queue: collections.deque) -> np.array:
         """
         Summary:
             Calculate the importance sampling ratio.
@@ -294,14 +303,27 @@ class OffPolicyGradient:
         Returns:
             np.array: the importance sampling ratio.
         """
-        # initialize matrix of size num trajectories x batch updates in the window
-        pi_thetas = np.zeros((self.window_length, self.window_size))
+        # initialize product matrix where row i contains the probability product under parameter theta_i
+        products = np.zeros((self.window_length, self.window_size, self.batch_size), dtype=np.float64)
 
+        #for each batch in the window, compute the product of the probabilities
+        #products[i, j] contains the products of the probabilities under parameter theta_i for batch j
         for i in range(self.window_length):
-            self.policy.set_parameters(thetas=thetas_queue[i])
-            pi_thetas[i, :] = self.policy.compute_pi(state_trajectory[i], action_trajectory[i])
+            for j in range(self.batch_size):
+                self.policy.set_parameters(thetas=thetas_queue[i])
+                products[i, j, :] = self.policy.compute_products(state_queue[j], action_queue[j])
 
-        
+        #compute the importance sampling ratio
+        for batch_idx in range(self.window_length):
+            for trajectory_idx in range(self.batch_size):
+
+                #numerator is product of probabilities using the last parameter
+                num = products[-1, batch_idx, trajectory_idx]
+                #denomitator is the sum of the probability product of the trajectoryunder all parameters
+                denom = np.sum(products[theta_idx, batch_idx, trajectory_idx] for theta_idx in range(self.window_length))
+
+                
+
         return np.array([])
     
     def update_g_off_policy(self, reward_trajectory: np.array,

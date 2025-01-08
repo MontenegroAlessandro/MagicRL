@@ -66,7 +66,7 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         return self.parameters
     
 
-        # TODO: check if this is correct
+    # TODO: check if this is correct
     def compute_products(self, state_queue, action_queue):
         # Convert inputs to numpy arrays if needed
         state_queue = np.array(state_queue)
