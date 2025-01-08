@@ -99,10 +99,11 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         action_deviation = np.power(action - (self.parameters @ state), 2)
         if self.multi_linear:
             # state = np.tile(state, self.dim_action).reshape((self.dim_action, self.dim_state))
-            action_deviation = action_deviation[:, np.newaxis]
+            action_deviation = action_deviation[:, np.newaxis] - (self.std_dev[:,np.newaxis] ** 2)
             scores = ((action_deviation) / (self.std_dev[:,np.newaxis] ** 3))
             scores = np.ravel(scores) * e_parameterization_score
         else:
+            action_deviation = action_deviation - (self.std_dev ** 2)
             scores = ((action_deviation) / (self.std_dev ** 3)) * e_parameterization_score
         if self.multi_linear:
             scores = np.ravel(scores)
