@@ -31,7 +31,7 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         self.parameters = parameters
 
         err_msg = "[GaussPolicy] standard deviation is negative!"
-        assert std_dev > 0, err_msg
+        # assert std_dev > 0, err_msg
         self.std_dev = std_dev
 
         # Additional attributes

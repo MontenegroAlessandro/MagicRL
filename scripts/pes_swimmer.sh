@@ -1,23 +1,22 @@
 cd ..
 python run_phases.py \
-  --learn 1 \
-  --sigma_lr 0.001 \
+  --learn 0 \
+  --sigma_lr 0.01 \
   --sigma_lr_strategy adam \
-  --phases 100 \
+  --phases 50 \
   --sigma_exponent 2.0 \
   --sigma_init 1.0 \
   --dir /Users/ale/Desktop/results/ \
   --ite 100 \
-  --alg pg \
+  --alg pgpe \
   --var 1.0 \
   --pol linear \
   --env swimmer \
-  --costs 0 \
   --horizon 100 \
   --gamma 1.0 \
-  --lr 0.0001 \
+  --lr 0.01 \
   --lr_strategy adam \
-  --n_workers 4 \
+  --n_workers 1 \
   --batch 100 \
   --clip 0 \
   --n_trials 1 

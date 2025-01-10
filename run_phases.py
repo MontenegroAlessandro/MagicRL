@@ -370,7 +370,7 @@ for i in range(args.n_trials):
             n_jobs_param=args.n_workers,
             n_jobs_traj=1
         )
-        alg = PGPE(**alg_parameters)
+        # alg = PGPE(**alg_parameters)
     elif args.alg == "cpgpe":
         if args.var == 1:
             var_term = 1.001
@@ -458,13 +458,13 @@ for i in range(args.n_trials):
             env_seed=i,
             update_b_pol=True
         )
-        alg = DeterministicPG(**alg_parameters)
+        # alg = DeterministicPG(**alg_parameters)
     else:
         raise ValueError("Invalid algorithm name.")
     
     dim_exploration = 0
     if args.alg == "pgpe":
-        dim_explpration = tot_params
+        dim_exploration = tot_params
     else:
         dim_exploration = a_dim
     

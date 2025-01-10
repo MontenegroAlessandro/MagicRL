@@ -45,20 +45,22 @@ class PES:
         # Exploration Scheduler
         err_msg = "[PES] Invalid initial exploration."
         assert initial_sigma > 0, err_msg
-        self.initial_sigma = initial_sigma
+        # self.initial_sigma = initial_sigma
 
         err_msg = "[PES] Invalid exploration exponent."
         assert sigma_exponent > 0, err_msg
         self.sigma_exponent = sigma_exponent
 
         # Dimension
-        err_msg = "[PES] Invalid dimension."
+        err_msg = f"[PES] Invalid dimension: {dim}"
         assert dim > 0, err_msg
         self.dim = dim
 
         # Initialization of the exploration
         self.current_phase = 0
-        self.sigma = 0
+        # self.sigma = 0
+        self.initial_sigma = initial_sigma * np.ones(self.dim)
+        self.sigma = np.zeros(self.dim)
         self._update_sigma()
 
         # PGPE subroutine initialization
@@ -82,9 +84,11 @@ class PES:
             check_directory_and_create(self.directory)
 
         # Saving stuff
+        self.ite_index = 0
+        self.sub_ite = pg_sub_dict["ite"]
         self.sigmas = np.zeros((self.phases, dim))
         self.sigmas[0] = self.sigma
-        self.performances = np.zeros(self.phases)
+        self.performances = np.zeros(self.phases * self.sub_ite)
         self.last_param = None
         self.last_rate = last_rate
     
@@ -97,8 +101,10 @@ class PES:
             self.pg_sub.learn()
 
             # Save Last Performance
-            num_elem = int(self.last_rate * len(self.pg_sub.performance_idx))
-            self.performances[i] = np.mean(self.pg_sub.performance_idx[-num_elem:])
+            # num_elem = int(self.last_rate * len(self.pg_sub.performance_idx))
+            # self.performances[i] = np.mean(self.pg_sub.performance_idx[-num_elem:])
+            self.performances[self.ite_index : self.ite_index + self.sub_ite] = copy.deepcopy(self.pg_sub.performance_idx)
+            self.ite_index += self.sub_ite
 
             # Save Last Parameters
             self._inject_parameters()
@@ -106,7 +112,7 @@ class PES:
             # Log results
             print(f"\nPhase {i}")
             print(f"Exploration {self.sigma}")
-            print(f"Performance {self.performances[i]}")
+            print(f"Performance {self.performances[self.ite_index]}")
 
             # Update Sigma
             self.current_phase += 1
@@ -143,10 +149,11 @@ class PES:
             # self.pg_sub.rho[RhoElem.STD] = self.sigma
             self.pg_sub.rho[RhoElem.STD] = np.log(self.sigma)
         else:
-            if self.current_phase == 0:
-                self.pg_sub.policy.std_dev = self.sigma * np.ones(self.dim)
-            else:
-                self.pg_sub.policy.std_dev = self.sigma
+            self.pg_sub.policy.std_dev = self.sigma
+            # if self.current_phase == 0:
+            #     self.pg_sub.policy.std_dev = self.sigma * np.ones(self.dim)
+            # else:
+            #     self.pg_sub.policy.std_dev = self.sigma
     
     def save_results(self) -> None:
         # Create the dictionary with the useful info

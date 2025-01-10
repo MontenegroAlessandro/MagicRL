@@ -225,11 +225,12 @@ for i in range(args.n_trials):
         )
     elif args.pol == "gaussian":
         tot_params = s_dim * a_dim
+        var = np.sqrt(args.var * np.ones(a_dim))
         pol = LinearGaussianPolicy(
             parameters=np.zeros(tot_params),
             dim_state=s_dim,
             dim_action=a_dim,
-            std_dev=np.sqrt(args.var),
+            std_dev=var,#np.sqrt(args.var),
             std_decay=0,
             std_min=1e-5,
             multi_linear=MULTI_LINEAR
