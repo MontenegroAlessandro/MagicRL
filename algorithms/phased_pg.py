@@ -112,7 +112,7 @@ class PES:
             # Log results
             print(f"\nPhase {i}")
             print(f"Exploration {self.sigma}")
-            print(f"Performance {self.performances[self.ite_index]}")
+            print(f"Performance {self.performances[self.ite_index-1]}")
 
             # Update Sigma
             self.current_phase += 1
@@ -231,8 +231,10 @@ class PEL(PES):
             self.pg_sub.learn()
 
             # Save Last Performance
-            num_elem = int(self.last_rate * len(self.pg_sub.performance_idx))
-            self.performances[i] = np.mean(self.pg_sub.performance_idx[-num_elem:])
+            # num_elem = int(self.last_rate * len(self.pg_sub.performance_idx))
+            # self.performances[i] = np.mean(self.pg_sub.performance_idx[-num_elem:])
+            self.performances[self.ite_index : self.ite_index + self.sub_ite] = copy.deepcopy(self.pg_sub.performance_idx)
+            self.ite_index += self.sub_ite
 
             # Update Exploration Parameterization
             self._extract_parameters()
@@ -248,7 +250,7 @@ class PEL(PES):
             # Log results
             print(f"\nPhase {i}")
             print(f"Exploration {self.sigma}")
-            print(f"Performance {self.performances[i]}")
+            print(f"Performance {self.performances[self.ite_index-1]}")
 
             # Update Sigma
             self.current_phase += 1
