@@ -27,6 +27,12 @@ parser.add_argument(
     choices=["pgpe", "pg", "dpg", "cpgpe", "off_pg"]
 )
 parser.add_argument(
+    "--window_length",
+    help="The window length for off-policy gradient.",
+    type=int,
+    default=5
+)
+parser.add_argument(
     "--var",
     help="The exploration amount.",
     type=float,
@@ -436,7 +442,7 @@ for i in range(args.n_trials):
             natural=False,
             checkpoint_freq=100,
             n_jobs=args.n_workers,
-            window_length=20
+            window_length=args.window_length
         )
         alg = OffPolicyGradient(**alg_parameters)
     else:

@@ -36,7 +36,7 @@ class OffPolicyGradient:
             natural: bool = False,
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
-            window_length: int = 20
+            window_length: int = 5
     ) -> None:
         """
         Summary:
@@ -123,7 +123,8 @@ class OffPolicyGradient:
         self.parallel_computation = bool(self.n_jobs != 1)
         self.dim_action = self.env.action_dim
         self.dim_state = self.env.state_dim
-        self.window_length = window_length
+        self.window_length = np.min([window_length, self.ite])
+        self.window_size = self.window_length * self.batch_size
 
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
@@ -139,9 +140,6 @@ class OffPolicyGradient:
         # init the theta history
         self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
 
-        # init the actions and states history
-        self.window_size = max(self.ite * self.batch_size, window_length * self.batch_size)
-
         # create the adam optimizers
         self.adam_optimizer = None
         if self.lr_strategy == "adam":
@@ -150,9 +148,10 @@ class OffPolicyGradient:
 
     def learn(self) -> None:
         """Learning function"""
-        action_queue = collections.deque(maxlen=self.window_length)
-        state_queue = collections.deque(maxlen=self.window_length)
-        thetas_queue = collections.deque(maxlen=self.window_length)
+        action_queue = collections.deque(maxlen=int(self.window_size))
+        state_queue = collections.deque(maxlen=int(self.window_size))
+        thetas_queue = collections.deque(maxlen=int(self.window_length))
+        reward_queue = collections.deque(maxlen=int(self.window_size))
 
         for i in tqdm(range(self.ite)):
             thetas_queue.append(self.thetas)
@@ -189,9 +188,6 @@ class OffPolicyGradient:
                                     dtype=np.float64)
             reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float64)
 
-            action_batch = []
-            state_batch = []
-
             #for each trajectory in the batch, update the action, state, reward, and score  
             for j in range(self.batch_size):
                 perf_vector[j] = res[j][OffPolicyTrajectoryResults.PERF]
@@ -199,34 +195,21 @@ class OffPolicyGradient:
                 score_vector[j, :, :] = res[j][OffPolicyTrajectoryResults.ScoreList]
 
                 #append the actions and states corresponding to the trajectory
-                action_batch.append(res[j][OffPolicyTrajectoryResults.ActList])
-                state_batch.append(res[j][OffPolicyTrajectoryResults.StateList])
+                action_queue.append(res[j][OffPolicyTrajectoryResults.ActList])
+                state_queue.append(res[j][OffPolicyTrajectoryResults.StateList])
+                reward_queue.append(res[j][OffPolicyTrajectoryResults.RewList])
 
             #append the batch of trajectories to the queues
-            action_queue.append(action_batch)
-            state_queue.append(state_batch)
 
             self.performance_idx[i] = np.mean(perf_vector)
             # Update best theta
             self.update_best_theta(current_perf=self.performance_idx[i])
 
             # Compute the estimated gradient
-            if self.estimator_type == "REINFORCE":
-                estimated_gradient = np.mean(
-                    perf_vector[:, np.newaxis] * np.sum(score_vector, axis=1), axis=0)
-            elif self.estimator_type == "GPOMDP":
-                estimated_gradient = self.update_g(
-                    reward_trajectory=reward_vector, score_trajectory=score_vector
-                )
-            elif self.estimator_type == "GPOMDP_off_policy":
-                estimated_gradient = self.update_g_off_policy(
-                    reward_trajectory=reward_vector, score_trajectory=score_vector,
-                    action_trajectory=action_queue, state_trajectory=state_queue,
-                    thetas_trajectory=thetas_queue
-                )
-            else:
-                err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
-                raise NotImplementedError(err_msg)
+            estimated_gradient = self.calculate_g_off_policy(
+                action_queue=action_queue, state_queue=state_queue,
+                thetas_queue=thetas_queue, reward_queue=reward_queue
+            )
 
             # Update parameters
             if self.lr_strategy == "constant":
@@ -264,7 +247,7 @@ class OffPolicyGradient:
         self.sample_deterministic_curve()
         return
 
-    def update_g(
+    def calculate_g(
             self, reward_trajectory: np.array,
             score_trajectory: np.array
     ) -> np.array:
@@ -283,6 +266,12 @@ class OffPolicyGradient:
         """
         gamma = self.env.gamma
         horizon = self.env.horizon
+
+        # Reshape reward_trajectory if it's 1D
+        if reward_trajectory.ndim == 1:
+            reward_trajectory = reward_trajectory[np.newaxis, :]
+            score_trajectory = score_trajectory[np.newaxis, :, :]
+        
         gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
         rolling_scores = np.cumsum(score_trajectory, axis=1)
         reward_trajectory = reward_trajectory[:, :, np.newaxis] * rolling_scores
@@ -291,8 +280,20 @@ class OffPolicyGradient:
             axis=0)
         return estimated_gradient
     
-    def calculate_importance_sampling_ratio(self, action_queue: collections.deque,
-                                            state_queue: collections.deque, thetas_queue: collections.deque) -> np.array:
+    def compute_all_trajectory_products(self, state_queue, action_queue):
+        products = []
+        for state_sequence, action_sequence in zip(state_queue, action_queue):
+            product = np.prod([self.policy.compute_pi(np.array(s), np.array(a)) for s, a in zip(state_sequence, action_sequence)])
+            products.append(product)
+        return np.array(products)
+
+    def compute_single_trajectory_scores(self, state_sequence, action_sequence):
+        return np.array([self.policy.compute_score(np.array(s), np.array(a)) for s, a in zip(state_sequence, action_sequence)])
+    
+    def calculate_g_off_policy(self, action_queue: collections.deque,
+                                            state_queue: collections.deque, 
+                                            thetas_queue: collections.deque, 
+                                            reward_queue: collections.deque) -> np.array:
         """
         Summary:
             Calculate the importance sampling ratio.
@@ -303,39 +304,37 @@ class OffPolicyGradient:
         Returns:
             np.array: the importance sampling ratio.
         """
+        num_trajectories = len(state_queue)
+        num_updates = len(thetas_queue)
         # initialize product matrix where row i contains the probability product under parameter theta_i
-        products = np.zeros((self.window_length, self.window_size, self.batch_size), dtype=np.float64)
+        products = np.zeros((num_updates, num_trajectories), dtype=np.float64)
 
         #for each batch in the window, compute the product of the probabilities
-        #products[i, j] contains the products of the probabilities under parameter theta_i for batch j
-        for i in range(self.window_length):
-            for j in range(self.batch_size):
-                self.policy.set_parameters(thetas=thetas_queue[i])
-                products[i, j, :] = self.policy.compute_products(state_queue[j], action_queue[j])
+        #products i contains the products of the probabilities under parameter theta_i for all trajectories
+        for i in range(num_updates):
+            self.policy.set_parameters(thetas=thetas_queue[i])
+            products[i, :] = self.compute_all_trajectory_products(state_queue, action_queue)
 
-        #compute the importance sampling ratio
-        for batch_idx in range(self.window_length):
-            for trajectory_idx in range(self.batch_size):
+        #compute the gradient update
+        estimated_gradient = 0
+        for trajectory_idx in range(num_trajectories):
+            #numerator is product of state/action probabilities using the target distribution
+            num = products[-1, trajectory_idx]
 
-                #numerator is product of probabilities using the last parameter
-                num = products[-1, batch_idx, trajectory_idx]
-                #denomitator is the sum of the probability product of the trajectoryunder all parameters
-                denom = np.sum(products[theta_idx, batch_idx, trajectory_idx] for theta_idx in range(self.window_length))
+            #denomitator is the weigthed sum of the probability product of the trajectory probabilities of all behavioural distributions
+            denom = np.sum(products[:, trajectory_idx]) * self.batch_size
 
-                
+            #compute the importance sampling ratio
+            importance_sampling_ratio = num / denom
 
-        return np.array([])
-    
-    def update_g_off_policy(self, reward_trajectory: np.array,
-                            score_trajectory: np.array,
-                            action_trajectory: collections.deque,
-                            state_trajectory: collections.deque) -> np.array:
-        """
-        Summary:
-            Update the gradient estimate accoring to balance off-policy.
-        """
-        importance_sampling_ratio = self.calculate_importance_sampling_ratio(action_trajectory, state_trajectory)
-        return np.array([])
+            #compute g, using scores of the past trajectory with respect to the target distribution parameters
+            score_trajectory = self.compute_single_trajectory_scores(state_queue[trajectory_idx], action_queue[trajectory_idx])
+            g = self.calculate_g(reward_trajectory=reward_queue[trajectory_idx], score_trajectory=score_trajectory)
+
+            estimated_gradient += importance_sampling_ratio * g
+
+        return estimated_gradient
+
 
     def update_best_theta(self, current_perf: np.float64, *args, **kwargs) -> None:
         """

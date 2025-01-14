@@ -65,33 +65,6 @@ class LinearGaussianPolicy(BasePolicy, ABC):
     def get_parameters(self):
         return self.parameters
     
-
-    # TODO: check if this is correct
-    def compute_products(self, state_queue, action_queue):
-        # Convert inputs to numpy arrays if needed
-        state_queue = np.array(state_queue)
-        action_queue = np.array(action_queue)
-
-        products = []
-        #for each sequence of actions and states, compute the product of the probabilities
-        for state_sequence, action_sequence in zip(state_queue, action_queue):
-            product = self._compute_sequence_product(np.array(state_sequence), np.array(action_sequence))
-            products.append(product)
-
-        return np.array(products)
-
-    def compute_sequence_product(self, state_sequence, action_sequence):
-        # Handle both single inputs and batches
-        if state_sequence.ndim == 1:
-            mean = np.array(self.parameters @ state_sequence, dtype=np.float64)
-        else:
-            mean = np.array(state_sequence @ self.parameters.T, dtype=np.float64)
-        
-        # Compute Gaussian probability density
-        fact = 1 / (np.sqrt(2 * np.pi) * self.std_dev)
-        probs = fact * np.exp(-((action_sequence - mean) ** 2) / (2 * (self.std_dev ** 2)))
-        
-        return np.prod(probs)
     
     def compute_pi(self, state, action):
 
