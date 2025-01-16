@@ -15,21 +15,39 @@ import copy
 import tempfile
 import shutil
 import argparse
+import pickle
 
-def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, ite=100, window_lengths=[3, 5, 10]):
+def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, ite=100, window_lengths=[3, 5, 10], checkpoint_dir='checkpoints'):
     """
     Run algorithms multiple times and return their performance curves.
-    If off_pg is selected, runs multiple window lengths.
+    Includes checkpoint system to resume from crashes.
     """
-    # Initialize results dictionary
-    results = {alg1: []}
+    # Create checkpoint directory if it doesn't exist
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    checkpoint_file = os.path.join(checkpoint_dir, f'{alg1}_vs_{alg2}_checkpoint.pkl')
     
-    # If second algorithm is off_pg, create entries for each window length
-    if alg2 == 'off_pg':
-        for w in window_lengths:
-            results[f'off_pg_{w}'] = []
-    else:
-        results[alg2] = []
+    # Try to load existing results from checkpoint
+    results = None
+    if os.path.exists(checkpoint_file):
+        try:
+            with open(checkpoint_file, 'rb') as f:
+                checkpoint_data = pickle.load(f)
+                results = checkpoint_data['results']
+                start_trial = checkpoint_data['last_trial'] + 1
+                print(f"Resuming from trial {start_trial}")
+        except Exception as e:
+            print(f"Error loading checkpoint: {e}")
+            start_trial = 0
+    
+    # Initialize results if no checkpoint was loaded
+    if results is None:
+        start_trial = 0
+        results = {alg1: []}
+        if alg2 == 'off_pg':
+            for w in window_lengths:
+                results[f'off_pg_{w}'] = []
+        else:
+            results[alg2] = []
     
     # Create temporary directory for results
     temp_dir = tempfile.mkdtemp()
@@ -43,51 +61,28 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, ite=100, window_lengths
         batch_size = 100
         lr = 1e-3
         
-        for trial in range(n_trials):
+        for trial in range(start_trial, n_trials):
             print(f"Running trial {trial + 1}/{n_trials}")
             
             # Create trial directory
             trial_dir = os.path.join(temp_dir, f"trial_{trial}")
             os.makedirs(trial_dir, exist_ok=True)
             
-            # Initialize policy
-            pol = LinearGaussianPolicy(
-                parameters=np.zeros(tot_params),
-                dim_state=s_dim,
-                dim_action=a_dim,
-                std_dev=np.sqrt(1),
-                std_decay=0,
-                std_min=1e-5,
-                multi_linear=True
-            )
-
-            # Run first algorithm
-            if alg1 == 'pg':
-                alg = PolicyGradient(
-                    lr=[lr],
-                    lr_strategy="adam",
-                    estimator_type="GPOMDP",
-                    initial_theta=np.zeros(tot_params),
-                    ite=ite,
-                    batch_size=batch_size,
-                    env=copy.deepcopy(env),
-                    policy=copy.deepcopy(pol),
-                    data_processor=IdentityDataProcessor(),
-                    directory=os.path.join(trial_dir, alg1),
-                    verbose=False,
-                    natural=False,
-                    checkpoint_freq=100,
-                    n_jobs=1
+            try:
+                # Initialize policy
+                pol = LinearGaussianPolicy(
+                    parameters=np.zeros(tot_params),
+                    dim_state=s_dim,
+                    dim_action=a_dim,
+                    std_dev=np.sqrt(1),
+                    std_decay=0,
+                    std_min=1e-5,
+                    multi_linear=True
                 )
-            # Add other algorithm options here...
-            
-            alg.learn()
-            results[alg1].append(alg.performance_idx)
-            
-            # Run second algorithm
-            if alg2 == 'off_pg':
-                for window_length in window_lengths:
-                    alg = OffPolicyGradient(
+
+                # Run first algorithm
+                if alg1 == 'pg':
+                    alg = PolicyGradient(
                         lr=[lr],
                         lr_strategy="adam",
                         estimator_type="GPOMDP",
@@ -97,21 +92,68 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, ite=100, window_lengths
                         env=copy.deepcopy(env),
                         policy=copy.deepcopy(pol),
                         data_processor=IdentityDataProcessor(),
-                        directory=os.path.join(trial_dir, f"off_pg_{window_length}"),
+                        directory=os.path.join(trial_dir, alg1),
                         verbose=False,
                         natural=False,
                         checkpoint_freq=100,
-                        n_jobs=1,
-                        window_length=window_length
+                        n_jobs=1
                     )
-                    alg.learn()
-                    results[f'off_pg_{window_length}'].append(alg.performance_idx)
-            else:
-                # Add handling for other algorithm types here
-                pass
+                # Add other algorithm options here...
+                
+                alg.learn()
+                results[alg1].append(alg.performance_idx)
+                
+                # Run second algorithm
+                if alg2 == 'off_pg':
+                    for window_length in window_lengths:
+                        alg = OffPolicyGradient(
+                            lr=[lr],
+                            lr_strategy="adam",
+                            estimator_type="GPOMDP",
+                            initial_theta=np.zeros(tot_params),
+                            ite=ite,
+                            batch_size=batch_size,
+                            env=copy.deepcopy(env),
+                            policy=copy.deepcopy(pol),
+                            data_processor=IdentityDataProcessor(),
+                            directory=os.path.join(trial_dir, f"off_pg_{window_length}"),
+                            verbose=False,
+                            natural=False,
+                            checkpoint_freq=100,
+                            n_jobs=1,
+                            window_length=window_length
+                        )
+                        alg.learn()
+                        results[f'off_pg_{window_length}'].append(alg.performance_idx)
+                else:
+                    # Add handling for other algorithm types here
+                    pass
+                
+                # Save checkpoint after each successful trial
+                checkpoint_data = {
+                    'results': results,
+                    'last_trial': trial
+                }
+                with open(checkpoint_file, 'wb') as f:
+                    pickle.dump(checkpoint_data, f)
+                    
+            except Exception as e:
+                print(f"Error in trial {trial}: {e}")
+                # Save checkpoint before raising the exception
+                checkpoint_data = {
+                    'results': results,
+                    'last_trial': trial - 1
+                }
+                with open(checkpoint_file, 'wb') as f:
+                    pickle.dump(checkpoint_data, f)
+                raise
             
     finally:
         shutil.rmtree(temp_dir)
+        
+    # Clean up checkpoint file after successful completion
+    if os.path.exists(checkpoint_file):
+        os.remove(checkpoint_file)
         
     return results
 
@@ -180,6 +222,8 @@ def main():
     parser.add_argument('--ite', type=int, default=100, help='Number of iterations')
     parser.add_argument('--window_lengths', type=int, nargs='+', default=[3, 5, 10], 
                       help='Window lengths for off-policy (multiple values allowed)')
+    parser.add_argument('--checkpoint_dir', type=str, default='checkpoints',
+                      help='Directory to store checkpoints')
     args = parser.parse_args()
     
     results = run_experiment(
@@ -187,7 +231,8 @@ def main():
         alg2=args.alg2,
         n_trials=args.n_trials,
         ite=args.ite,
-        window_lengths=args.window_lengths
+        window_lengths=args.window_lengths,
+        checkpoint_dir=args.checkpoint_dir
     )
     
     print("\nSaving comparison plot...")
