@@ -184,15 +184,10 @@ class OffPolicyGradient:
 
             # Update performance
             perf_vector = np.zeros(self.batch_size, dtype=np.float64)
-            score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim),
-                                    dtype=np.float64)
-            reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float64)
 
             #for each trajectory in the batch, update the action, state, reward, and score  
             for j in range(self.batch_size):
                 perf_vector[j] = res[j][OffPolicyTrajectoryResults.PERF]
-                reward_vector[j, :] = res[j][OffPolicyTrajectoryResults.RewList]
-                score_vector[j, :, :] = res[j][OffPolicyTrajectoryResults.ScoreList]
 
                 #append the actions and states corresponding to the trajectory
                 action_queue.append(res[j][OffPolicyTrajectoryResults.ActList])
