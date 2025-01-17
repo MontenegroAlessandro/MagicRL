@@ -8,7 +8,7 @@ from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
 from algorithms.utils import OffPolicyTrajectoryResults, check_directory_and_create, LearnRates
-from algorithms.samplers import TrajectorySampler, pg_sampling_worker
+from algorithms.samplers import TrajectorySampler, off_pg_sampling_worker
 from joblib import Parallel, delayed
 import json
 import io
@@ -24,7 +24,6 @@ class OffPolicyGradient:
     def __init__(
             self, lr: np.array = None,
             lr_strategy: str = "constant",
-            estimator_type: str = "REINFORCE",
             initial_theta: np.array = None,
             ite: int = 100,
             batch_size: int = 1,
@@ -89,9 +88,11 @@ class OffPolicyGradient:
         assert lr_strategy in ["constant", "adam"], err_msg
         self.lr_strategy = lr_strategy
 
+        '''
         err_msg = "[PG] estimator_type not valid!"
         assert estimator_type in ["REINFORCE", "GPOMDP"], err_msg
         self.estimator_type = estimator_type
+        '''
 
         err_msg = "[PG] initial_theta has not been specified!"
         assert initial_theta is not None, err_msg
@@ -169,7 +170,7 @@ class OffPolicyGradient:
                 )
 
                 # build the parallel functions
-                delayed_functions = delayed(pg_sampling_worker)
+                delayed_functions = delayed(off_pg_sampling_worker)
 
                 # parallel computation
                 res = Parallel(n_jobs=self.n_jobs, backend="loky")(
@@ -275,11 +276,18 @@ class OffPolicyGradient:
             axis=0)
         return estimated_gradient
     
+    def compute_trajectory_product(self, state_sequence, action_sequence):
+        """Helper function to compute product for a single trajectory"""
+        return np.prod([self.policy.compute_pi(np.array(s), np.array(a)) 
+                       for s, a in zip(state_sequence, action_sequence)])
+
     def compute_all_trajectory_products(self, state_queue, action_queue):
-        products = []
-        for state_sequence, action_sequence in zip(state_queue, action_queue):
-            product = np.prod([self.policy.compute_pi(np.array(s), np.array(a)) for s, a in zip(state_sequence, action_sequence)])
-            products.append(product)
+        """Compute probability products for all trajectories in parallel"""
+        # Use existing n_jobs parameter from class initialization
+        products = Parallel(n_jobs=self.n_jobs, backend="loky")(
+            delayed(self.compute_trajectory_product)(state_sequence, action_sequence)
+            for state_sequence, action_sequence in zip(state_queue, action_queue)
+        )
         return np.array(products)
 
     def compute_single_trajectory_scores(self, state_sequence, action_sequence):
@@ -301,6 +309,7 @@ class OffPolicyGradient:
         """
         num_trajectories = len(state_queue)
         num_updates = len(thetas_queue)
+        estimated_gradients = np.zeros((num_trajectories, self.dim), dtype=np.float64)
         # initialize product matrix where row i contains the probability product under parameter theta_i
         products = np.zeros((num_updates, num_trajectories), dtype=np.float64)
 
@@ -311,7 +320,6 @@ class OffPolicyGradient:
             products[i, :] = self.compute_all_trajectory_products(state_queue, action_queue)
 
         #compute the gradient update
-        estimated_gradient = 0
         for trajectory_idx in range(num_trajectories):
             #numerator is product of state/action probabilities using the target distribution
             num = products[-1, trajectory_idx]
@@ -326,9 +334,9 @@ class OffPolicyGradient:
             score_trajectory = self.compute_single_trajectory_scores(state_queue[trajectory_idx], action_queue[trajectory_idx])
             g = self.calculate_g(reward_trajectory=reward_queue[trajectory_idx], score_trajectory=score_trajectory)
 
-            estimated_gradient += importance_sampling_ratio * g
+            estimated_gradients[trajectory_idx] = importance_sampling_ratio * g
 
-        return estimated_gradient
+        return np.sum(estimated_gradients, axis=0)
 
 
     def update_best_theta(self, current_perf: np.float64, *args, **kwargs) -> None:
@@ -373,7 +381,7 @@ class OffPolicyGradient:
                 starting_state=None
             )
             # build the parallel functions
-            delayed_functions = delayed(pg_sampling_worker)
+            delayed_functions = delayed(off_pg_sampling_worker)
 
             # parallel computation
             res = Parallel(n_jobs=self.n_jobs, backend="loky")(

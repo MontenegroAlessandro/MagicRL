@@ -42,6 +42,39 @@ def pg_sampling_worker(
     return res
 
 
+def off_pg_sampling_worker(
+        env: BaseEnv = None,
+        pol: BasePolicy = None,
+        dp: BaseProcessor = None,
+        params: np.ndarray = None,
+        starting_state: np.ndarray = None,
+        starting_action: np.ndarray = None,
+        pol_values: bool = False
+) -> list:
+    """Worker collecting a single trajectory.
+
+    Args:
+        env (BaseEnv, optional): the env to employ. Defaults to None.
+        
+        pol (BasePolicy, optional): the policy to play. Defaults to None.
+        
+        dp (Baseprocessor, optional): the data processor to employ. 
+        Defaults to None.
+        
+        params (np.array, optional): the parameters to plug into the policy. 
+        Defaults to None.
+        
+        starting_state (np.array, optional): the state to which the env should 
+        be initialized. Defaults to None.
+
+    Returns:
+        list: [performance, reward, scores]
+    """
+    trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp, pol_values=pol_values)
+    res = trajectory_sampler.collect_off_policy_trajectory(params=params, starting_state=starting_state, starting_action=starting_action)
+    return res
+
+
 def pgpe_sampling_worker(
         env: BaseEnv = None,
         pol: BasePolicy = None,

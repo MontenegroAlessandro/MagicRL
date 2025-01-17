@@ -17,7 +17,7 @@ import shutil
 import argparse
 import pickle
 
-def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, ite=100, window_lengths=[3, 5, 10], checkpoint_dir='checkpoints'):
+def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, window_lengths=[3, 5, 10], checkpoint_dir='checkpoints', n_workers=1):
     """
     Run algorithms multiple times and return their performance curves.
     Includes checkpoint system to resume from crashes.
@@ -54,7 +54,7 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, ite=100, window_lengths
     
     try:
         # Common parameters
-        env = Swimmer(horizon=100, gamma=1, render=False, clip=True)
+        env = Swimmer(horizon=horizon, gamma=1, render=False, clip=True)
         s_dim = env.state_dim
         a_dim = env.action_dim
         tot_params = s_dim * a_dim
@@ -77,7 +77,8 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, ite=100, window_lengths
                     std_dev=np.sqrt(1),
                     std_decay=0,
                     std_min=1e-5,
-                    multi_linear=True
+                    multi_linear=True,
+
                 )
 
                 # Run first algorithm
@@ -96,7 +97,7 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, ite=100, window_lengths
                         verbose=False,
                         natural=False,
                         checkpoint_freq=100,
-                        n_jobs=1
+                        n_jobs=n_workers,
                     )
                 # Add other algorithm options here...
                 
@@ -109,7 +110,6 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, ite=100, window_lengths
                         alg = OffPolicyGradient(
                             lr=[lr],
                             lr_strategy="adam",
-                            estimator_type="GPOMDP",
                             initial_theta=np.zeros(tot_params),
                             ite=ite,
                             batch_size=batch_size,
@@ -120,8 +120,8 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, ite=100, window_lengths
                             verbose=False,
                             natural=False,
                             checkpoint_freq=100,
-                            n_jobs=1,
-                            window_length=window_length
+                            n_jobs=n_workers,
+                            window_length=window_length,
                         )
                         alg.learn()
                         results[f'off_pg_{window_length}'].append(alg.performance_idx)
@@ -224,6 +224,8 @@ def main():
                       help='Window lengths for off-policy (multiple values allowed)')
     parser.add_argument('--checkpoint_dir', type=str, default='checkpoints',
                       help='Directory to store checkpoints')
+    parser.add_argument("--horizon", help="The horizon amount.", type=int,default=100)
+    parser.add_argument('--n_workers', type=int, default=1, help='Number of parallel workers')
     args = parser.parse_args()
     
     results = run_experiment(
@@ -232,7 +234,9 @@ def main():
         n_trials=args.n_trials,
         ite=args.ite,
         window_lengths=args.window_lengths,
-        checkpoint_dir=args.checkpoint_dir
+        checkpoint_dir=args.checkpoint_dir,
+        n_workers=args.n_workers,
+        horizon=args.horizon
     )
     
     print("\nSaving comparison plot...")

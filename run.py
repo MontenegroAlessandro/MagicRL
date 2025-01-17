@@ -430,7 +430,6 @@ for i in range(args.n_trials):
         alg_parameters = dict(
             lr=[args.lr],
             lr_strategy=args.lr_strategy,
-            estimator_type="GPOMDP",
             initial_theta=init_theta,
             ite=args.ite,
             batch_size=args.batch,
