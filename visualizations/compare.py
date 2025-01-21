@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from algorithms.off_policy import OffPolicyGradient
 from algorithms import PolicyGradient
-from envs import Swimmer
+from envs import Swimmer, HalfCheetah, Reacher, Humanoid, Ant, Hopper
 from policies import LinearGaussianPolicy
 from data_processors import IdentityDataProcessor
 import copy
@@ -17,7 +17,7 @@ import shutil
 import argparse
 import pickle
 
-def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, window_lengths=[3, 5, 10], checkpoint_dir='checkpoints', n_workers=1):
+def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, window_lengths=[3, 5, 10], checkpoint_dir='checkpoints', n_workers=1, env_name='swimmer', var=1):
     """
     Run algorithms multiple times and return their performance curves.
     Includes checkpoint system to resume from crashes.
@@ -53,13 +53,27 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, w
     temp_dir = tempfile.mkdtemp()
     
     try:
-        # Common parameters
-        env = Swimmer(horizon=horizon, gamma=1, render=False, clip=True)
+        # Create environment based on env_name
+        if env_name == 'swimmer':
+            env = Swimmer(horizon=horizon, gamma=1, render=False, clip=True)
+        elif env_name == 'half_cheetah':
+            env = HalfCheetah(horizon=horizon, gamma=1, render=False, clip=True)
+        elif env_name == 'reacher':
+            env = Reacher(horizon=horizon, gamma=1, render=False, clip=True)
+        elif env_name == 'humanoid':
+            env = Humanoid(horizon=horizon, gamma=1, render=False, clip=True)
+        elif env_name == 'ant':
+            env = Ant(horizon=horizon, gamma=1, render=False, clip=True)
+        elif env_name == 'hopper':
+            env = Hopper(horizon=horizon, gamma=1, render=False, clip=True)
+        else:
+            raise ValueError(f"Invalid environment name: {env_name}")
+
         s_dim = env.state_dim
         a_dim = env.action_dim
         tot_params = s_dim * a_dim
         batch_size = 100
-        lr = 1e-3
+        lr = 0.003
         
         for trial in range(start_trial, n_trials):
             print(f"Running trial {trial + 1}/{n_trials}")
@@ -74,11 +88,10 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, w
                     parameters=np.zeros(tot_params),
                     dim_state=s_dim,
                     dim_action=a_dim,
-                    std_dev=np.sqrt(1),
+                    std_dev=np.sqrt(var),
                     std_decay=0,
                     std_min=1e-5,
                     multi_linear=True,
-
                 )
 
                 # Run first algorithm
@@ -226,6 +239,11 @@ def main():
                       help='Directory to store checkpoints')
     parser.add_argument("--horizon", help="The horizon amount.", type=int,default=100)
     parser.add_argument('--n_workers', type=int, default=1, help='Number of parallel workers')
+    parser.add_argument('--env', type=str, default='swimmer',
+                      choices=['swimmer', 'half_cheetah', 'reacher', 'humanoid', 'ant', 'hopper'],
+                      help='Environment to use')
+    parser.add_argument('--var', type=float, default=1,
+                      help='The exploration amount (variance)')
     args = parser.parse_args()
     
     results = run_experiment(
@@ -236,14 +254,20 @@ def main():
         window_lengths=args.window_lengths,
         checkpoint_dir=args.checkpoint_dir,
         n_workers=args.n_workers,
-        horizon=args.horizon
+        horizon=args.horizon,
+        env_name=args.env,
+        var=args.var
     )
     
+    # Update plot filename to include variance
+    var_str = str(args.var).replace(".", "")
     print("\nSaving comparison plot...")
     if args.alg2 == 'off_pg':
-        plot_comparison(results, window=10, save_path=f'{args.alg1}_vs_off_pg_windows.png')
+        plot_comparison(results, window=10, 
+                       save_path=f'{args.env}_{args.alg1}_vs_off_pg_windows_var_{var_str}.png')
     else:
-        plot_comparison(results, window=10, save_path=f'{args.alg1}_vs_{args.alg2}.png')
+        plot_comparison(results, window=10, 
+                       save_path=f'{args.env}_{args.alg1}_vs_{args.alg2}_var_{var_str}.png')
 
 if __name__ == '__main__':
     main()
