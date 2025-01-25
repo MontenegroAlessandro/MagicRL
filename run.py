@@ -315,7 +315,8 @@ for i in range(args.n_trials):
             hp[0] = [0] * tot_params
         else:
             hp[0] = np.random.normal(0, 1, tot_params)
-        hp[1] = [np.log(np.sqrt(var_term))] * tot_params
+        # hp[1] = [np.log(np.sqrt(var_term))] * tot_params
+        hp[1] = [var_term] * tot_params
         alg_parameters = dict(
             lr=[args.lr],
             initial_rho=hp,
@@ -347,7 +348,8 @@ for i in range(args.n_trials):
             hp[0] = [0] * tot_params
         else:
             hp[0] = np.random.normal(0, 1, tot_params)
-        hp[1] = [np.log(np.sqrt(var_term))] * tot_params
+        # hp[1] = [np.log(np.sqrt(var_term))] * tot_params
+        hp[1] = [var_term] * tot_params
         alg_parameters = dict(
             cost_type="tc",
             cost_param=0,
