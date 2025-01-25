@@ -29,7 +29,7 @@ class Hopper(MujocoBase):
         if self.render:
             render_mode = "human"
 
-        self.gym_env = gym.make('Hopper-v4', render_mode=render_mode)
+        self.gym_env = gym.make('Hopper-v5', render_mode=render_mode)
         self.action_bounds = [-1, 1]
         self.state_dim = self.gym_env.observation_space.shape[0]    # 11
         self.action_dim = self.gym_env.action_space.shape[0]        # 3

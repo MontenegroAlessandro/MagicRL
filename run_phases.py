@@ -45,6 +45,13 @@ parser.add_argument(
     default=1
 )
 parser.add_argument(
+    "--sigma_param",
+    help="Type of parameterization for sigma.",
+    type=str,
+    default="hyper",
+    choices=["hyper", "exp", "sigmoid"]
+)
+parser.add_argument(
     "--dir",
     help="Directory in which save the results.",
     type=str,
@@ -81,7 +88,7 @@ parser.add_argument(
     help="The environment.",
     type=str,
     default="swimmer",
-    choices=["swimmer", "half_cheetah", "reacher", "humanoid", "ant", "hopper", "lqr"]
+    choices=["swimmer", "half_cheetah", "reacher", "humanoid", "ant", "hopper", "lqr", "ip"]
 )
 parser.add_argument(
     "--costs",
@@ -177,10 +184,10 @@ base_dir = args.dir
 for i in range(args.n_trials):
     np.random.seed(i)
     if args.learn == 1:
-        dir_name = "pel_"
+        dir_name = f"pel_param_{args.sigma_param}_"
     else:
         dir_name = "pes_"
-    dir_name += f"phases_{args.phases}_lrsigma_{args.sigma_lr_strategy}_"
+    dir_name += f"exp_{str(args.sigma_exponent).replace('.','')}_phases_{args.phases}_lrsigma_{args.sigma_lr_strategy}_"
     dir_name += f"{str(args.sigma_lr).replace('.', '')}_"
     dir_name += f"{args.alg}_{args.ite}_{args.env}_{args.horizon}_{args.lr_strategy}_"
     dir_name += f"{str(args.lr).replace('.', '')}_{args.pol}_batch_{args.batch}_"
@@ -205,6 +212,13 @@ for i in range(args.n_trials):
             env_class = HalfCheetah
             env = HalfCheetah(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
+    elif args.env == "ip":
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = InvertedPendulum
+            env = InvertedPendulum(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        MULTI_LINEAR = False
     elif args.env == "reacher":
         if args.costs:
             raise NotImplementedError
@@ -490,7 +504,8 @@ for i in range(args.n_trials):
             pg_sub_dict=copy.deepcopy(alg_parameters),
             directory=dir_name,
             checkpoint_freq=1,
-            dim=dim_exploration
+            dim=dim_exploration,
+            sigma_param=args.sigma_param
         )
 
     print(text2art(f"== {args.alg} TEST on {args.env} =="))

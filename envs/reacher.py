@@ -29,7 +29,7 @@ class Reacher(MujocoBase):
             render_mode = "human"
 
         self.gym_env = gym.make(
-            'Reacher-v4',
+            'Reacher-v5',
             render_mode=render_mode
         )
         self.action_bounds = [-1, 1]

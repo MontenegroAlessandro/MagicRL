@@ -7,7 +7,7 @@ import numpy as np
 from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
-from algorithms.utils import TrajectoryResults, check_directory_and_create, LearnRates
+from algorithms.utils import TrajectoryResults, check_directory_and_create, LearnRates, TrajectoryResults2
 from algorithms.samplers import TrajectorySampler, pg_sampling_worker
 from joblib import Parallel, delayed
 import json
@@ -35,7 +35,8 @@ class PolicyGradient:
             natural: bool = False,
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
-            save_det: int = 0
+            save_det: int = 0,
+            learn_std: int = 0
     ) -> None:
         """
         Summary:
@@ -113,7 +114,7 @@ class PolicyGradient:
         self.directory = directory
         if self.directory is not None:
             check_directory_and_create(dir_name=directory)
-        self.save_det = 0
+        self.save_det = save_det
 
         # Other class' parameters
         self.ite = ite
@@ -144,6 +145,10 @@ class PolicyGradient:
         self.adam_optimizer = None
         if self.lr_strategy == "adam":
             self.adam_optimizer = Adam(self.lr, strategy="ascent")
+
+        # learn std
+        self.learn_std = learn_std
+        self.std_score = None
         return
 
     def learn(self) -> None:
@@ -158,7 +163,9 @@ class PolicyGradient:
                     dp=copy.deepcopy(self.data_processor),
                     # params=copy.deepcopy(self.thetas),
                     params=None,
-                    starting_state=None
+                    starting_state=None,
+                    learn_std=self.learn_std,
+                    e_parameterization_score=1
                 )
 
                 # build the parallel functions
@@ -180,10 +187,14 @@ class PolicyGradient:
             score_vector = np.zeros((self.batch_size, self.env.horizon, self.dim),
                                     dtype=np.float64)
             reward_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float64)
+            if self.learn_std:
+                e_score_vector = np.zeros((self.batch_size, self.env.horizon), dtype=np.float64)
             for j in range(self.batch_size):
-                perf_vector[j] = res[j][TrajectoryResults.PERF]
-                reward_vector[j, :] = res[j][TrajectoryResults.RewList]
-                score_vector[j, :, :] = res[j][TrajectoryResults.ScoreList]
+                perf_vector[j] = res[j][TrajectoryResults2.PERF]
+                reward_vector[j, :] = res[j][TrajectoryResults2.RewList]
+                score_vector[j, :, :] = res[j][TrajectoryResults2.ScoreList]
+                if self.learn_std:
+                    e_score_vector[j, :] = res[j][TrajectoryResults2.Info]["e_scores"]
             self.performance_idx[i] = np.mean(perf_vector)
 
             # Update best theta
@@ -200,6 +211,15 @@ class PolicyGradient:
             else:
                 err_msg = f"[PG] {self.estimator_type} has not been implemented yet!"
                 raise NotImplementedError(err_msg)
+            
+            # compute the sigma score
+            if self.learn_std:
+                gamma = self.env.gamma
+                horizon = self.env.horizon
+                gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
+                rolling_scores = np.cumsum(e_score_vector, axis=1)
+                reward_trajectory = reward_vector * rolling_scores
+                self.std_score = np.mean(np.sum(gamma_seq * reward_trajectory, axis=1), axis=0)
 
             # Update parameters
             if self.lr_strategy == "constant":

@@ -10,3 +10,4 @@ from envs.hopper import *
 from envs.reacher import *
 from envs.lqr import *
 from envs.lqr_cost import *
+from envs.inverted_pendulum import *

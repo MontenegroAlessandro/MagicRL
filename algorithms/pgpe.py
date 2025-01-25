@@ -160,6 +160,9 @@ class PGPE:
         self.rho_history = np.zeros((ite, self.dim), dtype=np.float64)
         self.rho_history[0, :] = copy.deepcopy(self.rho[RhoElem.MEAN])
 
+        # Varaince learning
+        self.std_score = None
+
         return
 
     def learn(self) -> None:
@@ -220,7 +223,8 @@ class PGPE:
 
             # std_decay
             if not self.learn_std:
-                std = np.float64(np.exp(self.rho[RhoElem.STD]))
+                # std = np.float64(np.exp(self.rho[RhoElem.STD]))
+                std = self.rho[RhoElem.STD]
                 std = np.clip(std - self.std_decay, self.std_min, np.inf)
                 self.rho[RhoElem.STD, :] = np.log(std)
 
@@ -238,7 +242,8 @@ class PGPE:
 
         # take the means and the sigmas
         means = self.rho[RhoElem.MEAN, :]
-        stds = np.float64(np.exp(self.rho[RhoElem.STD, :]))
+        # stds = np.float64(np.exp(self.rho[RhoElem.STD, :]))
+        stds = self.rho[RhoElem.STD, :]
 
         # compute the scores
         if not self.natural:
@@ -256,19 +261,25 @@ class PGPE:
         if self.lr_strategy == "constant":
             self.rho[RhoElem.MEAN, :] = self.rho[RhoElem.MEAN, :] + self.lr * np.mean(grad_means, axis=0)
             # update sigma if it is the case
-            if self.learn_std:
-                self.rho[RhoElem.STD, :] = self.rho[RhoElem.STD, :] + self.lr * np.mean(grad_stds, axis=0)
+            # if self.learn_std:
+            #     self.rho[RhoElem.STD, :] = self.rho[RhoElem.STD, :] + self.lr * np.mean(grad_stds, axis=0)
         elif self.lr_strategy == "adam":
             adaptive_lr_m = self.rho_adam[RhoElem.MEAN].compute_gradient(np.mean(grad_means, axis=0))
             adaptive_lr_m = np.array(adaptive_lr_m)
             self.rho[RhoElem.MEAN, :] = self.rho[RhoElem.MEAN, :] + adaptive_lr_m
             # update sigma if it is the case
-            if self.learn_std:
-                adaptive_lr_s = self.rho_adam[RhoElem.STD].compute_gradient(np.mean(grad_stds, axis=0))
-                adaptive_lr_s = np.array(adaptive_lr_s)
-                self.rho[RhoElem.STD, :] = self.rho[RhoElem.STD, :] + adaptive_lr_s
+            # if self.learn_std:
+            #     adaptive_lr_s = self.rho_adam[RhoElem.STD].compute_gradient(np.mean(grad_stds, axis=0))
+            #     adaptive_lr_s = np.array(adaptive_lr_s)
+            #     self.rho[RhoElem.STD, :] = self.rho[RhoElem.STD, :] + adaptive_lr_s
         else:
             raise NotImplementedError("[PGPE] Ops, not implemented yet!")
+        
+        # compute sigma score if needed
+        if self.learn_std:
+            std = stds[0] 
+            self.std_score = (((np.linalg.norm(self.thetas - means, axis=1) ** 2) - self.dim * (std ** 2)) / (std ** 3))
+            self.std_score = self.std_score * batch_perf
         return
 
     def sample_theta(self, index: int) -> None:
@@ -281,9 +292,13 @@ class PGPE:
             index (int): the current index of the thetas vector
         """
         for id in range(len(self.rho[RhoElem.MEAN])):
+            # self.thetas[index, id] = np.random.normal(
+            #     loc=self.rho[RhoElem.MEAN, id],
+            #     scale=np.exp(np.float64(self.rho[RhoElem.STD, id]))
+            # )
             self.thetas[index, id] = np.random.normal(
                 loc=self.rho[RhoElem.MEAN, id],
-                scale=np.exp(np.float64(self.rho[RhoElem.STD, id]))
+                scale=self.rho[RhoElem.STD, id]
             )
         return
 
@@ -298,9 +313,13 @@ class PGPE:
         """
         thetas = []
         for id in range(len(self.best_rho[RhoElem.MEAN])):
+            # thetas.append(np.random.normal(
+            #     loc=self.rho[RhoElem.MEAN, id],
+            #     scale=np.exp(np.float64(self.rho[RhoElem.STD, id])))
+            # )
             thetas.append(np.random.normal(
                 loc=self.rho[RhoElem.MEAN, id],
-                scale=np.exp(np.float64(self.rho[RhoElem.STD, id])))
+                scale=self.rho[RhoElem.STD, id])
             )
         return thetas
 

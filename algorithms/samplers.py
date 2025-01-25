@@ -149,9 +149,13 @@ class ParameterSampler:
         dim = len(params[RhoElem.MEAN])
         thetas = np.zeros(dim, dtype=np.float64)
         for i in range(dim):
+            # thetas[i] = np.random.normal(
+            #     params[RhoElem.MEAN, i],
+            #     np.float64(np.exp(params[RhoElem.STD, i]))
+            # )
             thetas[i] = np.random.normal(
                 params[RhoElem.MEAN, i],
-                np.float64(np.exp(params[RhoElem.STD, i]))
+                params[RhoElem.STD, i]
             )
 
         # collect performances over the sampled parameter configuration
@@ -269,7 +273,8 @@ class TrajectorySampler:
         pol_values = 0
 
         if self.learn_std:
-            e_scores = np.zeros(shape=(self.env.horizon, self.pol.dim_action), dtype=np.float64)
+            # e_scores = np.zeros(shape=(self.env.horizon, self.pol.dim_action), dtype=np.float64)
+            e_scores = np.zeros(shape=self.env.horizon, dtype=np.float64)
 
         if params is not None:
             self.pol.set_parameters(thetas=params)
@@ -313,7 +318,8 @@ class TrajectorySampler:
                     action=a, 
                     e_parameterization_score=self.e_parameterization_score
                 )
-                e_scores[t, :] = e_score
+                # e_scores[t, :] = e_score
+                e_scores[t] = e_score
 
             if done:
                 if t < self.env.horizon - 1:
@@ -322,7 +328,8 @@ class TrajectorySampler:
                     if self.env.with_costs:
                         costs[t+1:, :] = 0
                     if self.learn_std:
-                        e_scores[t+1,:] = 0
+                        # e_scores[t+1,:] = 0
+                        e_scores[t+1 :] = 0
                 break
 
         # if necessary save the info of the costs or the exploration scores

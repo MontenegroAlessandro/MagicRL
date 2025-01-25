@@ -1,27 +1,27 @@
 cd ..
-taskset -ca 12-35 python run_phases.py \
-  --learn 0 \
-  --sigma_lr 0.01 \
-  --sigma_lr_strategy adam \
-  --phases 25 \
-  --sigma_exponent 1.0 \
-  --sigma_init 1.0 \
-  --dir /data2/alessandro/pes/ \
-  --ite 200 \
-  --alg pgpe \
-  --var 1.0 \
-  --pol linear \
-  --env swimmer \
-  --horizon 200 \
-  --gamma 1.0 \
-  --lr 0.01 \
-  --lr_strategy adam \
-  --n_workers 24 \
-  --batch 100 \
-  --clip 0 \
-  --n_trials 5
+# taskset -ca 12-35 python run_phases.py \
+#   --learn 0 \
+#   --sigma_lr 0.01 \
+#   --sigma_lr_strategy adam \
+#   --phases 25 \
+#   --sigma_exponent 1.0 \
+#   --sigma_init 1.0 \
+#   --dir /data2/alessandro/pes/ \
+#   --ite 200 \
+#   --alg pgpe \
+#   --var 1.0 \
+#   --pol linear \
+#   --env swimmer \
+#   --horizon 200 \
+#   --gamma 1.0 \
+#   --lr 0.01 \
+#   --lr_strategy adam \
+#   --n_workers 24 \
+#   --batch 100 \
+#   --clip 0 \
+#   --n_trials 5
 
-taskset -ca 12-35 python run_phases.py \
+taskset -ca 0-35 python run_phases.py \
   --learn 0 \
   --sigma_lr 0.01 \
   --sigma_lr_strategy adam \
@@ -36,9 +36,9 @@ taskset -ca 12-35 python run_phases.py \
   --env swimmer \
   --horizon 200 \
   --gamma 1.0 \
-  --lr 0.01 \
+  --lr 0.005 \
   --lr_strategy adam \
-  --n_workers 24 \
+  --n_workers 36 \
   --batch 100 \
   --clip 0 \
   --n_trials 5

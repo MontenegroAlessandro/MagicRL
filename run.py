@@ -44,7 +44,7 @@ parser.add_argument(
     help="The environment.",
     type=str,
     default="swimmer",
-    choices=["swimmer", "half_cheetah", "reacher", "humanoid", "ant", "hopper", "lqr"]
+    choices=["swimmer", "half_cheetah", "reacher", "humanoid", "ant", "hopper", "lqr", "ip"]
 )
 parser.add_argument(
     "--costs",
@@ -162,6 +162,13 @@ for i in range(args.n_trials):
             env_class = HalfCheetah
             env = HalfCheetah(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
+    elif args.env == "ip":
+        if args.costs:
+            raise NotImplementedError
+        else:
+            env_class = InvertedPendulum
+            env = InvertedPendulum(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        MULTI_LINEAR = False
     elif args.env == "reacher":
         if args.costs:
             raise NotImplementedError
@@ -225,12 +232,13 @@ for i in range(args.n_trials):
         )
     elif args.pol == "gaussian":
         tot_params = s_dim * a_dim
-        var = np.sqrt(args.var * np.ones(a_dim))
+        # var = np.sqrt(args.var * np.ones(a_dim))
+        std = np.sqrt(args.var)
         pol = LinearGaussianPolicy(
             parameters=np.zeros(tot_params),
             dim_state=s_dim,
             dim_action=a_dim,
-            std_dev=var,#np.sqrt(args.var),
+            std_dev=std, #var,#np.sqrt(args.var),
             std_decay=0,
             std_min=1e-5,
             multi_linear=MULTI_LINEAR

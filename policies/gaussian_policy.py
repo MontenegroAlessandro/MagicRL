@@ -69,22 +69,23 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         mean = np.array(self.parameters @ state, dtype=np.float64)
         if self.multi_linear:
             fact = 1 / (np.sqrt(2 * np.pi) + self.std_dev[:, np.newaxis])
-            prob = fact * np.exp(- (action - mean) / (2 * (self.std_dev[:, np.newaxis] ** 2)))
+            prob = fact * np.exp(- ((action - mean)**2) / (2 * (self.std_dev[:, np.newaxis] ** 2)))
         else:
             fact = 1 / (np.sqrt(2 * np.pi) + self.std_dev)
-            prob = fact * np.exp(- (action - mean) / (2 * (self.std_dev ** 2)))
+            prob = fact * np.exp(- ((action - mean)**2) / (2 * (self.std_dev ** 2)))
         return prob
 
     def compute_score(self, state, action) -> np.array:
-        if self.std_dev.all() == 0:
-            return super().compute_score(state, action)
+        # if self.std_dev.all() == 0:
+        #     return super().compute_score(state, action)
 
         state = np.ravel(state)
         action_deviation = action - (self.parameters @ state)
         if self.multi_linear:
             # state = np.tile(state, self.dim_action).reshape((self.dim_action, self.dim_state))
             action_deviation = action_deviation[:, np.newaxis]
-            scores = (action_deviation * state) / (self.std_dev[:, np.newaxis] ** 2)
+            # scores = (action_deviation * state) / (self.std_dev[:, np.newaxis] ** 2)
+            scores = (action_deviation * state) / (self.std_dev ** 2)
         else:
             scores = (action_deviation * state) / (self.std_dev ** 2)
         if self.multi_linear:
@@ -92,21 +93,26 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         return scores
     
     def compute_score_exploration(self, state, action, e_parameterization_score = 0) -> np.array:
-        if self.std_dev.all() == 0:
-            return super().compute_score(state, action)
+        # if self.std_dev.all() == 0:
+        #     return super().compute_score(state, action)
 
         state = np.ravel(state)
-        action_deviation = np.power(action - (self.parameters @ state), 2)
-        if self.multi_linear:
-            # state = np.tile(state, self.dim_action).reshape((self.dim_action, self.dim_state))
-            action_deviation = action_deviation[:, np.newaxis] - (self.std_dev[:,np.newaxis] ** 2)
-            scores = ((action_deviation) / (self.std_dev[:,np.newaxis] ** 3))
-            scores = np.ravel(scores) * e_parameterization_score
-        else:
-            action_deviation = action_deviation - (self.std_dev ** 2)
-            scores = ((action_deviation) / (self.std_dev ** 3)) * e_parameterization_score
-        if self.multi_linear:
-            scores = np.ravel(scores)
+        # action_deviation = np.power(action - (self.parameters @ state), 2)
+        action = np.atleast_1d(action)
+        dim = len(action)
+        action_deviation = np.linalg.norm(action - (self.parameters @ state)) ** 2
+        scores = (action_deviation - dim * (self.std_dev ** 2)) / (self.std_dev ** 3)
+        scores = scores * e_parameterization_score
+        # if self.multi_linear:
+        #     # state = np.tile(state, self.dim_action).reshape((self.dim_action, self.dim_state))
+        #     action_deviation = action_deviation[:, np.newaxis] - (self.std_dev[:,np.newaxis] ** 2)
+        #     scores = ((action_deviation) / (self.std_dev[:,np.newaxis] ** 3))
+        #     scores = np.ravel(scores) * e_parameterization_score
+        # else:
+        #     action_deviation = action_deviation - (self.std_dev ** 2)
+        #     scores = ((action_deviation) / (self.std_dev ** 3)) * e_parameterization_score
+        # if self.multi_linear:
+        #     scores = np.ravel(scores)
         return scores
     
     def diff(self, state):

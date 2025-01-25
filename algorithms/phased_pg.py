@@ -59,7 +59,7 @@ class PES:
         # Initialization of the exploration
         self.current_phase = 0
         # self.sigma = 0
-        self.initial_sigma = initial_sigma * np.ones(self.dim)
+        self.initial_sigma = initial_sigma # * np.ones(self.dim)
         self.sigma = np.zeros(self.dim)
         self._update_sigma()
 
@@ -86,7 +86,7 @@ class PES:
         # Saving stuff
         self.ite_index = 0
         self.sub_ite = pg_sub_dict["ite"]
-        self.sigmas = np.zeros((self.phases, dim))
+        self.sigmas = np.zeros(self.phases) # np.zeros((self.phases, dim))
         self.sigmas[0] = self.sigma
         self.performances = np.zeros(self.phases * self.sub_ite)
         self.last_param = None
@@ -101,8 +101,6 @@ class PES:
             self.pg_sub.learn()
 
             # Save Last Performance
-            # num_elem = int(self.last_rate * len(self.pg_sub.performance_idx))
-            # self.performances[i] = np.mean(self.pg_sub.performance_idx[-num_elem:])
             self.performances[self.ite_index : self.ite_index + self.sub_ite] = copy.deepcopy(self.pg_sub.performance_idx)
             self.ite_index += self.sub_ite
 
@@ -126,18 +124,23 @@ class PES:
 
 
     def _inject_parameters(self):
-        # TODO: fare finestra
         if self.pg_sub_name == "PGPE":
-            # self.pg_sub_args["initial_rho"][RhoElem.MEAN] = copy.deepcopy(self.pg_sub.rho[RhoElem.MEAN])
-            self.pg_sub_args["initial_rho"][RhoElem.MEAN] = copy.deepcopy(self.pg_sub.best_rho[RhoElem.MEAN])
-            self.last_param = copy.deepcopy(self.pg_sub_args["initial_rho"][RhoElem.MEAN])
+            # self.pg_sub_args["initial_rho"][RhoElem.MEAN] = copy.deepcopy(self.pg_sub.rho[RhoElem.MEAN])
+            # self.pg_sub_args["initial_rho"][RhoElem.MEAN] = copy.deepcopy(self.pg_sub.best_rho[RhoElem.MEAN])
+            # self.pg_sub.rho[RhoElem.MEAN] = copy.deepcopy(self.pg_sub.best_rho[RhoElem.MEAN])
+            # self.last_param = copy.deepcopy(self.pg_sub_args["initial_rho"][RhoElem.MEAN])
+            self.last_param = copy.deepcopy(self.pg_sub.rho[RhoElem.MEAN])
         else:
             # self.pg_sub_args["initial_theta"] = copy.deepcopy(self.pg_sub.thetas)
-            self.pg_sub_args["initial_theta"] = copy.deepcopy(self.pg_sub.best_theta)
-            self.last_param = copy.deepcopy(self.pg_sub_args["initial_theta"])
+            # self.pg_sub_args["initial_theta"] = copy.deepcopy(self.pg_sub.best_theta)
+            # self.last_param = copy.deepcopy(self.pg_sub_args["initial_theta"])
+            self.last_param = copy.deepcopy(self.pg_sub.thetas)
 
     def _init_pg_sub(self):
-        self.pg_sub = self.pg_sub_class(**self.pg_sub_args)
+        # self.pg_sub = self.pg_sub_class(**self.pg_sub_args)
+        if self.current_phase == 0:
+            self.pg_sub = self.pg_sub_class(**self.pg_sub_args)
+        self.pg_sub.time = 0
         self._inject_sigma()
 
     def _update_sigma(self) -> None:
@@ -145,15 +148,10 @@ class PES:
     
     def _inject_sigma(self):
         if self.pg_sub_name == "PGPE":
-            # TODO: fix this later
-            # self.pg_sub.rho[RhoElem.STD] = self.sigma
-            self.pg_sub.rho[RhoElem.STD] = np.log(self.sigma)
+            self.pg_sub.rho[RhoElem.STD] = self.sigma
+            # self.pg_sub.rho[RhoElem.STD] = np.log(self.sigma)
         else:
             self.pg_sub.policy.std_dev = self.sigma
-            # if self.current_phase == 0:
-            #     self.pg_sub.policy.std_dev = self.sigma * np.ones(self.dim)
-            # else:
-            #     self.pg_sub.policy.std_dev = self.sigma
     
     def save_results(self) -> None:
         # Create the dictionary with the useful info
@@ -187,7 +185,8 @@ class PEL(PES):
             directory = "", 
             checkpoint_freq = 1, 
             last_rate = 0.1,
-            dim: int = 1
+            dim: int = 1,
+            sigma_param: str = "hyper"
     ):
         super().__init__(
             phases, 
@@ -215,14 +214,71 @@ class PEL(PES):
         self.lr_scheduler = None
         if self.lr_sigma_strategy == "adam":
             self.lr_scheduler = Adam(step_size=self.lr_sigma, strategy="ascent")
+
+        # Sigma parameterization
+        self.sigma_param = sigma_param
+        err_msg = f"[PEL] Invalid sigma parameterization: {self.sigma_param}."
+        assert sigma_param in ["hyper", "exp", "sigmoid"], err_msg
         
         # Sigma initialization
-        self.sigma = 0
-        self.nu = np.clip(self.initial_sigma, -np.inf, 0)
-        self._map_sigma()
+        self.sigma = initial_sigma
+        if self.sigma_param == "hyper":
+            self.nu = 1 - np.power(self.sigma, - 1 / self.sigma_exponent)
+        elif self.sigma_param == "exp":
+            if self.sigma == 1:
+                self.sigma = 0.999
+            self.nu = np.log(self.sigma)
+        elif self.sigma_param == "sigmoid":
+            if self.sigma == 1:
+                self.sigma = 0.999
+            self.nu = - np.log((1/self.sigma) - 1)
+        else:
+            NotImplementedError(f"[PEL] {self.sigma_param} parameterization not implemented yet")
         self.sigmas[0] = self.sigma
     
+    def _init_pg_sub(self):
+        super()._init_pg_sub()
+        if self.current_phase == 0:
+            self.pg_sub.learn_std = 1
+    
     def learn(self):
+        for i in tqdm(range(self.phases)):
+            # Init PG Subroutine
+            self._init_pg_sub()
+
+            # Extract the parameters before learning 
+            self._extract_parameters()
+
+            # Run PG subroutine -> update the parameters
+            self.pg_sub.learn()
+
+            # Save Last Performance
+            self.performances[self.ite_index : self.ite_index + self.sub_ite] = copy.deepcopy(self.pg_sub.performance_idx)
+            self.ite_index += self.sub_ite
+
+            # Update Exploration Parameterization
+            self._gradient()
+            
+            # nu clip
+            if self.sigma_param == "hyper":
+                self.nu = np.clip(self.nu, -np.inf, 0)
+
+            # Log results
+            print(f"\nPhase {i}")
+            print(f"Exploration {self.sigma}")
+            print(f"Performance {self.performances[self.ite_index-1]}")
+
+            # Update Sigma
+            self.current_phase += 1
+            self._map_sigma()
+            if(i + 1 < self.phases):
+                self.sigmas[i+1] = self.sigma
+
+            # Save results
+            if (i == 0 or self.checkpoint_freq % i == 0 or i == self.phases - 1) and self.directory is not None:
+                self.save_results()
+    
+    def old_learn(self):
         for i in tqdm(range(self.phases)):
             # Init PG Subroutine
             self._init_pg_sub()
@@ -242,10 +298,12 @@ class PEL(PES):
                 self._parameter_based_gradient()
             else:
                 self._action_based_gradient()
+            # nu clip
             self.nu = np.clip(self.nu, -np.inf, 0)
+            # self.nu = np.min(self.nu) * np.ones(self.dim)
 
             # Save Last Parameters
-            self._inject_parameters()
+            # self._inject_parameters()
 
             # Log results
             print(f"\nPhase {i}")
@@ -261,8 +319,25 @@ class PEL(PES):
             # Save results
             if (i == 0 or self.checkpoint_freq % i == 0 or i == self.phases - 1) and self.directory is not None:
                 self.save_results()
+    
+    def _gradient(self):
+        # compute the gradients
+        grad_stds = self.pg_sub.std_score * self._grad_nu()
 
-    def _parameter_based_gradient(self):
+        # update nu
+        if self.lr_sigma_strategy == "constant":
+            if self.pg_sub_name == "PGPE":
+                self.nu = self.nu + self.lr_sigma * np.mean(grad_stds, axis=0)
+            else:
+                self.nu = self.nu + self.lr_sigma * grad_stds
+        elif self.lr_sigma_strategy == "adam":
+            if self.pg_sub_name == "PGPE":
+                adaptive_lr_s = self.lr_scheduler.compute_gradient(np.mean(grad_stds, axis=0))
+            else:
+                adaptive_lr_s = self.lr_scheduler.compute_gradient(grad_stds)
+            self.nu = self.nu + adaptive_lr_s
+
+    def _old_parameter_based_gradient(self):
         # Array to store the parameters seen during the trajectories
         thetas = np.zeros((self.pg_sub.batch_size, self.pg_sub.dim))
         performance_res = np.zeros(self.pg_sub.batch_size, dtype=np.float64)
@@ -297,10 +372,13 @@ class PEL(PES):
 
         # take the means and the sigmas
         means = self.last_param
-        stds = np.ones(self.pg_sub.dim, dtype=np.float64) * self.sigma
+        # stds = np.ones(self.pg_sub.dim, dtype=np.float64) * self.sigma
+        stds = self.sigma
 
-        # compute the scores
-        log_nu_stds = ((((thetas - means) ** 2) - (stds ** 2)) / (stds ** 3)) * self._grad_nu()
+        # compute the scores 
+        # log_nu_stds = ((((thetas - means) ** 2) - (stds ** 2)) / (stds ** 3)) * self._grad_nu()
+        # log_nu_stds = (((np.linalg.norm(thetas - means) ** 2) - self.dim * (stds ** 2)) / (stds ** 3)) * self._grad_nu()
+        log_nu_stds = (((np.linalg.norm(thetas - means, axis=1) ** 2) - self.dim * (stds ** 2)) / (stds ** 3)) * self._grad_nu()
 
         # compute the gradients
         grad_stds = batch_perf[:, np.newaxis] * log_nu_stds
@@ -309,11 +387,11 @@ class PEL(PES):
         if self.lr_sigma_strategy == "constant":
             self.nu = self.nu + self.lr_sigma * np.mean(grad_stds, axis=0)
         elif self.lr_sigma_strategy == "adam":
-            adaptive_lr_s = self.lr_scheduler.compute_gradient(np.mean(grad_stds, axis=0))
-            adaptive_lr_s = np.array(adaptive_lr_s)
+            adaptive_lr_s = self.lr_scheduler.compute_gradient(np.mean(grad_stds, axis=0))[0]
+            # adaptive_lr_s = np.array(adaptive_lr_s)
             self.nu = self.nu + adaptive_lr_s
 
-    def _action_based_gradient(self):
+    def _old_action_based_gradient(self):
         if self.pg_sub.parallel_computation:
             # prepare the parameters
             worker_dict = dict(
@@ -343,48 +421,66 @@ class PEL(PES):
         perf_vector = np.zeros(self.pg_sub.batch_size, dtype=np.float64)
         # score_vector = np.zeros((self.pg_sub.batch_size, self.pg_sub.env.horizon, self.pg_sub.dim), dtype=np.float64)
         reward_vector = np.zeros((self.pg_sub.batch_size, self.pg_sub.env.horizon), dtype=np.float64)
-        e_score_vector = np.zeros((self.pg_sub.batch_size, self.pg_sub.env.horizon, self.pg_sub.dim_action),
-                                dtype=np.float64)
+        # e_score_vector = np.zeros((self.pg_sub.batch_size, self.pg_sub.env.horizon, self.pg_sub.dim_action), dtype=np.float64)
+        e_score_vector = np.zeros((self.pg_sub.batch_size, self.pg_sub.env.horizon), dtype=np.float64)
         for j in range(self.pg_sub.batch_size):
             perf_vector[j] = res[j][TrajectoryResults2.PERF]
             reward_vector[j, :] = res[j][TrajectoryResults2.RewList]
             # score_vector[j, :, :] = res[j][TrajectoryResults2.ScoreList]
-            e_score_vector[j, :, :] = res[j][TrajectoryResults2.Info]["e_scores"]
+            # e_score_vector[j, :, :] = res[j][TrajectoryResults2.Info]["e_scores"]
+            e_score_vector[j, :] = res[j][TrajectoryResults2.Info]["e_scores"]
 
         # GPOMDP-like estimator
         gamma = self.pg_sub.env.gamma
         horizon = self.pg_sub.env.horizon
         gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
         rolling_scores = np.cumsum(e_score_vector, axis=1)
-        reward_trajectory = reward_vector[:, :, np.newaxis] * rolling_scores
-        estimated_gradient = np.mean(
-            np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
-            axis=0)
+        # reward_trajectory = reward_vector[:, :, np.newaxis] * rolling_scores
+        reward_trajectory = reward_vector * rolling_scores
+        # estimated_gradient = np.mean(np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1), axis=0)
+        estimated_gradient = np.mean(np.sum(gamma_seq * reward_trajectory, axis=1), axis=0)
         
         # Update nu
         if self.lr_sigma_strategy == "constant":
             self.nu = self.nu + self.lr_sigma * estimated_gradient
         elif self.lr_sigma_strategy == "adam":
             adaptive_lr_s = self.lr_scheduler.compute_gradient(estimated_gradient)
-            adaptive_lr_s = np.array(adaptive_lr_s)
+            # adaptive_lr_s = np.array(adaptive_lr_s)
             self.nu = self.nu + adaptive_lr_s
 
     def _extract_parameters(self):
         # TODO: fare finestra
         if self.pg_sub_name == "PGPE":
             # self.pg_sub_args["initial_rho"][RhoElem.MEAN] = copy.deepcopy(self.pg_sub.rho[RhoElem.MEAN])
-            self.pg_sub_args["initial_rho"][RhoElem.MEAN] = copy.deepcopy(self.pg_sub.best_rho[RhoElem.MEAN])
-            self.last_param = copy.deepcopy(self.pg_sub_args["initial_rho"][RhoElem.MEAN])
+            # self.pg_sub_args["initial_rho"][RhoElem.MEAN] = copy.deepcopy(self.pg_sub.best_rho[RhoElem.MEAN])
+            # self.last_param = copy.deepcopy(self.pg_sub_args["initial_rho"][RhoElem.MEAN])
+            self.last_param = copy.deepcopy(self.pg_sub.rho[RhoElem.MEAN])
         else:
             # self.pg_sub_args["initial_theta"] = copy.deepcopy(self.pg_sub.thetas)
-            self.pg_sub_args["initial_theta"] = copy.deepcopy(self.pg_sub.best_theta)
-            self.last_param = copy.deepcopy(self.pg_sub_args["initial_theta"])
+            # self.pg_sub_args["initial_theta"] = copy.deepcopy(self.pg_sub.best_theta)
+            # self.last_param = copy.deepcopy(self.pg_sub_args["initial_theta"])
+            self.last_param = copy.deepcopy(self.pg_sub.thetas)
     
     def _map_sigma(self):
-        self.sigma = np.power(1 - self.nu, -self.sigma_exponent)
+        if self.sigma_param == "hyper":
+            self.sigma = np.power(1 - self.nu, -self.sigma_exponent)
+        elif self.sigma_param == "exp":
+            self.sigma = np.exp(self.nu)
+        elif self.sigma_param == "sigmoid":
+            self.sigma = 1/ (1 + np.exp(-self.nu))
+        else:
+            NotImplementedError(f"[PEL] {self.sigma_param} parameterization not implemented.")
     
     def _grad_nu(self):
-        return self.sigma_exponent * np.power(1 - self.nu, -self.sigma_exponent - 1)
+        if self.sigma_param == "hyper":
+            grad = self.sigma_exponent * np.power(1 - self.nu, -self.sigma_exponent - 1)
+        elif self.sigma_param == "exp":
+            grad = np.exp(self.nu)
+        elif self.sigma_param == "sigmoid":
+            grad = 1 / (1 + np.exp(-self.nu))
+        else:
+            grad = 0
+        return grad
 
     def save_results(self) -> None:
         # Create the dictionary with the useful info
