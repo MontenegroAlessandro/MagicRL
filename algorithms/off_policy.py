@@ -16,6 +16,7 @@ from tqdm import tqdm
 import copy
 from adam.adam import Adam
 import collections
+import time
 
 
 # Class Implementation
@@ -344,10 +345,22 @@ class OffPolicyGradient:
         return np.sum(estimated_gradients, axis=0)
     
 
+    def matrix_shift(self, arr, num, fill_value=np.nan):
+        """Helper function to shift array elements vertically
+        Positive num shifts down, negative shifts up"""
+        result = np.empty_like(arr)
+
+        result[:num] = arr[-num:]
+        result[num:] = fill_value
+
+        return result
+
+
     def calculate_g_off_policy_v2(self, action_queue: collections.deque,
                                             state_queue: collections.deque, 
                                             thetas_queue: collections.deque, 
-                                            reward_queue: collections.deque) -> np.array:
+                                            reward_queue: collections.deque,
+                                            products: np.array) -> np.array:
         """
         Summary:
             Calculate the importance sampling ratio.
@@ -355,15 +368,13 @@ class OffPolicyGradient:
             action_trajectory (collections.deque): the action trajectory.
             state_trajectory (collections.deque): the state trajectory.
             thetas_queue (collections.deque): the thetas trajectory.
+            products (np.array): the products matrix.
         Returns:
             np.array: the importance sampling ratio.
         """
         num_trajectories = len(state_queue)
         num_updates = len(thetas_queue)
         estimated_gradients = np.zeros((num_trajectories, self.dim), dtype=np.float64)
-        # initialize product matrix where row i contains the probability product under parameter theta_i
-        products = np.zeros((num_updates, num_trajectories), dtype=np.float64)
-
         #for each batch in the window, compute the product of the probabilities
         #products i contains the products of the probabilities under parameter theta_i for all trajectories
 
@@ -396,9 +407,9 @@ class OffPolicyGradient:
             estimated_gradients[trajectory_idx] = importance_sampling_ratio * g
 
         if num_updates >= self.window_length:
-            # In-place operations to modify the original products matrix
-            products[:-1, :] = products[1:, :]  # Shift rows up
-            products[:, :-self.batch_size] = products[:, self.batch_size:]  # Shift columns left
+            # In-place operations to modify the original products matrix 
+            products = self.matrix_shift(products, 1, fill_value=0) # First shift up (rows)
+            products = self.matrix_shift(products.T, self.batch_size, fill_value=0).T # Then shift left (columns)
 
         return np.sum(estimated_gradients, axis=0)
     
