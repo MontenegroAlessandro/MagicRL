@@ -408,8 +408,8 @@ class OffPolicyGradient:
 
         if num_updates >= self.window_length:
             # In-place operations to modify the original products matrix 
-            products = self.matrix_shift(products, 1, fill_value=0) # First shift up (rows)
-            products = self.matrix_shift(products.T, self.batch_size, fill_value=0).T # Then shift left (columns)
+            products = self.matrix_shift(products, -1, fill_value=0) # First shift up (rows)
+            products = self.matrix_shift(products.T, -self.batch_size, fill_value=0).T # Then shift left (columns)
 
         return np.sum(estimated_gradients, axis=0)
     
