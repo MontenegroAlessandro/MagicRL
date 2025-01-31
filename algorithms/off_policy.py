@@ -319,6 +319,8 @@ class OffPolicyGradient:
             self.policy.set_parameters(thetas=thetas_queue[i])
             products[i, :] = self.compute_all_trajectory_products(state_queue, action_queue)
 
+        ratio_history = np.zeros(num_trajectories, dtype=np.float64)
+
         #compute the gradient update
         for trajectory_idx in range(num_trajectories):
             #numerator is product of state/action probabilities using the target distribution
@@ -329,6 +331,7 @@ class OffPolicyGradient:
 
             #compute the importance sampling ratio
             importance_sampling_ratio = num / denom
+            ratio_history[trajectory_idx] = importance_sampling_ratio
 
             #compute g, using scores of the past trajectory with respect to the target distribution parameters
             score_trajectory = self.compute_single_trajectory_scores(state_queue[trajectory_idx], action_queue[trajectory_idx])
@@ -336,6 +339,7 @@ class OffPolicyGradient:
 
             estimated_gradients[trajectory_idx] = importance_sampling_ratio * g
 
+        sum = np.sum(ratio_history, axis=0)
         return np.sum(estimated_gradients, axis=0)
 
 

@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from algorithms.off_policy import OffPolicyGradient
 from algorithms import PolicyGradient
-from envs import Swimmer, HalfCheetah, Reacher, Humanoid, Ant, Hopper
+from envs import Swimmer, HalfCheetah, Reacher, Humanoid, Ant, Hopper, Pendulum
 from policies import LinearGaussianPolicy
 from data_processors import IdentityDataProcessor
 import copy
@@ -66,6 +66,8 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, w
             env = Ant(horizon=horizon, gamma=1, render=False, clip=True)
         elif env_name == 'hopper':
             env = Hopper(horizon=horizon, gamma=1, render=False, clip=True)
+        elif env_name == 'pendulum':
+            env = Pendulum(horizon=horizon, gamma=1, render=False, clip=True)
         else:
             raise ValueError(f"Invalid environment name: {env_name}")
 
@@ -233,14 +235,14 @@ def main():
     parser.add_argument('--alg2', type=str, default='off_pg', help='Second algorithm to compare')
     parser.add_argument('--n_trials', type=int, default=3, help='Number of trials')
     parser.add_argument('--ite', type=int, default=100, help='Number of iterations')
-    parser.add_argument('--window_lengths', type=int, nargs='+', default=[3, 5, 10], 
+    parser.add_argument('--window_lengths', type=int, nargs='+', default=[2, 4, 8], 
                       help='Window lengths for off-policy (multiple values allowed)')
     parser.add_argument('--checkpoint_dir', type=str, default='checkpoints',
                       help='Directory to store checkpoints')
     parser.add_argument("--horizon", help="The horizon amount.", type=int,default=100)
     parser.add_argument('--n_workers', type=int, default=1, help='Number of parallel workers')
     parser.add_argument('--env', type=str, default='swimmer',
-                      choices=['swimmer', 'half_cheetah', 'reacher', 'humanoid', 'ant', 'hopper'],
+                      choices=['swimmer', 'half_cheetah', 'reacher', 'humanoid', 'ant', 'hopper', 'pendulum'],
                       help='Environment to use')
     parser.add_argument('--var', type=float, default=1,
                       help='The exploration amount (variance)')

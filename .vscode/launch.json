@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+    
         
 
         {
@@ -12,7 +13,11 @@
             "request": "launch",
             "program": "run.py",
             "args": [
-                "--alg", "off_pg"
+                "--alg", "off_pg",
+                "--n_workers", "10",
+                "--batch", "1",
+                "--var", "0.1",
+                "--window_length", "3",
             ],
             "console": "integratedTerminal"
         }

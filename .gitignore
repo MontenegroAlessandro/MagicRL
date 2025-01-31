@@ -8,6 +8,8 @@ __pycache__/
 # C extensions
 *.so
 
+rl
+
 # Distribution / packaging
 .Python
 build/

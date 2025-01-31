@@ -50,7 +50,7 @@ parser.add_argument(
     help="The environment.",
     type=str,
     default="swimmer",
-    choices=["swimmer", "half_cheetah", "reacher", "humanoid", "ant", "hopper", "lqr"]
+    choices=["swimmer", "half_cheetah", "reacher", "humanoid", "ant", "hopper", "lqr", "pendulum"]
 )
 parser.add_argument(
     "--costs",
@@ -206,6 +206,10 @@ for i in range(args.n_trials):
                 scale_matrix=0.9
             )
         MULTI_LINEAR = bool(args.lqr_action_dim > 1)
+    elif args.env == "pendulum":
+        env_class = Pendulum
+        env = env_class(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
+        MULTI_LINEAR = True
     else:
         raise ValueError(f"Invalid env name.")
     s_dim = env.state_dim
