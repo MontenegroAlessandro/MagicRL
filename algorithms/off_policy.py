@@ -155,6 +155,9 @@ class OffPolicyGradient:
         thetas_queue = collections.deque(maxlen=int(self.window_length))
         reward_queue = collections.deque(maxlen=int(self.window_size))
 
+        # initialize product matrix where row i contains the probability product under parameter theta_i
+        products = np.zeros((self.window_length, self.window_size), dtype=np.float64)
+
         for i in tqdm(range(self.ite)):
             thetas_queue.append(self.thetas)
 
@@ -202,10 +205,8 @@ class OffPolicyGradient:
             # Update best theta
             self.update_best_theta(current_perf=self.performance_idx[i])
 
-            # initialize product matrix where row i contains the probability product under parameter theta_i
-            products = np.zeros((len(thetas_queue), len(state_queue)), dtype=np.float64)
             # Compute the estimated gradient
-            estimated_gradient = self.calculate_g_off_policy_v2(
+            estimated_gradient, products = self.calculate_g_off_policy_v2(
                 action_queue=action_queue, state_queue=state_queue,
                 thetas_queue=thetas_queue, reward_queue=reward_queue,
                 products=products
@@ -360,7 +361,7 @@ class OffPolicyGradient:
                                             state_queue: collections.deque, 
                                             thetas_queue: collections.deque, 
                                             reward_queue: collections.deque,
-                                            products: np.array) -> np.array:
+                                            products: np.array) -> tuple[np.array, np.array]:
         """
         Summary:
             Calculate the importance sampling ratio.
@@ -375,27 +376,34 @@ class OffPolicyGradient:
         num_trajectories = len(state_queue)
         num_updates = len(thetas_queue)
         estimated_gradients = np.zeros((num_trajectories, self.dim), dtype=np.float64)
+
+        last_batch_states = list(state_queue)[-self.batch_size:]
+        last_batch_actions = list(action_queue)[-self.batch_size:]
+
+        #last theta index for the row of the products matrix, it's the last theta from whcih trajectories were sampled.
+        theta_idx = num_updates - 1
+
         #for each batch in the window, compute the product of the probabilities
         #products i contains the products of the probabilities under parameter theta_i for all trajectories
 
         #For each new trajectory in the batch, i need the respective product with respect to all thetas
-        last_batch_states = list(state_queue)[-self.batch_size:]
-        last_batch_actions = list(action_queue)[-self.batch_size:]
-        for i in range(num_updates - 1):
+        batch_start = num_updates * self.batch_size - self.batch_size
+        batch_end = num_updates * self.batch_size
+        for i in range(num_updates-1):
             self.policy.set_parameters(thetas=thetas_queue[i])
-            products[i, -self.batch_size:] = self.compute_all_trajectory_products(last_batch_states, last_batch_actions)
+            products[i, batch_start:batch_end] = self.compute_all_trajectory_products(last_batch_states, last_batch_actions)
 
         #then i need to recalculate all trajectories with respect to the new parameter
-        self.policy.set_parameters(thetas=thetas_queue[-1])
-        products[-1, :] = self.compute_all_trajectory_products(state_queue, action_queue)
+        self.policy.set_parameters(thetas=thetas_queue[theta_idx])
+        products[theta_idx, :num_trajectories] = self.compute_all_trajectory_products(state_queue, action_queue)
 
         #compute the gradient update
         for trajectory_idx in range(num_trajectories):
             #numerator is product of state/action probabilities using the target distribution
-            num = products[-1, trajectory_idx]
+            num = products[theta_idx, trajectory_idx]
 
             #denomitator is the weigthed sum of the probability product of the trajectory probabilities of all behavioural distributions
-            denom = np.sum(products[:, trajectory_idx]) * self.batch_size
+            denom = np.sum(products[:num_updates, trajectory_idx]) * self.batch_size
 
             #compute the importance sampling ratio
             importance_sampling_ratio = num / denom
@@ -411,7 +419,7 @@ class OffPolicyGradient:
             products = self.matrix_shift(products, -1, fill_value=0) # First shift up (rows)
             products = self.matrix_shift(products.T, -self.batch_size, fill_value=0).T # Then shift left (columns)
 
-        return np.sum(estimated_gradients, axis=0)
+        return np.sum(estimated_gradients, axis=0), products
     
     def calculate_g_off_policy_v3(self, action_queue: collections.deque,
                                             state_queue: collections.deque, 
