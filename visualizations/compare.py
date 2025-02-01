@@ -17,7 +17,7 @@ import shutil
 import argparse
 import pickle
 
-def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, window_lengths=[3, 5, 10], checkpoint_dir='checkpoints', n_workers=1, env_name='swimmer', var=1):
+def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, window_lengths=[3, 5, 10], checkpoint_dir='checkpoints', n_workers=1, env_name='swimmer', var=1, batch_size=100):
     """
     Run algorithms multiple times and return their performance curves.
     Includes checkpoint system to resume from crashes.
@@ -74,7 +74,6 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, w
         s_dim = env.state_dim
         a_dim = env.action_dim
         tot_params = s_dim * a_dim
-        batch_size = 100
         lr = 0.003
         
         for trial in range(start_trial, n_trials):
@@ -244,8 +243,8 @@ def main():
     parser.add_argument('--env', type=str, default='swimmer',
                       choices=['swimmer', 'half_cheetah', 'reacher', 'humanoid', 'ant', 'hopper', 'pendulum'],
                       help='Environment to use')
-    parser.add_argument('--var', type=float, default=1,
-                      help='The exploration amount (variance)')
+    parser.add_argument('--var', type=float, default=1, help='The exploration amount (variance)')
+    parser.add_argument('--batch_size', type=int, default=100, help='Batch size for off-policy methods')
     args = parser.parse_args()
     
     results = run_experiment(

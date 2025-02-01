@@ -4,6 +4,7 @@ import errno
 
 import numpy as np
 import torch
+from joblib import Parallel, delayed
 
 
 class RhoElem:
@@ -74,3 +75,13 @@ def numpy_to_tensor(arr: np.ndarray) -> torch.Tensor:
     if is_tensor(arr):
         return arr
     return torch.tensor(arr)
+
+def matrix_shift(arr, num, fill_value=np.nan):
+    """Helper function to shift array elements vertically
+    Positive num shifts down, negative shifts up"""
+    result = np.empty_like(arr)
+
+    result[:num] = arr[-num:]
+    result[num:] = fill_value
+
+    return result
