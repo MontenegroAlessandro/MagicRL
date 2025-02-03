@@ -163,10 +163,10 @@ class OffPolicyGradient:
         reward_queue = collections.deque(maxlen=int(self.window_size))
 
         # initialize product matrix where row i contains the probability product under parameter theta_i
-        products = np.zeros((self.window_length, self.window_size), dtype=np.float64)
+        log_sums = np.zeros((self.window_length, self.window_size), dtype=np.float64)
 
         for i in tqdm(range(self.ite)):
-            thetas_queue.append(self.thetas)
+            thetas_queue.append(np.array(self.thetas, dtype=np.float64))
 
             if self.parallel_computation:
                 # prepare the parameters
@@ -202,9 +202,9 @@ class OffPolicyGradient:
                 perf_vector[j] = res[j][OffPolicyTrajectoryResults.PERF]
 
                 #append the actions and states corresponding to the trajectory
-                action_queue.append(res[j][OffPolicyTrajectoryResults.ActList])
-                state_queue.append(res[j][OffPolicyTrajectoryResults.StateList])
-                reward_queue.append(res[j][OffPolicyTrajectoryResults.RewList])
+                action_queue.append(np.array(res[j][OffPolicyTrajectoryResults.ActList], dtype=np.float64))
+                state_queue.append(np.array(res[j][OffPolicyTrajectoryResults.StateList], dtype=np.float64))
+                reward_queue.append(np.array(res[j][OffPolicyTrajectoryResults.RewList], dtype=np.float64))
 
             #append the batch of trajectories to the queues
 
@@ -213,17 +213,11 @@ class OffPolicyGradient:
             self.update_best_theta(current_perf=self.performance_idx[i])
 
             # Compute the estimated gradient
-            if self.gradient_type == "particle":
-                estimated_gradient, products = self.calculate_g_particle_off_policy(
+            if self.gradient_type == "off_pg":
+                estimated_gradient, log_sums = self.calculate_g_off_policy(
                     action_queue=action_queue, state_queue=state_queue,
                     thetas_queue=thetas_queue, reward_queue=reward_queue,
-                    products=products
-                )
-            elif self.gradient_type == "off_pg":
-                estimated_gradient, products = self.calculate_g_off_policy(
-                    action_queue=action_queue, state_queue=state_queue,
-                    thetas_queue=thetas_queue, reward_queue=reward_queue,
-                    products=products
+                    log_sums=log_sums
                 )
 
 
@@ -297,28 +291,30 @@ class OffPolicyGradient:
             axis=0)
         return estimated_gradient
     
-    def compute_trajectory_product(self, state_sequence, action_sequence):
-        """Helper function to compute product for a single trajectory"""
-        return np.prod([self.policy.compute_pi(np.array(s), np.array(a)) 
-                       for s, a in zip(state_sequence, action_sequence)])
+    def compute_single_trajectory_scores(self, state_sequence, action_sequence):
+        return np.array([self.policy.compute_score(np.array(s), np.array(a)) for s, a in zip(state_sequence, action_sequence)])
 
-    def compute_all_trajectory_products(self, state_queue, action_queue):
+
+    def compute_all_trajectory_log_sum(self, state_queue, action_queue):
         """Compute probability products for all trajectories in parallel"""
         # Use existing n_jobs parameter from class initialization
         products = Parallel(n_jobs=self.n_jobs, backend="loky")(
-            delayed(self.compute_trajectory_product)(state_sequence, action_sequence)
+            delayed(self.compute_trajectory_log_sum)(state_sequence, action_sequence)
             for state_sequence, action_sequence in zip(state_queue, action_queue)
         )
         return np.array(products)
-
-    def compute_single_trajectory_scores(self, state_sequence, action_sequence):
-        return np.array([self.policy.compute_score(np.array(s), np.array(a)) for s, a in zip(state_sequence, action_sequence)])
     
+    def compute_trajectory_log_sum(self, state_sequence, action_sequence):
+        """Helper function to compute product for a single trajectory"""
+        return np.sum([np.log(self.policy.compute_pi(np.array(s), np.array(a))) 
+                       for s, a in zip(state_sequence, action_sequence)], dtype=np.float64)
+    
+
     def calculate_g_off_policy(self, action_queue: collections.deque,
                                             state_queue: collections.deque, 
                                             thetas_queue: collections.deque, 
                                             reward_queue: collections.deque,
-                                            products: np.array) -> tuple[np.array, np.array]:
+                                            log_sums: np.array) -> tuple[np.array, np.array]:
         """
         Summary:
             Calculate the importance sampling ratio.
@@ -348,22 +344,30 @@ class OffPolicyGradient:
         batch_end = num_updates * self.batch_size
         for i in range(num_updates-1):
             self.policy.set_parameters(thetas=thetas_queue[i])
-            products[i, batch_start:batch_end] = self.compute_all_trajectory_products(last_batch_states, last_batch_actions)
+            log_sums[i, batch_start:batch_end] = self.compute_all_trajectory_log_sum(last_batch_states, last_batch_actions)
 
         #then i need to recalculate all trajectories with respect to the new parameter
         self.policy.set_parameters(thetas=thetas_queue[theta_idx])
-        products[theta_idx, :num_trajectories] = self.compute_all_trajectory_products(state_queue, action_queue)
+        log_sums[theta_idx, :num_trajectories] = self.compute_all_trajectory_log_sum(state_queue, action_queue)
 
         #compute the gradient update
         for trajectory_idx in range(num_trajectories):
-            #numerator is product of state/action probabilities using the target distribution
-            num = products[theta_idx, trajectory_idx]
+            if num_updates <= 1:
+                # For first iteration, importance ratio is 1 since we're sampling from current policy
+                importance_sampling_ratio = 1.0
+            else:
+                #compute the importance sampling ratio
+                log_diff_terms = np.array([log_sums[i, trajectory_idx] - log_sums[theta_idx, trajectory_idx] for i in range(num_updates - 1)], dtype=np.float64)
+                
+                # Sort terms for better precision in summation
+                log_diff_terms = np.sort(log_diff_terms)
+                max_log_diff = log_diff_terms[-1]
 
-            #denomitator is the weigthed sum of the probability product of the trajectory probabilities of all behavioural distributions
-            denom = np.sum(products[:num_updates, trajectory_idx]) * self.batch_size
+                #subtract max from exponent and remultiply for numerical stability
+                log_sum = max_log_diff + np.log(np.sum(np.exp(log_diff_terms - max_log_diff)))
 
-            #compute the importance sampling ratio
-            importance_sampling_ratio = num / denom
+                # Convert to importance ratio: exp(-log(1 + exp(log_sum))) = 1/(1 + exp(log_sum))
+                importance_sampling_ratio = (1.0 / (1.0 + np.exp(log_sum))) * (1 / self.batch_size)
 
             #compute g, using scores of the past trajectory with respect to the target distribution parameters
             score_trajectory = self.compute_single_trajectory_scores(state_queue[trajectory_idx], action_queue[trajectory_idx])
@@ -373,10 +377,10 @@ class OffPolicyGradient:
 
         if num_updates >= self.window_length:
             # In-place operations to modify the original products matrix 
-            products = matrix_shift(products, -1, fill_value=0) # First shift up (rows)
-            products = matrix_shift(products.T, -self.batch_size, fill_value=0).T # Then shift left (columns)
+            log_sums = matrix_shift(log_sums, -1, fill_value=0) # First shift up (rows)
+            log_sums = matrix_shift(log_sums.T, -self.batch_size, fill_value=0).T # Then shift left (columns)
 
-        return np.sum(estimated_gradients, axis=0), products
+        return np.sum(estimated_gradients, axis=0), log_sums
     
     def calculate_g_particle_off_policy(self, action_queue: collections.deque,
                                             state_queue: collections.deque, 
@@ -534,3 +538,18 @@ class OffPolicyGradient:
             f.write(json.dumps(results, ensure_ascii=False, indent=4))
             f.close()
         return
+    '''
+    def compute_trajectory_product(self, state_sequence, action_sequence):
+        """Helper function to compute product for a single trajectory"""
+        return np.prod([self.policy.compute_pi(np.array(s), np.array(a)) 
+                       for s, a in zip(state_sequence, action_sequence)])
+
+    def compute_all_trajectory_products(self, state_queue, action_queue):
+        """Compute probability products for all trajectories in parallel"""
+        # Use existing n_jobs parameter from class initialization
+        products = Parallel(n_jobs=self.n_jobs, backend="loky")(
+            delayed(self.compute_trajectory_product)(state_sequence, action_sequence)
+            for state_sequence, action_sequence in zip(state_queue, action_queue)
+        )
+        return np.array(products)
+    '''
