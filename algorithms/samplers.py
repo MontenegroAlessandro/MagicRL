@@ -51,7 +51,9 @@ def off_pg_sampling_worker(
         params: np.ndarray = None,
         starting_state: np.ndarray = None,
         starting_action: np.ndarray = None,
-        pol_values: bool = False
+        pol_values: bool = False,
+        thetas_queue: collections.deque = None,
+        deterministic: bool = False
 ) -> list:
     """Worker collecting a single trajectory.
 
@@ -73,7 +75,7 @@ def off_pg_sampling_worker(
         list: [performance, reward, scores]
     """
     trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp, pol_values=pol_values)
-    res = trajectory_sampler.collect_off_policy_trajectory(params=params, starting_state=starting_state, starting_action=starting_action)
+    res = trajectory_sampler.collect_off_policy_trajectory(params=params, starting_state=starting_state, starting_action=starting_action, thetas_queue=thetas_queue, deterministic=deterministic)
     return res
 
 
@@ -351,7 +353,7 @@ class TrajectorySampler:
     
     def collect_off_policy_trajectory(
             self, params: np.array = None, starting_state=None, starting_action=None, 
-            thetas_queue: collections.deque = None
+            thetas_queue: collections.deque = None, deterministic: bool = False
     ) -> list:
         """
         Summary:
@@ -379,6 +381,13 @@ class TrajectorySampler:
         scores = np.zeros(shape=(self.env.horizon, self.pol.tot_params), dtype=np.float64)
         states = np.zeros(shape=(self.env.horizon, self.env.state_dim), dtype=np.float64)
         actions = np.zeros(shape=(self.env.horizon, self.env.action_dim), dtype=np.float64)
+
+        
+        if not deterministic:
+            len_queue = len(thetas_queue)
+            log_sums = np.zeros(len_queue, dtype=np.float64)
+        else:
+            log_sums = None
 
         pol_values = 0
         if params is not None:
@@ -422,10 +431,10 @@ class TrajectorySampler:
                 break
         
         #compute the log sum for each theta in the queue
-        len_queue = len(thetas_queue)
-        log_sums = np.zeros(len_queue, dtype=np.float64)
-        for i in range(len_queue):
-            self.pol.set_parameters(thetas=thetas_queue[i])
-            log_sums[i] = compute_trajectory_log_sum(self.pol, states, actions)
+        
+        if not deterministic:
+            for i in range(len_queue - 1):
+                self.pol.set_parameters(thetas=thetas_queue[i])
+                log_sums[i] = compute_trajectory_log_sum(self.pol, states, actions)
         
         return [perf, rewards, scores, states, actions, log_sums]

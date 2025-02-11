@@ -15,10 +15,10 @@
             "program": "run.py",
             "args": [
                 "--alg", "off_pg",
-                "--n_workers", "10",
-                "--batch", "10",
+                "--n_workers", "1",
+                "--batch", "2",
                 "--var", "0.1",
-                "--window_length", "16",
+                "--window_length", "3",
                 "--env", "half_cheetah"
             ],
             "console": "integratedTerminal"

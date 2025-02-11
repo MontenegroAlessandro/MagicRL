@@ -30,6 +30,7 @@ class OffPolicyTrajectoryResults:
     ScoreList = 2
     StateList = 3
     ActList = 4
+    LogSumList = 5
 
 class ParamSamplerResults:
     THETA = 0
