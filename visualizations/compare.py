@@ -17,7 +17,7 @@ import shutil
 import argparse
 import pickle
 
-def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, window_lengths=[3, 5, 10], checkpoint_dir='checkpoints', n_workers=1, env_name='swimmer', var=1, batch_size=100):
+def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, window_lengths=[3, 5, 10], batch_sizes=[10, 20, 40, 100], pg_batch_size=10, checkpoint_dir='checkpoints', n_workers=1, env_name='swimmer', var=1):
     """
     Run algorithms multiple times and return their performance curves.
     Includes checkpoint system to resume from crashes.
@@ -45,7 +45,8 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, w
         results = {alg1: []}
         if alg2 == 'off_pg':
             for w in window_lengths:
-                results[f'off_pg_{w}'] = []
+                for b in batch_sizes:
+                    results[f'off_pg_w{w}_b{b}'] = []
         else:
             results[alg2] = []
     
@@ -103,11 +104,11 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, w
                         estimator_type="GPOMDP",
                         initial_theta=np.zeros(tot_params),
                         ite=ite,
-                        batch_size=batch_size,
+                        batch_size=pg_batch_size,
                         env=copy.deepcopy(env),
                         policy=copy.deepcopy(pol),
                         data_processor=IdentityDataProcessor(),
-                        directory=os.path.join(trial_dir, alg1),
+                        directory=os.path.join(trial_dir, f"{alg1}_b{pg_batch_size}"),
                         verbose=False,
                         natural=False,
                         checkpoint_freq=100,
@@ -121,24 +122,25 @@ def run_experiment(alg1='pg', alg2='off_pg', n_trials=5, horizon=100, ite=100, w
                 # Run second algorithm
                 if alg2 == 'off_pg':
                     for window_length in window_lengths:
-                        alg = OffPolicyGradient(
-                            lr=[lr],
-                            lr_strategy="adam",
-                            initial_theta=np.zeros(tot_params),
-                            ite=ite,
-                            batch_size=batch_size,
-                            env=copy.deepcopy(env),
-                            policy=copy.deepcopy(pol),
-                            data_processor=IdentityDataProcessor(),
-                            directory=os.path.join(trial_dir, f"off_pg_{window_length}"),
-                            verbose=False,
-                            natural=False,
-                            checkpoint_freq=100,
-                            n_jobs=n_workers,
-                            window_length=window_length,
-                        )
-                        alg.learn()
-                        results[f'off_pg_{window_length}'].append(alg.performance_idx)
+                        for batch_size in batch_sizes:
+                            alg = OffPolicyGradient(
+                                lr=[lr],
+                                lr_strategy="adam",
+                                initial_theta=np.zeros(tot_params),
+                                ite=ite,
+                                batch_size=batch_size,
+                                env=copy.deepcopy(env),
+                                policy=copy.deepcopy(pol),
+                                data_processor=IdentityDataProcessor(),
+                                directory=os.path.join(trial_dir, f"off_pg_w{window_length}_b{batch_size}"),
+                                verbose=False,
+                                natural=False,
+                                checkpoint_freq=100,
+                                n_jobs=n_workers,
+                                window_length=window_length,
+                            )
+                            alg.learn()
+                            results[f'off_pg_w{window_length}_b{batch_size}'].append(alg.performance_idx)
                 else:
                     # Add handling for other algorithm types here
                     pass
@@ -175,28 +177,30 @@ def plot_comparison(results, window=10, save_path='comparison_plot.png'):
     """
     Plot performance comparison with confidence intervals and save to PNG
     """
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(12, 7))  # Increased figure size for better readability
     
-    # Get unique window lengths from results keys
-    window_lengths = sorted([int(k.split('_')[-1]) for k in results.keys() if k != 'pg'])
+    # Get unique window lengths and batch sizes from results keys
+    off_pg_configs = [(int(k.split('w')[1].split('_')[0]), int(k.split('b')[1])) 
+                      for k in results.keys() if k != 'pg']
     
     # Generate color map dynamically
     colors = {'pg': 'blue'}
     # Color map for off-policy variants
-    color_map = plt.cm.get_cmap('Set2')(np.linspace(0, 1, len(window_lengths)))
-    for i, w in enumerate(window_lengths):
-        colors[f'off_pg_{w}'] = color_map[i]
+    color_map = plt.cm.get_cmap('Set2')(np.linspace(0, 1, len(off_pg_configs)))
     
     # Sort keys to ensure consistent plotting order
-    for alg_name in sorted(results.keys()):
+    for idx, alg_name in enumerate(sorted(results.keys())):
         curves = np.array(results[alg_name])
         
         # Create readable label
         if alg_name == 'pg':
             label = 'PG'
+            color = colors['pg']
         else:
-            window_size = alg_name.split('_')[-1]
-            label = f'Off-PG (w={window_size})'
+            w = alg_name.split('w')[1].split('_')[0]
+            b = alg_name.split('b')[1]
+            label = f'Off-PG (w={w}, b={b})'
+            color = color_map[idx-1]  # -1 because pg is first
         
         # Compute mean and std across trials
         mean_curve = np.mean(curves, axis=0)
@@ -212,12 +216,12 @@ def plot_comparison(results, window=10, save_path='comparison_plot.png'):
             x = np.arange(len(mean_curve))
             
         # Plot mean and confidence interval
-        plt.plot(x, mean_curve, label=label, color=colors.get(alg_name, 'gray'))
+        plt.plot(x, mean_curve, label=label, color=color)
         plt.fill_between(x, 
                         mean_curve - std_curve,
                         mean_curve + std_curve,
                         alpha=0.2,
-                        color=colors.get(alg_name, 'gray'))
+                        color=color)
     
     plt.xlabel('Iteration')
     plt.ylabel('Performance')
@@ -244,7 +248,10 @@ def main():
                       choices=['swimmer', 'half_cheetah', 'reacher', 'humanoid', 'ant', 'hopper', 'pendulum'],
                       help='Environment to use')
     parser.add_argument('--var', type=float, default=1, help='The exploration amount (variance)')
-    parser.add_argument('--batch_size', type=int, default=100, help='Batch size for off-policy methods')
+    parser.add_argument('--batch_sizes', type=int, nargs='+', default=[10, 20, 40, 100],
+                      help='Batch sizes for off-policy (multiple values allowed)')
+    parser.add_argument('--pg_batch_size', type=int, default=10,
+                      help='Batch size for policy gradient')
     args = parser.parse_args()
     
     results = run_experiment(
@@ -253,6 +260,8 @@ def main():
         n_trials=args.n_trials,
         ite=args.ite,
         window_lengths=args.window_lengths,
+        batch_sizes=args.batch_sizes,
+        pg_batch_size=args.pg_batch_size,
         checkpoint_dir=args.checkpoint_dir,
         n_workers=args.n_workers,
         horizon=args.horizon,

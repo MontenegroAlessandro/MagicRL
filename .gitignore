@@ -7,8 +7,10 @@ __pycache__/
 
 # C extensions
 *.so
-
+key.pub
 rl
+venv_rl
+key
 
 # Distribution / packaging
 .Python
