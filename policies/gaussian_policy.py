@@ -33,6 +33,7 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         err_msg = "[GaussPolicy] standard deviation is negative!"
         assert std_dev > 0, err_msg
         self.std_dev = std_dev
+        self.var = std_dev ** 2
 
         # Additional attributes
         self.dim_state = dim_state
@@ -73,6 +74,14 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         prob = fact * np.exp(-((action - mean) ** 2) / (2 * (self.std_dev ** 2)))
         
         return prob 
+
+    def compute_log_pi(self, state, action):
+        mean = np.array(self.parameters @ state, dtype=np.float64)
+        fact = 1 / (np.sqrt(2 * np.pi) * self.std_dev)
+        log_prob = np.log(fact) - ((action - mean) ** 2) / (2 * (self.var))
+        
+        return log_prob 
+
 
     def compute_score(self, state, action) -> np.array:
         if self.std_dev == 0:

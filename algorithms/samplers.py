@@ -7,6 +7,8 @@ from algorithms.utils import RhoElem, TrajectoryResults
 from joblib import Parallel, delayed
 import numpy as np
 import copy
+from algorithms.utils import compute_trajectory_log_sum
+import collections
 
 
 def pg_sampling_worker(
@@ -349,6 +351,7 @@ class TrajectorySampler:
     
     def collect_off_policy_trajectory(
             self, params: np.array = None, starting_state=None, starting_action=None, 
+            thetas_queue: collections.deque = None
     ) -> list:
         """
         Summary:
@@ -417,5 +420,12 @@ class TrajectorySampler:
                     rewards[t+1:] = 0
                     scores[t+1:, :] = 0
                 break
-
-        return [perf, rewards, scores, states, actions]
+        
+        #compute the log sum for each theta in the queue
+        len_queue = len(thetas_queue)
+        log_sums = np.zeros(len_queue, dtype=np.float64)
+        for i in range(len_queue):
+            self.pol.set_parameters(thetas=thetas_queue[i])
+            log_sums[i] = compute_trajectory_log_sum(self.pol, states, actions)
+        
+        return [perf, rewards, scores, states, actions, log_sums]

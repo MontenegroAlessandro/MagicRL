@@ -400,22 +400,26 @@ def parse_args() -> ExperimentConfig:
                       choices=['swimmer', 'half_cheetah', 'reacher', 'humanoid', 'ant', 'hopper', 'pendulum'],
                       help='Environment to use')
     parser.add_argument('--var', type=float, default=1, help='The exploration amount (variance)')
+    parser.add_argument('--lr', type=float, default=0.003, 
+                      help='Learning rate for the algorithms')
     parser.add_argument('--run-id', type=str, default="",
                        help='Unique identifier for this run')
     
     args = parser.parse_args()
     
-    # Create algorithm configurations
+    # Create algorithm configurations with proper window lengths
     alg1_config = AlgorithmConfig(
         name=args.alg1,
         batch_sizes=tuple(args.batch_alg_1),
-        window_lengths=tuple(args.window_alg_1) if args.window_alg_1 else None
+        window_lengths=tuple(args.window_alg_1 if args.window_alg_1 is not None else [1]) 
+            if args.alg1 == 'off_pg' else None
     )
     
     alg2_config = AlgorithmConfig(
         name=args.alg2,
         batch_sizes=tuple(args.batch_alg_2),
-        window_lengths=tuple(args.window_alg_2) if args.window_alg_2 else None
+        window_lengths=tuple(args.window_alg_2 if args.window_alg_2 is not None else [1])
+            if args.alg2 == 'off_pg' else None
     )
     
     return ExperimentConfig(
@@ -428,6 +432,7 @@ def parse_args() -> ExperimentConfig:
         n_workers=args.n_workers,
         env_name=EnvType(args.env),
         var=args.var,
+        learning_rate=args.lr,
         run_id=args.run_id
     )
 

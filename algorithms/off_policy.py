@@ -7,7 +7,7 @@ import numpy as np
 from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
-from algorithms.utils import OffPolicyTrajectoryResults, check_directory_and_create, LearnRates, matrix_shift
+from algorithms.utils import OffPolicyTrajectoryResults, check_directory_and_create, LearnRates, matrix_shift, compute_trajectory_log_sum
 from algorithms.samplers import TrajectorySampler, off_pg_sampling_worker
 from joblib import Parallel, delayed
 import json
@@ -148,6 +148,7 @@ class OffPolicyGradient:
 
         # init the theta history
         self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
+        self.num_updates = 0
 
         # create the adam optimizers
         self.adam_optimizer = None
@@ -177,7 +178,8 @@ class OffPolicyGradient:
                     dp=copy.deepcopy(self.data_processor),
                     # params=copy.deepcopy(self.thetas),
                     params=None,
-                    starting_state=None
+                    starting_state=None,
+                    thetas_queue=thetas_queue
                 )
 
                 # build the parallel functions
@@ -191,12 +193,14 @@ class OffPolicyGradient:
             else:
                 res = []
                 for j in range(self.batch_size):
-                    tmp_res = self.sampler.collect_off_policy_trajectory(params=copy.deepcopy(self.thetas))
+                    tmp_res = self.sampler.collect_off_policy_trajectory(params=copy.deepcopy(self.thetas), thetas_queue=thetas_queue)
                     res.append(tmp_res)
 
             # Update performance
             perf_vector = np.zeros(self.batch_size, dtype=np.float64)
 
+            batch_start = self.num_updates * (self.batch_size - 1)
+            test = copy.deepcopy(log_sums)
             #for each trajectory in the batch, update the action, state, reward, and score  
             for j in range(self.batch_size):
                 perf_vector[j] = res[j][OffPolicyTrajectoryResults.PERF]
@@ -205,6 +209,7 @@ class OffPolicyGradient:
                 action_queue.append(np.array(res[j][OffPolicyTrajectoryResults.ActList], dtype=np.float64))
                 state_queue.append(np.array(res[j][OffPolicyTrajectoryResults.StateList], dtype=np.float64))
                 reward_queue.append(np.array(res[j][OffPolicyTrajectoryResults.RewList], dtype=np.float64))
+                test[:, batch_start + j] = np.array(res[j][OffPolicyTrajectoryResults.LogSumList], dtype=np.float64)
 
             #append the batch of trajectories to the queues
 
@@ -225,13 +230,15 @@ class OffPolicyGradient:
             # Update parameters
             if self.lr_strategy == "constant":
                 self.thetas = self.thetas + self.lr * estimated_gradient
+                self.num_updates += 1
             elif self.lr_strategy == "adam":
                 adaptive_lr = self.adam_optimizer.compute_gradient(estimated_gradient)
                 self.thetas = self.thetas + adaptive_lr
+                self.num_updates += 1
             else:
                 err_msg = f"[PG] {self.lr_strategy} not implemented yet!"
                 raise NotImplementedError(err_msg)
-
+            
             # Log
             if self.verbose:
                 print("*" * 30)
@@ -296,18 +303,14 @@ class OffPolicyGradient:
 
 
     def compute_all_trajectory_log_sum(self, state_queue, action_queue):
-        """Compute probability products for all trajectories in parallel"""
+        """Compute log sums for all trajectories in parallel"""
         # Use existing n_jobs parameter from class initialization
-        products = Parallel(n_jobs=self.n_jobs, backend="loky")(
-            delayed(self.compute_trajectory_log_sum)(state_sequence, action_sequence)
+        log_sums = Parallel(n_jobs=self.n_jobs, backend="loky")(
+            delayed(compute_trajectory_log_sum)(self.policy, state_sequence, action_sequence)
             for state_sequence, action_sequence in zip(state_queue, action_queue)
         )
-        return np.array(products)
+        return np.array(log_sums)
     
-    def compute_trajectory_log_sum(self, state_sequence, action_sequence):
-        """Helper function to compute product for a single trajectory"""
-        return np.sum([np.log(self.policy.compute_pi(np.array(s), np.array(a))) 
-                       for s, a in zip(state_sequence, action_sequence)], dtype=np.float64)
     
 
     def calculate_g_off_policy(self, action_queue: collections.deque,
@@ -327,22 +330,21 @@ class OffPolicyGradient:
             np.array: the importance sampling ratio.
         """
         num_trajectories = len(state_queue)
-        num_updates = len(thetas_queue)
         estimated_gradients = np.zeros((num_trajectories, self.dim), dtype=np.float64)
 
         last_batch_states = list(state_queue)[-self.batch_size:]
         last_batch_actions = list(action_queue)[-self.batch_size:]
 
         #last theta index for the row of the products matrix, it's the last theta from whcih trajectories were sampled.
-        theta_idx = num_updates - 1
+        theta_idx = self.num_updates - 1
 
         #for each batch in the window, compute the product of the probabilities
         #products i contains the products of the probabilities under parameter theta_i for all trajectories
 
-        #For each new trajectory in the batch, i need the respective product with respect to all thetas
-        batch_start = num_updates * self.batch_size - self.batch_size
-        batch_end = num_updates * self.batch_size
-        for i in range(num_updates-1):
+        #For each new trajectory in the batch, we need the respective log sum with respect to all parameters in the window
+        batch_start = self.num_updates * self.batch_size - self.batch_size
+        batch_end = self.num_updates * self.batch_size
+        for i in range(self.num_updates-1):
             self.policy.set_parameters(thetas=thetas_queue[i])
             log_sums[i, batch_start:batch_end] = self.compute_all_trajectory_log_sum(last_batch_states, last_batch_actions)
 
@@ -352,12 +354,12 @@ class OffPolicyGradient:
 
         #compute the gradient update
         for trajectory_idx in range(num_trajectories):
-            if num_updates <= 1:
+            if self.num_updates <= 1:
                 # For first iteration, importance ratio is 1 since we're sampling from current policy
                 importance_sampling_ratio = 1.0
             else:
                 #compute the importance sampling ratio
-                log_diff_terms = np.array([log_sums[i, trajectory_idx] - log_sums[theta_idx, trajectory_idx] for i in range(num_updates - 1)], dtype=np.float64)
+                log_diff_terms = np.array([log_sums[i, trajectory_idx] - log_sums[theta_idx, trajectory_idx] for i in range(self.num_updates - 1)], dtype=np.float64)
                 
                 # Sort terms for better precision in summation
                 log_diff_terms = np.sort(log_diff_terms)
@@ -375,7 +377,7 @@ class OffPolicyGradient:
 
             estimated_gradients[trajectory_idx] = importance_sampling_ratio * g
 
-        if num_updates >= self.window_length:
+        if self.num_updates >= self.window_length:
             # In-place operations to modify the original products matrix 
             log_sums = matrix_shift(log_sums, -1, fill_value=0) # First shift up (rows)
             log_sums = matrix_shift(log_sums.T, -self.batch_size, fill_value=0).T # Then shift left (columns)

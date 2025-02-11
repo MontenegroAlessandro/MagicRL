@@ -76,6 +76,7 @@ def numpy_to_tensor(arr: np.ndarray) -> torch.Tensor:
         return arr
     return torch.tensor(arr)
 
+#matrix shift: currently works with negative shifts
 def matrix_shift(arr, num, fill_value=np.nan):
     """Helper function to shift array elements vertically
     Positive num shifts down, negative shifts up"""
@@ -85,3 +86,8 @@ def matrix_shift(arr, num, fill_value=np.nan):
     result[num:] = fill_value
 
     return result
+
+def compute_trajectory_log_sum(policy, state_sequence, action_sequence):
+    """Helper function to compute log sum for a single trajectory"""
+    return np.sum([policy.compute_log_pi(np.array(s), np.array(a)) 
+                   for s, a in zip(state_sequence, action_sequence)], dtype=np.float64)
