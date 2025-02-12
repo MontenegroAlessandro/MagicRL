@@ -433,7 +433,7 @@ class TrajectorySampler:
         #compute the log sum for each theta in the queue
         
         if not deterministic:
-            for i in range(len_queue - 1):
+            for i in range(len_queue):
                 self.pol.set_parameters(thetas=thetas_queue[i])
                 log_sums[i] = compute_trajectory_log_sum(self.pol, states, actions)
         

@@ -80,7 +80,7 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         fact = 1 / (np.sqrt(2 * np.pi) * self.std_dev)
         log_prob = np.log(fact) - ((action - mean) ** 2) / (2 * (self.var))
         
-        return log_prob 
+        return log_prob
 
 
     def compute_score(self, state, action) -> np.array:
