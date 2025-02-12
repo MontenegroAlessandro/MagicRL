@@ -82,6 +82,14 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         
         return log_prob
 
+    def compute_sum_log_pi(self, states, actions):
+        
+        means = np.array(states @ self.parameters.T, dtype=np.float64)
+        log_fact = -np.log(np.sqrt(2 * np.pi) * self.std_dev)
+        log_prob = log_fact - ((actions - means) ** 2) / (2 * self.var)
+        
+        return np.sum(log_prob)
+
 
     def compute_score(self, state, action) -> np.array:
         if self.std_dev == 0:

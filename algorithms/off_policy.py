@@ -7,7 +7,7 @@ import numpy as np
 from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
-from algorithms.utils import OffPolicyTrajectoryResults, check_directory_and_create, LearnRates, matrix_shift, compute_trajectory_log_sum
+from algorithms.utils import OffPolicyTrajectoryResults, check_directory_and_create, LearnRates, matrix_shift
 from algorithms.samplers import TrajectorySampler, off_pg_sampling_worker
 from joblib import Parallel, delayed
 import json
@@ -16,10 +16,9 @@ from tqdm import tqdm
 import copy
 from adam.adam import Adam
 import collections
-import time
-import scipy
-import random
 from scipy.special import logsumexp
+import logging
+logger = logging.getLogger(__name__)
 
 # Class Implementation
 class OffPolicyGradient:
@@ -40,7 +39,7 @@ class OffPolicyGradient:
             n_jobs: int = 1,
             window_length: int = 5,
             gradient_type: str = "off_pg",
-            test: bool = True
+            test: bool = False
     ) -> None:
         """
         Summary:
@@ -136,6 +135,20 @@ class OffPolicyGradient:
         self.dim_state = self.env.state_dim
         self.window_length = np.min([window_length, self.ite])
         self.window_size = self.window_length * self.batch_size
+
+        # Print algorithm configuration
+        logger.info("\n" + "="*50)
+        logger.info("Initializing Off-Policy Gradient with parameters:")
+        logger.info(f"  - Window Length: {self.window_length}")
+        logger.info(f"  - Batch Size: {self.batch_size}")
+        logger.info(f"  - Learning Rate: {self.lr}")
+        logger.info(f"  - Learning Rate Strategy: {self.lr_strategy}")
+        logger.info(f"  - Number of Iterations: {self.ite}")
+        logger.info(f"  - Number of Workers: {self.n_jobs}")
+        logger.info(f"  - Environment: {self.env.__class__.__name__}")
+        logger.info(f"  - Horizon: {self.env.horizon}")
+        logger.info(f"  - Test Mode: {self.test}")
+        logger.info("="*50 + "\n")
 
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
@@ -276,53 +289,6 @@ class OffPolicyGradient:
             self.policy.reduce_exploration()
         self.sample_deterministic_curve()
         return
-
-    def calculate_g(
-            self, reward_trajectory: np.array,
-            score_trajectory: np.array
-    ) -> np.array:
-        """
-        Summary:
-            Update teh gradient estimate accoring to GPOMDP.
-        Args:
-            reward_trajectory (np.array): array containing the rewards obtained 
-            in each trajectory of the batch.
-            
-            score_trajectory (np.array):  array containing the scores 
-            $\\nabla_{\\theta} log \\pi(s_t, a_t)$ obtained in each 
-            trajectory of the batch.
-        Returns:
-            np.array: the estimated gradient for each parameter.
-        """
-        gamma = self.env.gamma
-        horizon = self.env.horizon
-
-        # Reshape reward_trajectory if it's 1D
-        if reward_trajectory.ndim == 1:
-            reward_trajectory = reward_trajectory[np.newaxis, :]
-            score_trajectory = score_trajectory[np.newaxis, :, :]
-        
-        gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
-        rolling_scores = np.cumsum(score_trajectory, axis=1)
-        reward_trajectory = reward_trajectory[:, :, np.newaxis] * rolling_scores
-        estimated_gradient = np.mean(
-            np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
-            axis=0)
-        return estimated_gradient
-    
-    def compute_single_trajectory_scores(self, state_sequence, action_sequence):
-        return np.array([self.policy.compute_score(np.array(s), np.array(a)) for s, a in zip(state_sequence, action_sequence)])
-
-
-    def compute_all_trajectory_log_sum(self, state_queue, action_queue):
-        """Compute log sums for all trajectories in parallel"""
-        # Use existing n_jobs parameter from class initialization
-        log_sums = Parallel(n_jobs=self.n_jobs, backend="loky")(
-            delayed(compute_trajectory_log_sum)(self.policy, state_sequence, action_sequence)
-            for state_sequence, action_sequence in zip(state_queue, action_queue)
-        )
-        return np.array(log_sums)
-    
     
 
     def calculate_g_off_policy(self, action_queue: collections.deque,
@@ -382,6 +348,52 @@ class OffPolicyGradient:
             log_sums = matrix_shift(log_sums.T, -self.batch_size, fill_value=0).T # Then shift left (columns)
 
         return np.sum(estimated_gradients, axis=0), log_sums
+
+    def calculate_g(
+            self, reward_trajectory: np.array,
+            score_trajectory: np.array
+    ) -> np.array:
+        """
+        Summary:
+            Update teh gradient estimate accoring to GPOMDP.
+        Args:
+            reward_trajectory (np.array): array containing the rewards obtained 
+            in each trajectory of the batch.
+            
+            score_trajectory (np.array):  array containing the scores 
+            $\\nabla_{\\theta} log \\pi(s_t, a_t)$ obtained in each 
+            trajectory of the batch.
+        Returns:
+            np.array: the estimated gradient for each parameter.
+        """
+        gamma = self.env.gamma
+        horizon = self.env.horizon
+
+        # Reshape reward_trajectory if it's 1D
+        if reward_trajectory.ndim == 1:
+            reward_trajectory = reward_trajectory[np.newaxis, :]
+            score_trajectory = score_trajectory[np.newaxis, :, :]
+        
+        gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
+        rolling_scores = np.cumsum(score_trajectory, axis=1)
+        reward_trajectory = reward_trajectory[:, :, np.newaxis] * rolling_scores
+        estimated_gradient = np.mean(
+            np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
+            axis=0)
+        return estimated_gradient
+    
+    def compute_single_trajectory_scores(self, state_sequence, action_sequence):
+        return np.array([self.policy.compute_score(np.array(s), np.array(a)) for s, a in zip(state_sequence, action_sequence)])
+
+
+    def compute_all_trajectory_log_sum(self, state_queue, action_queue):
+        """Compute log sums for all trajectories in parallel"""
+        # Use existing n_jobs parameter from class initialization
+        log_sums = Parallel(n_jobs=self.n_jobs, backend="loky")(
+            delayed(self.policy.compute_sum_log_pi)(state_sequence, action_sequence)
+            for state_sequence, action_sequence in zip(state_queue, action_queue)
+        )
+        return np.array(log_sums)
 
     def test_function(self, action_queue: collections.deque,
                                             state_queue: collections.deque, 

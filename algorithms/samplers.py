@@ -7,7 +7,6 @@ from algorithms.utils import RhoElem, TrajectoryResults
 from joblib import Parallel, delayed
 import numpy as np
 import copy
-from algorithms.utils import compute_trajectory_log_sum
 import collections
 
 
@@ -435,6 +434,6 @@ class TrajectorySampler:
         if not deterministic:
             for i in range(len_queue):
                 self.pol.set_parameters(thetas=thetas_queue[i])
-                log_sums[i] = compute_trajectory_log_sum(self.pol, states, actions)
+                log_sums[i] = self.pol.compute_sum_log_pi(states, actions)
         
         return [perf, rewards, scores, states, actions, log_sums]

@@ -121,6 +121,13 @@ parser.add_argument(
     type=int,
     default=2
 )
+parser.add_argument(
+    "--test",
+    help="Whether to run in test mode.",
+    type=int,
+    default=0,
+    choices=[0, 1]
+)
 
 args = parser.parse_args()
 
@@ -445,7 +452,8 @@ for i in range(args.n_trials):
             natural=False,
             checkpoint_freq=100,
             n_jobs=args.n_workers,
-            window_length=args.window_length
+            window_length=args.window_length,
+            test=bool(args.test)
         )
         alg = OffPolicyGradient(**alg_parameters)
     else:

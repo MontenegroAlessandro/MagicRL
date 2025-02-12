@@ -64,6 +64,7 @@ class ExperimentConfig:
     var: float
     learning_rate: float = 0.003
     run_id: str = ""
+    test: bool = False
 
     def __post_init__(self):
         """Validate configuration parameters and set run_id if not provided."""
@@ -150,6 +151,7 @@ class OffPolicyGradientAlgorithm(Algorithm):
             checkpoint_freq=100,
             n_jobs=config.n_workers,
             window_length=kwargs.get('window_length', 1),
+            test=config.test
         )
 
 class PolicyFactory:
@@ -313,60 +315,146 @@ class ExperimentRunner:
         return results
 
 class Visualizer:
-    """Handles experiment visualization."""
+    """Handles experiment visualization with clear separation of concerns."""
+    
+    def __init__(self):
+        self.figsize = (10, 6)
+        self.dpi = 300
+        self.alpha = 0.2
+        self.colormap_name = 'Set2'
+        self.line_styles = ['-', '--', ':', '-.']  # Add line styles for batch size variation
+    
     @staticmethod
-    def plot_comparison(results: Dict, window: int = 10, 
-                       save_path: str = 'comparison_plot.png'):
-        plt.figure(figsize=(10, 6))
+    def _parse_algorithm_key(key: str) -> dict:
+        """Parse an algorithm key into its components.
         
-        # Get unique window lengths from results keys
-        window_lengths = sorted([int(k.split('_')[-1]) for k in results.keys() if k != 'pg'])
+        Args:
+            key: String in format 'pg_b{batch}' or 'off_pg_w{window}_b{batch}'
+            
+        Returns:
+            Dictionary containing algorithm type and parameters
+        """
+        parts = key.split('_')
+        if parts[0] == 'pg':
+            return {
+                'type': 'pg',
+                'batch_size': int(parts[1][1:]),  # Remove 'b' prefix
+            }
+        else:
+            return {
+                'type': 'off_pg',
+                'window_size': int(parts[2][1:]),  # Remove 'w' prefix
+                'batch_size': int(parts[3][1:]),   # Remove 'b' prefix
+            }
+
+    def _create_label(self, key: str) -> str:
+        """Create a readable label from an algorithm key."""
+        info = self._parse_algorithm_key(key)
+        if info['type'] == 'pg':
+            return f"PG (b={info['batch_size']})"
+        return f"Off-PG (w={info['window_size']}, b={info['batch_size']})"
+
+    def _get_algorithm_colors(self, results: Dict) -> Dict[str, Tuple[Any, str]]:
+        """Generate color and line style mapping for different algorithms."""
+        # Get unique window lengths for off-policy algorithms
+        window_lengths = sorted({
+            self._parse_algorithm_key(key)['window_size']
+            for key in results.keys()
+            if key.startswith('off_pg')
+        })
         
-        # Generate color map dynamically
-        colors = {'pg': 'blue'}
-        # Color map for off-policy variants
-        color_map = plt.cm.get_cmap('Set2')(np.linspace(0, 1, len(window_lengths)))
-        for i, w in enumerate(window_lengths):
-            colors[f'off_pg_w{w}_b{window_lengths[i]}'] = color_map[i]
+        # Get unique batch sizes for each algorithm type
+        pg_batch_sizes = sorted({
+            self._parse_algorithm_key(key)['batch_size']
+            for key in results.keys()
+            if key.startswith('pg')
+        })
         
-        # Sort keys to ensure consistent plotting order
+        # Create color mapping
+        colors = {}
+        color_map = plt.colormaps[self.colormap_name]
+        
+        # Handle PG algorithms - different line styles for different batch sizes
+        pg_color = color_map(0)  # Use first color for PG
+        for key in results.keys():
+            if key.startswith('pg'):
+                info = self._parse_algorithm_key(key)
+                style_idx = pg_batch_sizes.index(info['batch_size']) % len(self.line_styles)
+                colors[key] = (pg_color, self.line_styles[style_idx])
+        
+        # Handle Off-PG algorithms
+        if window_lengths:
+            off_pg_colors = color_map(np.linspace(0.2, 0.8, len(window_lengths)))
+            
+            for key in results.keys():
+                if key.startswith('off_pg'):
+                    info = self._parse_algorithm_key(key)
+                    color_idx = window_lengths.index(info['window_size'])
+                    batch_sizes = sorted({
+                        self._parse_algorithm_key(k)['batch_size']
+                        for k in results.keys()
+                        if k.startswith('off_pg') and 
+                        self._parse_algorithm_key(k)['window_size'] == info['window_size']
+                    })
+                    style_idx = batch_sizes.index(info['batch_size']) % len(self.line_styles)
+                    colors[key] = (off_pg_colors[color_idx], self.line_styles[style_idx])
+        
+        return colors
+
+    def _smooth_curve(self, curve: np.ndarray, window: int) -> np.ndarray:
+        """Apply moving average smoothing to a curve."""
+        if window <= 1:
+            return curve
+        kernel = np.ones(window) / window
+        return np.convolve(curve, kernel, mode='valid')
+
+    def plot_comparison(self, results: Dict, window: int = 10, 
+                       save_path: str = 'visualizations/comparison_plot.png'):
+        """Create and save a comparison plot of algorithm performances.
+        
+        Args:
+            results: Dictionary mapping algorithm keys to lists of performance curves
+            window: Size of smoothing window for moving average
+            save_path: Path where to save the resulting plot
+        """
+        plt.figure(figsize=self.figsize)
+        
+        # Get color mapping for algorithms
+        colors = self._get_algorithm_colors(results)
+        
+        # Plot each algorithm's results
         for alg_name in sorted(results.keys()):
             curves = np.array(results[alg_name])
-            
-            # Create readable label
-            if alg_name == 'pg':
-                label = 'PG'
-            else:
-                window_size = alg_name.split('_')[-1]
-                label = f'Off-PG (w={window_size})'
-            
-            # Compute mean and std across trials
             mean_curve = np.mean(curves, axis=0)
             std_curve = np.std(curves, axis=0)
             
-            # Smooth curves
             if window > 1:
-                kernel = np.ones(window) / window
-                mean_curve = np.convolve(mean_curve, kernel, mode='valid')
-                std_curve = np.convolve(std_curve, kernel, mode='valid')
-                x = np.arange(len(mean_curve))
-            else:
-                x = np.arange(len(mean_curve))
-                
-            # Plot mean and confidence interval
-            plt.plot(x, mean_curve, label=label, color=colors.get(alg_name, 'gray'))
-            plt.fill_between(x, 
-                            mean_curve - std_curve,
-                            mean_curve + std_curve,
-                            alpha=0.2,
-                            color=colors.get(alg_name, 'gray'))
+                mean_curve = self._smooth_curve(mean_curve, window)
+                std_curve = self._smooth_curve(std_curve, window)
+            
+            x = np.arange(len(mean_curve))
+            color, line_style = colors[alg_name]
+            label = self._create_label(alg_name)
+            
+            # Plot mean curve with both color and line style
+            plt.plot(x, mean_curve, label=label, color=color, linestyle=line_style)
+            plt.fill_between(
+                x,
+                mean_curve - std_curve,
+                mean_curve + std_curve,
+                alpha=self.alpha,
+                color=color
+            )
         
+        # Set plot aesthetics
         plt.xlabel('Iteration')
         plt.ylabel('Performance')
         plt.title('Policy Gradient Methods Comparison')
         plt.legend()
         plt.grid(True)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
+        # Save plot
+        plt.savefig(save_path, dpi=self.dpi, bbox_inches='tight')
         plt.close()
 
 def parse_args() -> ExperimentConfig:
@@ -404,6 +492,8 @@ def parse_args() -> ExperimentConfig:
                       help='Learning rate for the algorithms')
     parser.add_argument('--run-id', type=str, default="",
                        help='Unique identifier for this run')
+    parser.add_argument("--test", help="Whether to run in test mode.", type=int, default=0,
+                        choices=[0, 1])
     
     args = parser.parse_args()
     
@@ -422,6 +512,7 @@ def parse_args() -> ExperimentConfig:
             if args.alg2 == 'off_pg' else None
     )
     
+    
     return ExperimentConfig(
         algorithm_1=alg1_config,
         algorithm_2=alg2_config,
@@ -433,7 +524,8 @@ def parse_args() -> ExperimentConfig:
         env_name=EnvType(args.env),
         var=args.var,
         learning_rate=args.lr,
-        run_id=args.run_id
+        run_id=args.run_id,
+        test=bool(args.test)
     )
 
 def main():
@@ -450,11 +542,11 @@ def main():
         logger.info("Saving comparison plot...")
         
         save_path = (
-            f'{config.env_name.value}_{config.algorithm_1.name}_vs_'
+            f'visualizations/{config.env_name.value}_{config.algorithm_1.name}_vs_'
             f'{config.algorithm_2.name}_var_{var_str}_run_{config.run_id}.png'
         )
             
-        Visualizer.plot_comparison(results, window=10, save_path=save_path)
+        Visualizer().plot_comparison(results, window=10, save_path=save_path)
         
     except Exception as e:
         logger.error(f"Experiment failed: {e}")
