@@ -8,7 +8,7 @@ from joblib import Parallel, delayed
 import numpy as np
 import copy
 import collections
-
+import time
 
 def pg_sampling_worker(
         env: BaseEnv = None,
@@ -406,7 +406,6 @@ class TrajectorySampler:
                 a = starting_action
             else:
                 a = self.pol.draw_action(state=features)
-            score = self.pol.compute_score(state=features, action=a)
             actions[t, :] = a
 
             # play the action
@@ -420,20 +419,16 @@ class TrajectorySampler:
 
             # update the vectors of rewards and scores
             rewards[t] = rew
-            scores[t, :] = score
 
 
             if done:
                 if t < self.env.horizon - 1:
                     rewards[t+1:] = 0
-                    scores[t+1:, :] = 0
                 break
         
         #compute the log sum for each theta in the queue
         
         if not deterministic:
-            for i in range(len_queue):
-                self.pol.set_parameters(thetas=thetas_queue[i])
-                log_sums[i] = self.pol.compute_sum_log_pi(states, actions)
-        
+            log_sums = self.pol.compute_sum_all_log_pi(states, actions, thetas_queue)
+
         return [perf, rewards, scores, states, actions, log_sums]

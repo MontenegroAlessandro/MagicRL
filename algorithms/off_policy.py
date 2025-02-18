@@ -18,6 +18,7 @@ from adam.adam import Adam
 import collections
 from scipy.special import logsumexp
 import logging
+import time  # Add this at the top with other imports
 logger = logging.getLogger(__name__)
 
 # Class Implementation
@@ -310,6 +311,12 @@ class OffPolicyGradient:
         num_trajectories = len(state_queue)
         estimated_gradients = np.zeros((num_trajectories, self.dim), dtype=np.float64)
 
+        #convert the queues to numpy arrays
+        reward_queue = np.array(reward_queue, dtype=np.float64)
+        state_queue = np.array(state_queue, dtype=np.float64)
+        action_queue = np.array(action_queue, dtype=np.float64)
+        thetas_queue = np.array(thetas_queue, dtype=np.float64)
+
         #last theta index for the row of the products matrix, it's the last theta from whcih trajectories were sampled.
         theta_idx = self.num_updates - 1
 
@@ -319,7 +326,17 @@ class OffPolicyGradient:
         #then i need to recalculate all trajectories with respect to the new parameter
         self.policy.set_parameters(thetas=thetas_queue[theta_idx])
         old_trajectories = num_trajectories - self.batch_size
-        log_sums[theta_idx, :(old_trajectories)] = self.compute_all_trajectory_log_sum(list(state_queue)[:old_trajectories], list(action_queue)[:old_trajectories])
+        start_time = time.time()
+        log_sums[theta_idx, :(old_trajectories)] = self.compute_all_trajectory_log_sum(state_queue[:old_trajectories], action_queue[:old_trajectories])
+        log_sum_time = time.time() - start_time
+        print(f"log sum computation time: {log_sum_time:.6f} seconds")
+
+        start_time = time.time()    
+        print(thetas_queue[theta_idx].reshape(1, -1).shape)
+        log_sums[theta_idx, :old_trajectories] = self.policy.compute_sum_all_log_pi(state_queue[:old_trajectories], action_queue[:old_trajectories], thetas_queue[theta_idx].reshape(1, -1))
+        log_sum_time_parallel = time.time() - start_time
+        print(f"log sum computation time parallel: {log_sum_time_parallel:.6f} seconds")
+        print(f"speedup: {log_sum_time / log_sum_time_parallel:.2f}x")
 
 
         if self.num_updates <= 1:
@@ -330,15 +347,15 @@ class OffPolicyGradient:
 
             #computes the log sum exp along the rows of the matrix, fixing columns
             log_sums_stable = logsumexp(log_diff_matrix, axis=0) #compute sum of exponents in log space for stability
+
             importance_vector = np.array(1.0 / (1.0 + np.exp(log_sums_stable)), dtype=np.float64) #final importance ratio
+
 
         importance_vector = importance_vector / self.batch_size
 
         #compute g, using scores of the past trajectory with respect to the target distribution parameters
-        all_scores = np.array([self.compute_single_trajectory_scores(states, actions) #need to be recualcuated, since respect to current parameters
-                             for states, actions in zip(state_queue, action_queue)], dtype=np.float64)
-        all_gradients = np.array([self.calculate_g(reward_trajectory=reward_queue[trajectory_idx], score_trajectory=all_scores[trajectory_idx]) 
-                             for trajectory_idx in range(num_trajectories)], dtype=np.float64) #classic gpomdp gradient for all trajectories, with respect to the target distribution parameters
+        all_scores = self.policy.compute_score_all_trajectories(state_queue, action_queue)
+        all_gradients = self.calculate_all_g(reward_trajectories=reward_queue, score_trajectories=all_scores)
 
         estimated_gradients = importance_vector.reshape(-1, 1) * all_gradients
 
@@ -381,10 +398,54 @@ class OffPolicyGradient:
             np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
             axis=0)
         return estimated_gradient
+
+    def calculate_all_g(
+            self, reward_trajectories: np.array,
+            score_trajectories: np.array
+    ) -> np.array:
+        """
+        Summary:
+            Compute GPOMDP gradients for multiple trajectories in parallel.
+        Args:
+            reward_trajectories (np.array): array of shape (n_trajectories, horizon) containing 
+                the rewards obtained in each trajectory.
+            
+            score_trajectories (np.array): array of shape (n_trajectories, horizon, dim) containing 
+                the scores $\\nabla_{\\theta} log \\pi(s_t, a_t)$ for each trajectory.
+        Returns:
+            np.array: matrix of shape (n_trajectories, dim) where row i contains 
+                the estimated gradient for trajectory i.
+        """
+        gamma = self.env.gamma
+        horizon = self.env.horizon
+        
+        # Ensure inputs are 3D/2D arrays
+        if reward_trajectories.ndim == 1:
+            reward_trajectories = reward_trajectories[np.newaxis, :]
+        if score_trajectories.ndim == 2:
+            score_trajectories = score_trajectories[np.newaxis, :, :]
+        
+        # Create gamma sequence (1, horizon)
+        gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** np.arange(horizon)
+        
+        # Compute cumulative scores (n_trajectories, horizon, dim)
+        rolling_scores = np.cumsum(score_trajectories, axis=1)
+        
+        # Expand rewards for broadcasting (n_trajectories, horizon, 1)
+        reward_trajectories = reward_trajectories[:, :, np.newaxis]
+        
+        # Multiply rewards with rolling scores (n_trajectories, horizon, dim)
+        weighted_scores = reward_trajectories * rolling_scores
+        
+        # Apply gamma discount and sum over time steps
+        # gamma_seq[:, np.newaxis] shape: (horizon, 1)
+        # Result shape: (n_trajectories, dim)
+        estimated_gradients = np.sum(gamma_seq[:, np.newaxis] * weighted_scores, axis=1)
+        
+        return estimated_gradients
     
     def compute_single_trajectory_scores(self, state_sequence, action_sequence):
         return np.array([self.policy.compute_score(np.array(s), np.array(a)) for s, a in zip(state_sequence, action_sequence)])
-
 
     def compute_all_trajectory_log_sum(self, state_queue, action_queue):
         """Compute log sums for all trajectories in parallel"""
@@ -394,6 +455,7 @@ class OffPolicyGradient:
             for state_sequence, action_sequence in zip(state_queue, action_queue)
         )
         return np.array(log_sums)
+
 
     def test_function(self, action_queue: collections.deque,
                                             state_queue: collections.deque, 

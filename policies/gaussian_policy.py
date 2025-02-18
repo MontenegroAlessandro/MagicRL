@@ -4,6 +4,7 @@ from policies import BasePolicy
 from abc import ABC
 import numpy as np
 import copy
+import time
 
 
 class LinearGaussianPolicy(BasePolicy, ABC):
@@ -90,6 +91,36 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         
         return np.sum(log_prob)
 
+    def compute_sum_all_log_pi(self, states, actions, thetas_queue):
+        """Compute sum of log probabilities for multiple parameter sets at once.
+        
+        Args:
+            states: Array of shape (timesteps, state_dim)
+            actions: Array of shape (timesteps, action_dim)
+            thetas_queue: List or array of parameters, each of shape (action_dim, state_dim)
+            
+        Returns:
+            log_sums: Array of shape (num_thetas,) containing sum of log probs for each theta
+        """
+        # Stack all parameters into a single array (num_thetas, action_dim, state_dim)
+        thetas = np.stack([theta.reshape(self.dim_action, self.dim_state) 
+                          for theta in thetas_queue])
+        
+        # Compute means for all parameter sets at once
+        # (num_thetas, timesteps, action_dim)
+        means = np.matmul(states, thetas.transpose(0, 2, 1))
+        
+        # Broadcasting to compute action deviations
+        # (num_thetas, timesteps, action_dim)
+        action_deviations = actions[np.newaxis, :, :] - means
+        
+        # Compute log probabilities
+        log_fact = -np.log(np.sqrt(2 * np.pi) * self.std_dev)
+        log_probs = log_fact - (action_deviations ** 2) / (2 * self.var)
+        
+        # Sum over both timesteps and action dimensions
+        return np.sum(log_probs, axis=(1, 2))
+
 
     def compute_score(self, state, action) -> np.array:
         if self.std_dev == 0:
@@ -104,6 +135,43 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         if self.multi_linear:
             scores = np.ravel(scores)
         return scores
+
+    def compute_score_trajectory(self, states, actions):
+        means = states @ self.parameters.T
+        action_deviations = actions - means
+        scores = (action_deviations[:, :, np.newaxis] * states[:, np.newaxis, :]) / self.var
+        return scores.reshape(scores.shape[0], -1)
+
+    def compute_score_all_trajectories(self, states_queue, actions_queue):
+        """Compute the score function for multiple trajectories.
+        
+        Args:
+            states_queue: Array of shape (num_trajectories, timesteps, state_dim)
+            actions_queue: Array of shape (num_trajectories, timesteps, action_dim)
+            
+        Returns:
+            scores: Array of shape (num_trajectories, timesteps, action_dim * state_dim)
+        """
+        if states_queue.ndim == 2:
+            means = states_queue @ self.parameters.T
+            action_deviations = actions_queue - means
+            scores = (action_deviations[:, :, np.newaxis] * states_queue[:, np.newaxis, :]) / self.var
+            return scores.reshape(scores.shape[0], -1)
+        
+        # Multiple trajectories version
+        means = np.matmul(states_queue, self.parameters.T)  # (num_trajectories, timesteps, action_dim)
+        action_deviations = actions_queue - means  # (num_trajectories, timesteps, action_dim)
+        
+        # Expand dimensions for broadcasting
+        action_deviations = action_deviations[:, :, :, np.newaxis]  # (num_trajectories, timesteps, action_dim, 1)
+        states_expanded = states_queue[:, :, np.newaxis, :]  # (num_trajectories, timesteps, 1, state_dim)
+        
+        # Compute scores
+        scores = (action_deviations * states_expanded) / self.var  # (num_trajectories, timesteps, action_dim, state_dim)
+        
+        # Reshape to (num_trajectories, timesteps, action_dim * state_dim)
+        return scores.reshape(scores.shape[0], scores.shape[1], -1)
     
     def diff(self, state):
         raise NotImplementedError 
+
