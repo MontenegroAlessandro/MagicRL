@@ -159,6 +159,9 @@ for i in range(args.n_trials):
     else:
         dir_name += "noclip_"
 
+    if args.alg == "off_pg":
+        dir_name += f"window_{args.window_length}_"
+
     """Environment"""
     MULTI_LINEAR = False
     if args.env == "swimmer":
