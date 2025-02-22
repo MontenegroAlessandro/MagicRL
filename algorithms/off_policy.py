@@ -39,7 +39,6 @@ class OffPolicyGradient:
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
             window_length: int = 5,
-            gradient_type: str = "off_pg",
             test: bool = False
     ) -> None:
         """
@@ -109,10 +108,6 @@ class OffPolicyGradient:
         assert env is not None, err_msg
         self.env = env
 
-        err_msg = "[PG] gradient_type not valid!"
-        assert gradient_type in ["off_pg", "particle"], err_msg
-        self.gradient_type = gradient_type
-
         err_msg = "[PG] policy is None."
         assert policy is not None, err_msg
         self.policy = policy
@@ -165,6 +160,7 @@ class OffPolicyGradient:
         # init the theta history
         self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
         self.num_updates = 1
+
 
         # create the adam optimizers
         self.adam_optimizer = None
@@ -236,12 +232,11 @@ class OffPolicyGradient:
             self.update_best_theta(current_perf=self.performance_idx[i])
 
             # Compute the estimated gradient
-            if self.gradient_type == "off_pg":
-                estimated_gradient, log_sums = self.calculate_g_off_policy(
-                    action_queue=action_queue, state_queue=state_queue,
-                    thetas_queue=thetas_queue, reward_queue=reward_queue,
-                    log_sums=log_sums
-                )
+            estimated_gradient, log_sums = self.calculate_g_off_policy(
+                action_queue=action_queue, state_queue=state_queue,
+                thetas_queue=thetas_queue, reward_queue=reward_queue,
+                log_sums=log_sums
+            )
             if self.test:
                 test_gradient = self.test_function(
                     action_queue=action_queue, state_queue=state_queue,
@@ -330,7 +325,7 @@ class OffPolicyGradient:
 
 
         if self.num_updates <= 1:
-            importance_vector = np.array(1.0, dtype=np.float64)
+            importance_vector = np.ones(self.batch_size, dtype=np.float64)
         else:
             #compute the difference between the log sums of the past trajectories and the log sum of the current trajectory
             log_diff_matrix = np.array(log_sums[:self.num_updates - 1, :num_trajectories] - log_sums[theta_idx, :num_trajectories], dtype=np.float64)
@@ -355,6 +350,7 @@ class OffPolicyGradient:
             log_sums = matrix_shift(log_sums.T, -self.batch_size, fill_value=0).T # Then shift left (columns)
 
         return np.sum(estimated_gradients, axis=0), log_sums
+
 
     def calculate_g(
             self, reward_trajectory: np.array,

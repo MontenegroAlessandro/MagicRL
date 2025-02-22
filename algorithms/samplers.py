@@ -388,7 +388,6 @@ class TrajectorySampler:
         else:
             log_sums = None
 
-        pol_values = 0
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
@@ -413,9 +412,6 @@ class TrajectorySampler:
 
             # update the performance index
             perf += (self.env.gamma ** t) * rew
-
-            if self.pol_values:
-                pol_values += np.log(self.pol.compute_pi(state=features, action=a))
 
             # update the vectors of rewards and scores
             rewards[t] = rew

@@ -15,11 +15,16 @@
             "program": "run.py",
             "args": [
                 "--alg", "off_pg",
-                "--n_workers", "1",
-                "--batch", "2",
+                "--env", "pendulum",
+                "--n_workers", "10",
                 "--var", "0.1",
-                "--window_length", "3",
-                "--env", "half_cheetah"
+                "--horizon", "200",
+                "--ite", "1000",
+                "--n_trials", "5",
+                "--clip", "0",
+                "--batch", "100",
+                "--window", "16",
+                "--noise_reduction", "1"
             ],
             "console": "integratedTerminal"
         }
