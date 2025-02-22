@@ -429,6 +429,6 @@ class TrajectorySampler:
         #compute the log sum for each theta in the queue
         
         if not deterministic:
-            log_sums = self.pol.compute_sum_all_log_pi(states, actions, thetas_queue)
+            log_sums = self.pol.compute_sum_all_log_pi(states, actions, np.array(thetas_queue))
 
         return [perf, rewards, scores, states, actions, log_sums]

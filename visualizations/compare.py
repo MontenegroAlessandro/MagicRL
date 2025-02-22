@@ -245,7 +245,7 @@ class ExperimentRunner:
         
         return results
 
-    def run_single_algorithm(self, alg_config: AlgorithmConfig, trial_dir: Path, 
+    def run_single_algorithm(self, alg_config: AlgorithmConfig, trial_dir: str, 
                            env: Any, policy: LinearGaussianPolicy, 
                            results: Dict) -> Dict:
         """Run a single algorithm with all its configurations."""
@@ -253,9 +253,10 @@ class ExperimentRunner:
             for window_length in alg_config.window_lengths:
                 for batch_size in alg_config.batch_sizes:
                     key = self._get_algorithm_key(alg_config, batch_size, window_length)
+                    alg_dir = f"{trial_dir}/{key}"
                     alg = self.algorithms[alg_config.name].create(
                         self.config, env, policy,
-                        trial_dir / key,
+                        Path(alg_dir),
                         window_length=window_length,
                         batch_size=batch_size
                     )
@@ -264,9 +265,10 @@ class ExperimentRunner:
         else:
             for batch_size in alg_config.batch_sizes:
                 key = self._get_algorithm_key(alg_config, batch_size)
+                alg_dir = f"{trial_dir}/{key}"
                 alg = self.algorithms[alg_config.name].create(
                     self.config, env, policy,
-                    trial_dir / key,
+                    Path(alg_dir),
                     batch_size=batch_size
                 )
                 alg.learn()
@@ -274,7 +276,7 @@ class ExperimentRunner:
         
         return results
 
-    def run_algorithms(self, trial_dir: Path, env: Any, 
+    def run_algorithms(self, trial_dir: str, env: Any, 
                       policy: LinearGaussianPolicy, results: Dict) -> Dict:
         """Run both algorithms with their respective configurations."""
         results = self.run_single_algorithm(
@@ -291,25 +293,24 @@ class ExperimentRunner:
         if results is None:
             results = self.initialize_results()
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            env = self.env_factory.create(self.config.horizon)
-            policy = PolicyFactory.create(
-                env.state_dim, env.action_dim, self.config.var
-            )
+        env = self.env_factory.create(self.config.horizon)
+        policy = PolicyFactory.create(
+            env.state_dim, env.action_dim, self.config.var
+        )
 
-            for trial in range(start_trial, self.config.n_trials):
-                logger.info(f"Running trial {trial + 1}/{self.config.n_trials}")
-                trial_dir = temp_path / f"trial_{trial}"
-                trial_dir.mkdir(parents=True, exist_ok=True)
+        for trial in range(start_trial, self.config.n_trials):
+            logger.info(f"Running trial {trial + 1}/{self.config.n_trials}")
+            
+            trial_dir = f"{self.config.checkpoint_dir}/trial_{trial}"
+            os.makedirs(trial_dir, exist_ok=True)
 
-                try:
-                    results = self.run_algorithms(trial_dir, env, policy, results)
-                    self.checkpoint_manager.save(results, trial)
-                except Exception as e:
-                    logger.error(f"Error in trial {trial}: {e}")
-                    self.checkpoint_manager.save(results, trial - 1)
-                    raise
+            try:
+                results = self.run_algorithms(trial_dir, env, policy, results)
+                self.checkpoint_manager.save(results, trial)
+            except Exception as e:
+                logger.error(f"Error in trial {trial}: {e}")
+                self.checkpoint_manager.save(results, trial - 1)
+                raise
 
         self.checkpoint_manager.cleanup()
         return results
@@ -461,6 +462,31 @@ def parse_args() -> ExperimentConfig:
     """Parse command line arguments and create ExperimentConfig."""
     parser = argparse.ArgumentParser(description='Compare RL algorithms')
     
+    # Add directory argument like in run.py
+    parser.add_argument(
+        "--dir",
+        help="Directory in which save the results.",
+        type=str,
+        default=""
+    )
+    
+    # Add lr_strategy argument
+    parser.add_argument(
+        "--lr_strategy",
+        help="Learning rate strategy (constant or adam).",
+        type=str,
+        default="adam",
+        choices=["constant", "adam"]
+    )
+    
+    # Change test to clip to match run.py
+    parser.add_argument(
+        "--clip",
+        help="Whether to clip the actions.",
+        action="store_true",  # This makes it a boolean flag
+        default=False
+    )
+    
     # Algorithm 1 configuration
     parser.add_argument('--alg1', type=str, default='pg', 
                       help='First algorithm to compare')
@@ -492,8 +518,6 @@ def parse_args() -> ExperimentConfig:
                       help='Learning rate for the algorithms')
     parser.add_argument('--run-id', type=str, default="",
                        help='Unique identifier for this run')
-    parser.add_argument("--test", help="Whether to run in test mode.", type=int, default=0,
-                        choices=[0, 1])
     
     args = parser.parse_args()
     
@@ -512,6 +536,20 @@ def parse_args() -> ExperimentConfig:
             if args.alg2 == 'off_pg' else None
     )
     
+    # Format directory name like in run.py
+    base_dir = args.dir
+    var_str = str(args.var).replace('.', '')
+    
+    # Create directory name following run.py pattern
+    dir_name = (
+        f"{args.alg1}_vs_{args.alg2}_{args.ite}_{args.env}_{args.horizon}_"
+        f"{args.lr_strategy}_{str(args.lr).replace('.', '')}_batch_"
+        f"{'-'.join(map(str, args.batch_alg_1))}_{'-'.join(map(str, args.batch_alg_2))}_"
+        f"{'clip_' if args.clip else 'noclip_'}"  # Changed from args.test to args.clip
+        f"var_{var_str}"
+    )
+    
+    full_dir = base_dir + dir_name
     
     return ExperimentConfig(
         algorithm_1=alg1_config,
@@ -519,13 +557,13 @@ def parse_args() -> ExperimentConfig:
         n_trials=args.n_trials,
         horizon=args.horizon,
         ite=args.ite,
-        checkpoint_dir=Path(args.checkpoint_dir),
+        checkpoint_dir=Path(full_dir),
         n_workers=args.n_workers,
         env_name=EnvType(args.env),
         var=args.var,
         learning_rate=args.lr,
         run_id=args.run_id,
-        test=bool(args.test)
+        test=args.clip  # Pass clip value to test parameter
     )
 
 def main():

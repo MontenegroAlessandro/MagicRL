@@ -312,10 +312,10 @@ class OffPolicyGradient:
         estimated_gradients = np.zeros((num_trajectories, self.dim), dtype=np.float64)
 
         #convert the queues to numpy arrays
-        reward_queue = np.array(reward_queue, dtype=np.float64)
-        state_queue = np.array(state_queue, dtype=np.float64)
-        action_queue = np.array(action_queue, dtype=np.float64)
-        thetas_queue = np.array(thetas_queue, dtype=np.float64)
+        reward_array = np.array(reward_queue, dtype=np.float64)
+        state_array = np.array(state_queue, dtype=np.float64)
+        action_array = np.array(action_queue, dtype=np.float64)
+        thetas_array = np.array(thetas_queue, dtype=np.float64)
 
         #last theta index for the row of the products matrix, it's the last theta from whcih trajectories were sampled.
         theta_idx = self.num_updates - 1
@@ -326,17 +326,7 @@ class OffPolicyGradient:
         #then i need to recalculate all trajectories with respect to the new parameter
         self.policy.set_parameters(thetas=thetas_queue[theta_idx])
         old_trajectories = num_trajectories - self.batch_size
-        start_time = time.time()
-        log_sums[theta_idx, :(old_trajectories)] = self.compute_all_trajectory_log_sum(state_queue[:old_trajectories], action_queue[:old_trajectories])
-        log_sum_time = time.time() - start_time
-        print(f"log sum computation time: {log_sum_time:.6f} seconds")
-
-        start_time = time.time()    
-        print(thetas_queue[theta_idx].reshape(1, -1).shape)
-        log_sums[theta_idx, :old_trajectories] = self.policy.compute_sum_all_log_pi(state_queue[:old_trajectories], action_queue[:old_trajectories], thetas_queue[theta_idx].reshape(1, -1))
-        log_sum_time_parallel = time.time() - start_time
-        print(f"log sum computation time parallel: {log_sum_time_parallel:.6f} seconds")
-        print(f"speedup: {log_sum_time / log_sum_time_parallel:.2f}x")
+        log_sums[theta_idx, :(old_trajectories)] = self.policy.compute_sum_all_log_pi(state_array[:old_trajectories], action_array[:old_trajectories], thetas_array[theta_idx].reshape(1, -1))
 
 
         if self.num_updates <= 1:
@@ -354,8 +344,8 @@ class OffPolicyGradient:
         importance_vector = importance_vector / self.batch_size
 
         #compute g, using scores of the past trajectory with respect to the target distribution parameters
-        all_scores = self.policy.compute_score_all_trajectories(state_queue, action_queue)
-        all_gradients = self.calculate_all_g(reward_trajectories=reward_queue, score_trajectories=all_scores)
+        all_scores = self.policy.compute_score_all_trajectories(state_array, action_array)
+        all_gradients = self.calculate_all_g(reward_array, all_scores)
 
         estimated_gradients = importance_vector.reshape(-1, 1) * all_gradients
 

@@ -112,7 +112,10 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         
         # Broadcasting to compute action deviations
         # (num_thetas, timesteps, action_dim)
-        action_deviations = actions[np.newaxis, :, :] - means
+        if actions.ndim == 2:
+            action_deviations = actions[np.newaxis, :, :] - means
+        elif actions.ndim == 3:
+            action_deviations = actions - means
         
         # Compute log probabilities
         log_fact = -np.log(np.sqrt(2 * np.pi) * self.std_dev)
