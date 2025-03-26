@@ -4,10 +4,6 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-
-    
-        
-
         {
             "name": "Python: Run Off-Policy",
             "type": "debugpy",
@@ -20,11 +16,11 @@
                 "--var", "0.1",
                 "--horizon", "200",
                 "--ite", "1000",
-                "--n_trials", "5",
+                "--n_trials", "1",
                 "--clip", "0",
-                "--batch", "100",
-                "--window", "16",
-                "--noise_reduction", "1"
+                "--batch", "10",
+                "--window", "3",
+                "--weight_type", "MIS",
             ],
             "console": "integratedTerminal"
         }

@@ -52,7 +52,8 @@ def off_pg_sampling_worker(
         starting_action: np.ndarray = None,
         pol_values: bool = False,
         thetas_queue: collections.deque = None,
-        deterministic: bool = False
+        deterministic: bool = False,
+        weight_type: str = 'BH'
 ) -> list:
     """Worker collecting a single trajectory.
 
@@ -74,7 +75,7 @@ def off_pg_sampling_worker(
         list: [performance, reward, scores]
     """
     trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp, pol_values=pol_values)
-    res = trajectory_sampler.collect_off_policy_trajectory(params=params, starting_state=starting_state, starting_action=starting_action, thetas_queue=thetas_queue, deterministic=deterministic)
+    res = trajectory_sampler.collect_off_policy_trajectory(params=params, starting_state=starting_state, starting_action=starting_action, thetas_queue=thetas_queue, deterministic=deterministic, weight_type=weight_type)
     return res
 
 
@@ -352,7 +353,7 @@ class TrajectorySampler:
     
     def collect_off_policy_trajectory(
             self, params: np.array = None, starting_state=None, starting_action=None, 
-            thetas_queue: collections.deque = None, deterministic: bool = False
+            thetas_queue: collections.deque = None, deterministic: bool = False, weight_type: str = 'BH'
     ) -> list:
         """
         Summary:
@@ -423,8 +424,12 @@ class TrajectorySampler:
                 break
         
         #compute the log sum for each theta in the queue
-        
-        if not deterministic:
+        if weight_type == 'BH' and not deterministic:
             log_sums = self.pol.compute_sum_all_log_pi(states, actions, np.array(thetas_queue))
+            return [perf, rewards, scores, states, actions, log_sums]
+        #compute the log sum for the current theta
+        elif weight_type == 'MIS' and not deterministic:
+            log_sum = self.pol.compute_sum_log_pi(states, actions)
+            return [perf, rewards, scores, states, actions, log_sum]
 
         return [perf, rewards, scores, states, actions, log_sums]

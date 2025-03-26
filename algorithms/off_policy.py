@@ -39,7 +39,8 @@ class OffPolicyGradient:
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
             window_length: int = 5,
-            test: bool = False
+            test: bool = False,
+            weight_type: str = "BH"
     ) -> None:
         """
         Summary:
@@ -116,6 +117,12 @@ class OffPolicyGradient:
         assert data_processor is not None, err_msg
         self.data_processor = data_processor
 
+        err_msg = "[PG] weight_type not valid!"
+        assert weight_type in ["BH", "MIS"], err_msg
+        self.weight_type = weight_type
+
+
+
         check_directory_and_create(dir_name=directory)
         self.directory = directory
 
@@ -179,8 +186,12 @@ class OffPolicyGradient:
         thetas_queue = collections.deque(maxlen=int(self.window_length))
         thetas_queue.append(np.array(self.thetas, dtype=np.float64))
 
-        # initialize product matrix where row i contains the probability product under parameter theta_i
-        log_sums = np.zeros((self.window_length, self.window_size), dtype=np.float64)
+        # for BH: initialize product matrix where row i contains the probability product under parameter theta_i
+        if self.weight_type == "BH":
+            log_sums = np.zeros((self.window_length, self.window_size), dtype=np.float64)
+        # for MIS: each element is the log sum of the trajectory under its behavioral distribution
+        elif self.weight_type == "MIS":
+            log_sums = np.zeros(self.window_size, dtype=np.float64)
 
         for i in tqdm(range(self.ite)):
             
@@ -194,7 +205,8 @@ class OffPolicyGradient:
                     # params=copy.deepcopy(self.thetas),
                     params=None,
                     starting_state=None,
-                    thetas_queue=thetas_queue
+                    thetas_queue=thetas_queue,
+                    weight_type=self.weight_type
                 )
 
                 # build the parallel functions
@@ -223,7 +235,11 @@ class OffPolicyGradient:
                 action_queue.append(np.array(res[j][OffPolicyTrajectoryResults.ActList], dtype=np.float64))
                 state_queue.append(np.array(res[j][OffPolicyTrajectoryResults.StateList], dtype=np.float64))
                 reward_queue.append(np.array(res[j][OffPolicyTrajectoryResults.RewList], dtype=np.float64))
-                log_sums[:self.num_updates, batch_start + j] = np.array(res[j][OffPolicyTrajectoryResults.LogSumList], dtype=np.float64)
+
+                if self.weight_type == "BH":
+                    log_sums[:self.num_updates, batch_start + j] = np.array(res[j][OffPolicyTrajectoryResults.LogSumList], dtype=np.float64)
+                elif self.weight_type == "MIS":
+                    log_sums[batch_start + j] = np.array(res[j][OffPolicyTrajectoryResults.LogSumList], dtype=np.float64)
 
             #append the batch of trajectories to the queues
 
@@ -232,17 +248,25 @@ class OffPolicyGradient:
             self.update_best_theta(current_perf=self.performance_idx[i])
 
             # Compute the estimated gradient
-            estimated_gradient, log_sums = self.calculate_g_off_policy(
-                action_queue=action_queue, state_queue=state_queue,
-                thetas_queue=thetas_queue, reward_queue=reward_queue,
-                log_sums=log_sums
-            )
-            if self.test:
-                test_gradient = self.test_function(
+            if self.weight_type == "BH":
+                estimated_gradient, log_sums = self.calculate_g_BH(
                     action_queue=action_queue, state_queue=state_queue,
-                    thetas_queue=thetas_queue, reward_queue=reward_queue
+                    thetas_queue=thetas_queue, reward_queue=reward_queue,
+                    log_sums=log_sums
                 )
-                assert np.abs(np.sum(estimated_gradient) - np.sum(test_gradient)) < 1e-6, "Sum of test gradient does not match sum of estimated gradient"
+                if self.test:
+                    test_gradient = self.test_function_BH(
+                        action_queue=action_queue, state_queue=state_queue,
+                        thetas_queue=thetas_queue, reward_queue=reward_queue
+                    )
+                    assert np.abs(np.sum(estimated_gradient) - np.sum(test_gradient)) < 1e-6, "Sum of test gradient does not match sum of estimated gradient"
+            
+            if self.weight_type == "MIS":
+                estimated_gradient, log_sums = self.calculate_g_MIS(
+                    action_queue=action_queue, state_queue=state_queue,
+                    thetas_queue=thetas_queue, reward_queue=reward_queue,
+                    log_sums=log_sums
+                )
 
 
 
@@ -286,8 +310,12 @@ class OffPolicyGradient:
         self.sample_deterministic_curve()
         return
     
-
-    def calculate_g_off_policy(self, action_queue: collections.deque,
+    '''
+    ------------------------------------------------------------------------------------------------
+    THE FOLLOWING SECTION CONTAINST ESTIMATOR FOR BH
+    ------------------------------------------------------------------------------------------------
+    '''
+    def calculate_g_BH(self, action_queue: collections.deque,
                                             state_queue: collections.deque, 
                                             thetas_queue: collections.deque, 
                                             reward_queue: collections.deque,
@@ -443,7 +471,7 @@ class OffPolicyGradient:
         return np.array(log_sums)
 
 
-    def test_function(self, action_queue: collections.deque,
+    def test_function_BH(self, action_queue: collections.deque,
                                             state_queue: collections.deque, 
                                             thetas_queue: collections.deque, 
                                             reward_queue: collections.deque) -> np.array:
@@ -481,6 +509,81 @@ class OffPolicyGradient:
 
         return np.sum(estimated_gradients, axis=0)
     
+
+    '''
+    ------------------------------------------------------------------------------------------------
+    THE FOLLOWING SECTION CONTAINST ESTIMATOR FOR MIS
+    ------------------------------------------------------------------------------------------------
+    '''
+
+    def calculate_g_MIS(self, action_queue: collections.deque,
+                                            state_queue: collections.deque, 
+                                            thetas_queue: collections.deque, 
+                                            reward_queue: collections.deque,
+                                            log_sums: np.array) -> tuple[np.array, np.array]:
+        """
+        Summary:
+            Calculate the importance sampling ratio.
+        Args:
+            action_trajectory (collections.deque): the action trajectory.
+            state_trajectory (collections.deque): the state trajectory.
+            thetas_queue (collections.deque): the thetas trajectory.
+            products (np.array): the products matrix.
+        Returns:
+            np.array: the importance sampling ratio.
+        """
+        num_trajectories = len(state_queue)
+        estimated_gradients = np.zeros((num_trajectories, self.dim), dtype=np.float64)
+
+        conf = 0.05
+        D = 3
+        lambdas = np.zeros(num_trajectories, dtype=np.float64)
+        lambdas[:(num_trajectories - self.batch_size)] = np.sqrt(2*np.log(2/conf)  / (3 * num_trajectories * D))
+        lambdas[(num_trajectories - self.batch_size):] = np.sqrt(2*np.log(2/conf)  / (3 * num_trajectories))
+
+        alphas = np.zeros(num_trajectories, dtype=np.float64)
+        alphas[:(num_trajectories - self.batch_size)] = 1 / (self.num_updates - 1 + D)
+        alphas[(num_trajectories - self.batch_size):] = D / (self.num_updates - 1 + D)
+
+        #convert the queues to numpy arrays
+        reward_array = np.array(reward_queue, dtype=np.float64)
+        state_array = np.array(state_queue, dtype=np.float64)
+        action_array = np.array(action_queue, dtype=np.float64)
+        thetas_array = np.array(thetas_queue, dtype=np.float64)
+
+        #last theta index for the row of the products matrix, it's the last theta from whcih trajectories were sampled.
+        theta_idx = self.num_updates - 1
+
+        #for each batch in the window, compute the product of the probabilities
+        #products i contains the products of the probabilities under parameter theta_i for all trajectories
+
+        #then i need to recalculate all trajectories with respect to the new parameter
+        self.policy.set_parameters(thetas=thetas_queue[theta_idx])
+        current_theta_log_sums = self.policy.compute_sum_all_log_pi(state_array[:num_trajectories], action_array[:num_trajectories], thetas_array[theta_idx].reshape(1, -1))
+
+
+        if self.num_updates <= 1:
+            importance_vector = np.ones(self.batch_size, dtype=np.float64)
+        else:
+            #compute the difference between the log sums of the past trajectories and the log sum of the current trajectory
+            log_diff_matrix = np.array(log_sums[:num_trajectories] - current_theta_log_sums, dtype=np.float64)
+
+            importance_vector = np.array(1.0 / ((1 - lambdas) * np.exp(log_diff_matrix) + lambdas), dtype=np.float64) #final importance ratio
+
+
+        importance_vector = alphas * importance_vector / self.batch_size
+
+        #compute g, using scores of the past trajectory with respect to the target distribution parameters
+        all_scores = self.policy.compute_score_all_trajectories(state_array, action_array)
+        all_gradients = self.calculate_all_g(reward_array, all_scores)
+
+        estimated_gradients = importance_vector.reshape(-1, 1) * all_gradients
+
+        if self.num_updates >= self.window_length:
+            # In-place operations to modify the original products matrix 
+            log_sums = matrix_shift(log_sums.T, -self.batch_size, fill_value=0).T # shift left (columns)
+
+        return np.sum(estimated_gradients, axis=0), log_sums    
 
     def update_best_theta(self, current_perf: np.float64, *args, **kwargs) -> None:
         """
@@ -523,7 +626,8 @@ class OffPolicyGradient:
                 params=None,
                 starting_state=None,
                 thetas_queue=None,
-                deterministic=True
+                deterministic=True,
+                weight_type=self.weight_type
 
             )
             # build the parallel functions

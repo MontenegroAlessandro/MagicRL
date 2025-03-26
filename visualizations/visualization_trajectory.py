@@ -9,7 +9,7 @@ def extract_batch_size(folder_name):
     return int(match.group(1)) if match else None
 
 def plot_performance_by_trajectory():
-    results_dir = "results"
+    results_dir = "results/cheetah"
     plt.figure(figsize=(12, 8), dpi=300)
     plt.style.use('bmh')
     

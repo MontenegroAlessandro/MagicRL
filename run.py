@@ -128,6 +128,13 @@ parser.add_argument(
     default=0,
     choices=[0, 1]
 )
+parser.add_argument(
+    "--weight_type",
+    help="The type of weight to use in the off-policy gradient.",
+    type=str,
+    default="MIS",
+    choices=["BH", "MIS"]
+)
 
 args = parser.parse_args()
 
@@ -456,7 +463,8 @@ for i in range(args.n_trials):
             checkpoint_freq=100,
             n_jobs=args.n_workers,
             window_length=args.window_length,
-            test=bool(args.test)
+            test=bool(args.test),
+            weight_type=args.weight_type
         )
         alg = OffPolicyGradient(**alg_parameters)
     else:
