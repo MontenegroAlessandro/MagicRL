@@ -13,7 +13,8 @@ def plot_performance():
     plt.style.use('bmh')
     
     # Define regex pattern
-    pattern = r'(off_pg|pg)_\d+_pendulum_\d+_adam_\d+_gaussian_batch_(\d+)_noclip(?:_window_(\d+)_?(BH|MIS))?_(\d+)_var_\d+'
+    pattern = r'(off_pg|pg)_(\d+)_([a-zA-Z0-9_]+)_(\d+)_adam_(\d+)_gaussian_batch_(\d+)_noclip(?:_window_(\d+)_(BH|MIS)_(\d+))?(?:_(\d+))?_var_(\d+)'
+    
     
     # Dictionary to store grouped data for legend organization
     algorithm_data = {}
@@ -28,20 +29,28 @@ def plot_performance():
         # Extract info using regex
         match = re.search(pattern, experiment_dir)
         if match:
-            algorithm = match.group(1)
-            batch_size = match.group(2)
-            window = match.group(3) if match.group(3) else "N/A"
-            bh_or_mis = match.group(4) if match.group(4) else "N/A"
+            algorithm = match.group(1)          # off_pg or pg
+            iterations = match.group(2)         # iterations (5000)
+            env_name = match.group(3)           # environment name (swimmer)
+            env_param = match.group(4)          # number after env_name (200)
+            adam_param = match.group(5)         # adam parameter (0001)
+            batch_size = match.group(6)         # batch size (20)
+            
+            # Optional window parameters
+            window_size = match.group(7) if match.group(7) else None
+            sampling_type = match.group(8) if match.group(8) else None
+            window_extra = match.group(9) if match.group(9) else None
+            var_num = match.group(10)           # variant number (01)
             
             # Create a clean label using the extracted information
             if algorithm != "N/A":
                 clean_label = f"{algorithm} ("
                 if batch_size != "N/A":
                     clean_label += f"Batch_size={batch_size}"
-                if window != "N/A":
-                    clean_label += f", Window={window}"
-                if bh_or_mis != "N/A":
-                    clean_label += f", {bh_or_mis}"
+                if window_size != "N/A":
+                    clean_label += f", Window={window_size}"
+                if sampling_type != "N/A":
+                    clean_label += f", {sampling_type}"
                 clean_label += ")"
             
         else:
