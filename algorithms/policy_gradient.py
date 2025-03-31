@@ -231,7 +231,7 @@ class PolicyGradient:
 
             # reduce the exploration factor of the policy
             self.policy.reduce_exploration()
-        self.sample_deterministic_curve()
+        #self.sample_deterministic_curve()
         return
 
     def update_g(

@@ -132,7 +132,6 @@ parser.add_argument(
     "--weight_type",
     help="The type of weight to use in the off-policy gradient.",
     type=str,
-    default="MIS",
     choices=["BH", "MIS"]
 )
 
@@ -167,7 +166,7 @@ for i in range(args.n_trials):
         dir_name += "noclip_"
 
     if args.alg == "off_pg":
-        dir_name += f"window_{args.window_length}_"
+        dir_name += f"window_{args.window_length}_{args.weight_type}_"
 
     """Environment"""
     MULTI_LINEAR = False

@@ -11,16 +11,17 @@
             "program": "run.py",
             "args": [
                 "--alg", "off_pg",
-                "--env", "pendulum",
+                "--env", "half_cheetah",
                 "--n_workers", "10",
                 "--var", "0.1",
                 "--horizon", "200",
                 "--ite", "1000",
                 "--n_trials", "1",
                 "--clip", "0",
-                "--batch", "10",
-                "--window", "3",
+                "--batch", "5",
+                "--window", "16",
                 "--weight_type", "MIS",
+                "--test", "1",
             ],
             "console": "integratedTerminal"
         }
