@@ -10,18 +10,17 @@
             "request": "launch",
             "program": "run.py",
             "args": [
-                "--alg", "off_pg",
-                "--env", "half_cheetah",
+                "--alg", "pg",
+                "--env", "swimmer",
                 "--n_workers", "10",
                 "--var", "0.1",
-                "--horizon", "200",
+                "--horizon", "100",
                 "--ite", "1000",
                 "--n_trials", "1",
                 "--clip", "0",
-                "--batch", "5",
-                "--window", "16",
-                "--weight_type", "MIS",
-                "--test", "1",
+                "--batch", "100",
+                "--pol", "nn",
+                "--lr", "0.01"
             ],
             "console": "integratedTerminal"
         }

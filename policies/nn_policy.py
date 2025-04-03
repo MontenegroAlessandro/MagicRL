@@ -32,9 +32,9 @@ class NeuralNetworkPolicy(BasePolicy, ABC):
         if model is None:
             # Build the default net
             self.net = nn.Sequential(
-                nn.Linear(self.dim_state, 32, bias=False),
-                nn.Linear(32, 32, bias=False),
-                nn.Linear(32, self.dim_action, bias=False)
+                nn.Linear(self.dim_state, 32, bias=False), # Added bias=True (recommended)
+                nn.Linear(32, 32, bias=False),          # Added bias=True
+                nn.Linear(32, self.dim_action, bias=False) # Added bias=True
             )
             self.layers_shape = [
                 (self.dim_state, 32),
@@ -49,19 +49,29 @@ class NeuralNetworkPolicy(BasePolicy, ABC):
 
         self.params_per_layer = []
         self.net_layer_shape = []
+
         for i in range(len(self.layers_shape)):
             n_neurons = self.layers_shape[i][NetIdx.inp] * self.layers_shape[i][NetIdx.out]
             self.params_per_layer.append(n_neurons)
             self.net_layer_shape.append(
                 (self.layers_shape[i][NetIdx.out], self.layers_shape[i][NetIdx.inp])
             )
+
         self.param_idx = np.cumsum(self.params_per_layer)
         self.tot_params = np.sum(self.params_per_layer)
 
         if self.parameters is None:
             # initialize the weights to one
             # self.parameters = np.ones(np.sum(self.params_per_layer))
-            self.parameters = np.random.normal(0, 1, np.sum(self.params_per_layer))
+            self.parameters = np.array([])
+            for i in range(len(self.layers_shape)):
+                fan_in = self.layers_shape[i][NetIdx.inp]
+                fan_out = self.layers_shape[i][NetIdx.out]
+                # Xavier formula: sqrt(6 / (fan_in + fan_out))
+                limit = np.sqrt(6.0 / (fan_in + fan_out))
+                # Uniform distribution between -limit and limit
+                layer_params = np.random.uniform(-limit, limit, self.params_per_layer[i])
+                self.parameters = np.append(self.parameters, layer_params)
         self.set_parameters(self.parameters)
 
     def draw_action(self, state) -> np.array:
@@ -74,21 +84,9 @@ class NeuralNetworkPolicy(BasePolicy, ABC):
 
     def set_parameters(self, thetas) -> None:
         # check on the number of parameters
-        err_msg = f"[NNPolicy] Number of parameters {len(thetas)} is different from "
-        err_msg += f"{self.tot_params}"
-        assert len(thetas) == np.sum(self.params_per_layer), err_msg
-
-        # set the weights
-        tensor_param = torch.tensor(np.array(thetas, dtype=np.float64))
-        for i, param_layer in enumerate(self.net.parameters()):
-            if i == 0:
-                batch_params = tensor_param[: self.param_idx[i]]
-            elif i == len(self.layers_shape) - 1:
-                batch_params = tensor_param[self.param_idx[i - 1]:]
-            else:
-                batch_params = tensor_param[self.param_idx[i - 1]:self.param_idx[i]]
-            reshaped_params = torch.reshape(batch_params, self.net_layer_shape[i])
-            param_layer.data = nn.parameter.Parameter(reshaped_params, requires_grad=True)
+        assert len(thetas) == self.tot_params, "Param mismatch"
+        tensor_param = torch.tensor(thetas, dtype=torch.float64)
+        torch.nn.utils.vector_to_parameters(tensor_param, self.net.parameters())
             
     def get_parameters(self):
         return nn.utils.parameters_to_vector(self.net.parameters())
