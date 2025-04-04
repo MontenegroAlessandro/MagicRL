@@ -230,7 +230,7 @@ class PolicyGradient:
             self.time += 1
 
             # reduce the exploration factor of the policy
-            self.policy.reduce_exploration()
+            #self.policy.reduce_exploration()
         #self.sample_deterministic_curve()
         return
 

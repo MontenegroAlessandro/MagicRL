@@ -303,14 +303,18 @@ for i in range(args.n_trials):
             )
         elif args.pol == "deep_gaussian":
             pol = DeepGaussian(
-                parameters=None,
-                input_size=s_dim,
-                output_size=a_dim,
-                model=copy.deepcopy(net),
-                model_desc=copy.deepcopy(model_desc),
+                n_states=s_dim,
+                n_actions=a_dim,
+                hidden_neurons=[32, 32],
+                feature_fun=None,
+                squash_fun=None,
+                param_init=None,
+                bias=False,
+                activation=torch.tanh,
+                init=torch.nn.init.xavier_uniform_,
                 std_dev=np.sqrt(args.var),
                 std_decay=0,
-                std_min=1e-6
+                std_min=1e-6,
             )
         else:
             raise ValueError("Invalid nn policy name.")

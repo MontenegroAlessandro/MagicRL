@@ -11,7 +11,7 @@
             "program": "run.py",
             "args": [
                 "--alg", "pg",
-                "--env", "swimmer",
+                "--env", "pendulum",
                 "--n_workers", "10",
                 "--var", "0.1",
                 "--horizon", "100",
@@ -20,7 +20,7 @@
                 "--clip", "0",
                 "--batch", "100",
                 "--pol", "nn",
-                "--lr", "0.01"
+                "--lr", "0.003"
             ],
             "console": "integratedTerminal"
         }
