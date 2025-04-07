@@ -87,3 +87,34 @@ def matrix_shift(arr, num, fill_value=np.nan):
     result[num:] = fill_value
 
     return result
+
+
+import time
+
+class Timer:
+    def __init__(self, label="Block", iterations=1):
+        self.label = label
+        self.iterations = iterations
+        self._loop_index = 0  # Internal counter for iterations
+
+    def __enter__(self):
+        self.start_time = time.perf_counter_ns()  # Start timing in nanoseconds
+        return self
+
+    def __iter__(self):
+        self._loop_index = 0
+        return self
+
+    def __next__(self):
+        if self._loop_index < self.iterations:
+            self._loop_index += 1
+            return self._loop_index
+        else:
+            raise StopIteration
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.end_time = time.perf_counter_ns()  # End timing in nanoseconds
+        elapsed_time_ns = self.end_time - self.start_time  # Total elapsed time
+        avg_time_ns = elapsed_time_ns / self.iterations  # Average time per iteration
+        print(f"{self.label}: Executed {self.iterations} times")
+        print(f"{self.label}: Average execution time: {avg_time_ns:.3f} ns")

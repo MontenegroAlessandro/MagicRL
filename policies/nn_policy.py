@@ -19,118 +19,6 @@ import torch
 import torch.nn as nn
 
 
-class NeuralNetworkPolicy(BasePolicy, ABC):
-    def __init__(
-            self, n_states, n_actions, 
-            hidden_neurons=[], 
-            feature_fun=None, 
-            squash_fun=None,
-            param_init=None,
-            bias=False,
-            activation=torch.tanh,
-            init=torch.nn.init.xavier_uniform_
-    ) -> None:
-        super().__init__()
-
-        # Attributes with checks
-        self.parameters = param_init
-
-        # Additional attributes
-        self.dim_state = n_states
-        self.dim_action = n_actions
-        self.feature_fun = feature_fun
-        self.squash_fun = squash_fun
-
-        # Pick the net
-        self.net = None
-        self.layers_shape = None
-        
-        # Build the network based on hidden_neurons
-        self.net = nn.Sequential()
-        current_dim = self.dim_state
-        self.layers_shape = []
-        
-        # Add hidden layers
-        for i, neurons in enumerate(hidden_neurons):
-            self.net.add_module(f"linear{i}", nn.Linear(current_dim, neurons, bias=bias))
-            self.net.add_module(f"activation{i}", activation)
-            self.layers_shape.append((current_dim, neurons))
-            current_dim = neurons
-            
-        # Add output layer
-        self.net.add_module(f"linear_out", nn.Linear(current_dim, self.dim_action, bias=bias))
-        self.layers_shape.append((current_dim, self.dim_action))
-
-        # Parameter counting
-        self.params_per_layer = []
-        self.net_layer_shape = []
-
-        for i in range(len(self.layers_shape)):
-            n_neurons = self.layers_shape[i][NetIdx.inp] * self.layers_shape[i][NetIdx.out]
-            self.params_per_layer.append(n_neurons)
-            self.net_layer_shape.append(
-                (self.layers_shape[i][NetIdx.out], self.layers_shape[i][NetIdx.inp])
-            )
-
-        self.param_idx = np.cumsum(self.params_per_layer)
-        self.tot_params = np.sum(self.params_per_layer)
-
-        if self.parameters is None:
-            # initialize using Xavier initialization
-            self.parameters = np.array([])
-            for i in range(len(self.layers_shape)):
-                fan_in = self.layers_shape[i][NetIdx.inp]
-                fan_out = self.layers_shape[i][NetIdx.out]
-                # Xavier formula: sqrt(6 / (fan_in + fan_out))
-                limit = np.sqrt(6.0 / (fan_in + fan_out))
-                # Uniform distribution between -limit and limit
-                layer_params = np.random.uniform(-limit, limit, self.params_per_layer[i])
-                self.parameters = np.append(self.parameters, layer_params)
-        
-        self.set_parameters(self.parameters)
-
-    def forward(self, state):
-        """
-        Maps state to action
-        """
-        if isinstance(state, np.ndarray):
-            state = torch.tensor(state, dtype=torch.float64)
-            
-        if self.feature_fun is not None:
-            state = self.feature_fun(state)
-        
-        action = self.net(state)
-        
-        if self.squash_fun is not None:
-            action = self.squash_fun(action)
-            
-        return action
-
-    def draw_action(self, state) -> np.array:
-        tensor_state = torch.tensor(np.array(state, dtype=np.float64))
-        action = np.array(torch.detach(self.forward(tensor_state)))
-        return action
-
-    def reduce_exploration(self):
-        raise NotImplementedError("[NNPolicy] Ops, not implemented yet!")
-
-    def set_parameters(self, thetas) -> None:
-        # check on the number of parameters
-        assert len(thetas) == self.tot_params, "Param mismatch"
-        tensor_param = torch.tensor(thetas, dtype=torch.float64)
-        torch.nn.utils.vector_to_parameters(tensor_param, self.net.parameters())
-            
-    def get_parameters(self):
-        return torch.nn.utils.parameters_to_vector(self.net.parameters())
-
-    def compute_score(self, state, action) -> np.array:
-        # Default implementation
-        return np.zeros(self.tot_params)
-    
-    def diff(self, state):
-        raise NotImplementedError
-
-
 class MLPMapping(nn.Module):
     def __init__(self, d_in, d_out, hidden_neurons, 
                  bias=False, 
@@ -185,7 +73,7 @@ class MLPMapping(nn.Module):
             x = self.out(x)
         return x
     
-    def get_flat(self):
+    def get_parameters(self):
         """Get flattened parameters"""
         return torch.nn.utils.parameters_to_vector(self.parameters())
     
@@ -206,7 +94,7 @@ class MLPMapping(nn.Module):
         """Get total number of parameters"""
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
         
-class DeepGaussian(NeuralNetworkPolicy):
+class DeepGaussian:
     """
     MLP mapping from states to action distributions
     """
@@ -289,22 +177,28 @@ class DeepGaussian(NeuralNetworkPolicy):
         raise NotImplementedError
     
     # Method removed as it's not directly equivalent in the reference implementation
+
+    def compute_log_pi(self, state, action):
+        """
+        Compute the log probability of an action given a state
+        """
+        # Pre-process state and action
+        if not isinstance(state, torch.Tensor):
+            state = torch.tensor(state, dtype=torch.float64)
+        if not isinstance(action, torch.Tensor):
+            action = torch.tensor(action, dtype=torch.float64)
+        sigma = torch.tensor(self.std_dev, dtype=torch.float64)
+
+        # Forward pass
+        action_mean = self.mlp(state)
+        return -0.5 * (((action - action_mean) / sigma) ** 2).sum() - 0.5 * torch.log(2 * torch.pi * sigma ** 2) * action.size(0)
     
     def compute_score(self, state, action):
         """
         Compute the score function (gradient of log probability w.r.t. parameters)
         """
-        # Pre-process state and action
-        if not isinstance(state, torch.Tensor):
-            state = torch.tensor(np.array(state, dtype=np.float64))
-        if not isinstance(action, torch.Tensor):
-            action = torch.tensor(np.array(action, dtype=np.float64))
-        sigma = torch.tensor(np.array(self.std_dev, dtype=np.float64))
-
-        # Forward pass
-        action_mean = self.mlp(state)
-        log_prob = -0.5 * (((action - action_mean) / sigma) ** 2).sum() - 0.5 * torch.log(torch.sqrt(2 * torch.pi * sigma ** 2)) * action.size(0)
-
+        log_prob = self.compute_log_pi(state, action)
+    
         # Put gradients to zero and compute the gradients
         self.mlp.zero_grad()
         log_prob.backward()
@@ -323,15 +217,107 @@ class DeepGaussian(NeuralNetworkPolicy):
         """
         Get the parameters of the policy
         """
-        return self.mlp.get_flat()
+        return self.mlp.get_parameters()
     
-    def reduce_exploration(self):
+
+    def compute_sum_log_pi(self, states, actions):
         """
-        Reduce the exploration noise according to the decay rate
+        Compute the log probabilities of actions given states for a full trajectory
+        
+        Parameters:
+        -----------
+        states: array-like or torch.Tensor, shape (batch_size, state_dim)
+            Batch of states representing a trajectory
+        actions: array-like or torch.Tensor, shape (batch_size, action_dim)
+            Batch of actions corresponding to the states
+            
+        Returns:
+        --------
+        log_probs: torch.Tensor, shape (batch_size,)
+            Log probabilities of each action given its corresponding state
         """
-        self.std_dev = np.clip(
-            self.std_dev - self.std_decay,
-            self.std_min,
-            np.inf,
-            dtype=np.float64
-        )
+        # Pre-process states and actions
+        if not isinstance(states, torch.Tensor):
+            states = torch.tensor(states, dtype=torch.float64)
+        if not isinstance(actions, torch.Tensor):
+            actions = torch.tensor(actions, dtype=torch.float64)
+        
+        # Ensure we have batch dimension
+        if states.dim() == 1:
+            states = states.unsqueeze(0)
+        if actions.dim() == 1:
+            actions = actions.unsqueeze(0)
+            
+        sigma = torch.tensor(self.std_dev, dtype=torch.float64)
+        
+        # Forward pass - this will work on batched inputs
+        action_means = self.mlp(states)  # shape: (batch_size, action_dim)
+        
+        # Calculate log probabilities for each state-action pair
+        # For each pair in the batch, compute the log probability
+        log_probs = -0.5 * (((actions - action_means) / sigma) ** 2).sum(dim=1) - 0.5 * actions.size(1) * torch.log(2 * torch.pi * sigma ** 2)
+        return torch.sum(log_probs, dim=0).detach().cpu().numpy()
+    
+    def compute_sum_all_log_pi(self, states, actions, thetas):
+        if not isinstance(states, torch.Tensor):
+            states = torch.tensor(states, dtype=torch.float64)
+        if not isinstance(actions, torch.Tensor):
+            actions = torch.tensor(actions, dtype=torch.float64)
+        if not isinstance(thetas, torch.Tensor):
+            thetas = torch.tensor(thetas, dtype=torch.float64)
+        
+        sums_log_pi = np.zeros((len(thetas), len(states)), dtype=np.float64)
+
+        for i, theta in enumerate(thetas):
+            # Set parameters for the current theta
+            self.mlp.set_parameters(theta)
+
+            for j, trajectory in enumerate(states):
+                # Compute the log probability for the current trajectory
+                sums_log_pi[i][j] = self.compute_sum_log_pi(states[j], actions[j])
+        
+        return sums_log_pi
+
+    
+    def compute_score_all_trajectories(self, states_queue, actions_queue):
+        """Compute the score function for multiple trajectories.
+        
+        Args:
+            states_queue: Array of shape (num_trajectories, timesteps, state_dim)
+            actions_queue: Array of shape (num_trajectories, timesteps, action_dim)
+        Returns:
+            scores: Array of shape (num_trajectories, timesteps, action_dim * state_dim)
+        """
+        # Convert inputs to tensors if they aren't already
+        if not isinstance(states_queue, torch.Tensor):
+            states_queue = torch.tensor(states_queue, dtype=torch.float64)
+        if not isinstance(actions_queue, torch.Tensor):
+            actions_queue = torch.tensor(actions_queue, dtype=torch.float64)
+
+        if states_queue.ndim == 2: #one trajectory
+            scores = np.array([self.compute_score(states_queue[i], actions_queue[i]) for i in range(len(states_queue))], dtype=np.float64)
+            return scores
+        
+        #if not then we have a miltiple trajectories
+        num_trajectories = states_queue.shape[0]
+        timesteps = states_queue.shape[1]
+        
+        # Initialize a list to store scores for each trajectory
+        all_trajectories_scores = []
+        
+        # For each trajectory, compute scores for all time steps
+        for i in range(num_trajectories):
+            trajectory_states = states_queue[i]
+            trajectory_actions = actions_queue[i]
+            # Computing scores for this trajectory (similar to the single trajectory case)
+            trajectory_scores = np.array([self.compute_score(trajectory_states[j], trajectory_actions[j]) 
+                                        for j in range(timesteps)], dtype=np.float64)
+            all_trajectories_scores.append(trajectory_scores)
+        
+        # Convert list of trajectories to numpy array
+        scores = np.array(all_trajectories_scores, dtype=np.float64)
+        
+        return scores
+
+
+

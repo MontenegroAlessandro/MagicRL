@@ -10,17 +10,19 @@
             "request": "launch",
             "program": "run.py",
             "args": [
-                "--alg", "pg",
-                "--env", "pendulum",
-                "--n_workers", "10",
+                "--alg", "off_pg",
+                "--env", "swimmer",
                 "--var", "0.1",
                 "--horizon", "100",
                 "--ite", "1000",
                 "--n_trials", "1",
                 "--clip", "0",
-                "--batch", "100",
+                "--batch", "4",
                 "--pol", "nn",
-                "--lr", "0.003"
+                "--lr", "0.003",
+                "--weight_type", "MIS",
+                "--window_length", "3"
+
             ],
             "console": "integratedTerminal"
         }

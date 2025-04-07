@@ -220,7 +220,11 @@ class OffPolicyGradient:
             else:
                 res = []
                 for j in range(self.batch_size):
-                    tmp_res = self.sampler.collect_off_policy_trajectory(params=copy.deepcopy(self.thetas), thetas_queue=thetas_queue)
+                    tmp_res = self.sampler.collect_off_policy_trajectory(
+                        params=copy.deepcopy(self.thetas),
+                        thetas_queue=thetas_queue,
+                        weight_type=self.weight_type
+                    )
                     res.append(tmp_res)
 
             # Update performance
@@ -312,7 +316,7 @@ class OffPolicyGradient:
             self.time += 1
 
             # reduce the exploration factor of the policy
-            self.policy.reduce_exploration()
+            #self.policy.reduce_exploration()
         #self.sample_deterministic_curve()
         return
     
@@ -552,9 +556,6 @@ class OffPolicyGradient:
         #last theta index for the row of the products matrix, it's the last theta from whcih trajectories were sampled.
         theta_idx = self.num_updates - 1
 
-        #for each batch in the window, compute the product of the probabilities
-        #products i contains the products of the probabilities under parameter theta_i for all trajectories
-
         #then i need to recalculate all trajectories with respect to the new parameter
         self.policy.set_parameters(thetas=thetas_queue[theta_idx])
         current_theta_log_sums = self.policy.compute_sum_all_log_pi(state_array[:num_trajectories], action_array[:num_trajectories], thetas_array[theta_idx].reshape(1, -1))
@@ -570,7 +571,6 @@ class OffPolicyGradient:
             log_sum_stable = logsumexp(- 2 * log_diff_matrix, axis=1) #numerically stable sum of exponents, sums over elements in the same row
             D_vector = np.exp(log_sum_stable).reshape(-1,1) / self.batch_size #remove log space and sample mean
             #D_vector = np.abs(np.log(I_2)) + 1
-            #END of D estimation
 
             D_inverse = 1 / D_vector
             D_sum = np.sum(D_inverse)
