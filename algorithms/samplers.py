@@ -392,6 +392,9 @@ class TrajectorySampler:
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
+        if weight_type == 'MIS':
+            means = np.zeros(shape=(self.env.horizon, self.env.action_dim), dtype=np.float64)
+
         # act
         for t in range(self.env.horizon):
             # retrieve the state
@@ -405,7 +408,12 @@ class TrajectorySampler:
             if t == 0 and starting_action is not None:
                 a = starting_action
             else:
-                a = self.pol.draw_action(state=features)
+                if weight_type == 'MIS':
+                    a, mean = self.pol.draw_action(state=features, return_mean=True)
+                    means[t, :] = mean
+                else:
+                    a = self.pol.draw_action(state=features)
+        
             actions[t, :] = a
 
             # play the action
@@ -429,7 +437,14 @@ class TrajectorySampler:
             return [perf, rewards, scores, states, actions, log_sums]
         #compute the log sum for the current theta
         elif weight_type == 'MIS' and not deterministic:
-            log_sum = self.pol.compute_sum_log_pi(states, actions, cached = True)
-            return [perf, rewards, scores, states, actions, log_sum]
+            log_sum = self.pol.compute_sum_log_pi(states, actions)
+            return [perf, rewards, scores, states, actions, log_sum, means]
 
         return [perf, rewards, scores, states, actions, log_sums]
+    
+
+
+    
+    
+
+    
