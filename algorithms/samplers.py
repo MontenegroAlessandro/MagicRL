@@ -429,7 +429,7 @@ class TrajectorySampler:
             return [perf, rewards, scores, states, actions, log_sums]
         #compute the log sum for the current theta
         elif weight_type == 'MIS' and not deterministic:
-            log_sum = self.pol.compute_sum_log_pi(states, actions)
+            log_sum = self.pol.compute_sum_log_pi(states, actions, cached = True)
             return [perf, rewards, scores, states, actions, log_sum]
 
         return [perf, rewards, scores, states, actions, log_sums]

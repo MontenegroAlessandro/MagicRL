@@ -7,6 +7,7 @@ import copy
 import time
 from collections import defaultdict
 import hashlib
+from numpy.testing import assert_allclose
 
 
 class LinearGaussianPolicy(BasePolicy, ABC):
@@ -51,6 +52,34 @@ class LinearGaussianPolicy(BasePolicy, ABC):
 
 
         return
+    
+    def calculate_mean(self, state):
+        return np.array(self.parameters @ state, dtype=np.float64)
+    
+    def calculate_mean_cached(self, state):
+        state_key = hashlib.md5(state.tobytes()).hexdigest()
+        return self.mean_cache[self.current_param_key][state_key]
+    
+
+    #expects states in form timesteps x state_dim
+    def calculate_mean_full_trajectory(self, states):
+        return np.array(states @ self.parameters.T, dtype=np.float64)
+    
+    def calculate_mean_full_trajectory_cached(self, states, actions):
+        timesteps, action_dim = actions.shape
+        means = np.zeros((timesteps, action_dim))
+        param_key = self.current_param_key #hashlib.md5(self.parameters.tobytes()).hexdigest()
+
+        for step_idx in range(timesteps):
+            # Get the state at position [i, j, ...]
+            state = states[step_idx]
+            # Flatten if needed and compute hash
+            flattened_state = state.flatten() if hasattr(state, 'flatten') else state
+            state_key = hashlib.md5(flattened_state.tobytes()).hexdigest()
+            means[step_idx] = self.mean_cache[param_key][state_key]
+
+        return means
+    
 
     def draw_action(self, state) -> float:
         if len(state) != self.dim_state:
@@ -94,30 +123,38 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         
         return prob 
 
-    def compute_log_pi(self, state, action):
-        state_key = hashlib.md5(state.tobytes()).hexdigest()
-        mean = self.mean_cache[self.current_param_key][state_key] #since we dont give a specific parameter set, we use the current one
+    def compute_log_pi(self, state, action, cached=False):
+        if cached:
+            mean = self.calculate_mean_cached(state)
+        else:
+            mean = self.calculate_mean(state)
         
         fact = 1 / (np.sqrt(2 * np.pi) * self.std_dev)
         log_prob = np.log(fact) - ((action - mean) ** 2) / (2 * (self.var))
         
         return log_prob
 
-    def compute_sum_log_pi(self, states, actions):
+    def compute_sum_log_pi(self, states, actions, cached = False):
         
-        means = np.array(states @ self.parameters.T, dtype=np.float64)
+        if cached:
+            means = self.calculate_mean_full_trajectory_cached(states, actions) #means is now timesteps x action_dim
+        else:
+            means = self.calculate_mean_full_trajectory(states) #means is now timesteps x action_dim
+
         log_fact = -np.log(np.sqrt(2 * np.pi) * self.std_dev)
         log_prob = log_fact - ((actions - means) ** 2) / (2 * self.var)
         
         return np.sum(log_prob)
+    
+
 
     def compute_sum_all_log_pi(self, states, actions, thetas_queue):
         """Compute sum of log probabilities for multiple parameter sets at once.
         
         Args:
-            states: Array of shape (timesteps, state_dim)
-            actions: Array of shape (timesteps, action_dim)
-            thetas_queue: List or array of parameters, each of shape (action_dim, state_dim)
+            states: Array of shape (batch_size, timesteps, state_dim)
+            actions: Array of shape (batch_size, timesteps, action_dim)
+            thetas_queue: target parameter,  of shape (action_dim, state_dim)
             
         Returns:
             log_sums: Array of shape (num_thetas,) containing sum of log probs for each theta
@@ -130,34 +167,34 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         # (num_thetas, timesteps, action_dim)
         means = np.matmul(states, thetas.transpose(0, 2, 1))
 
-        param_keys = [hashlib.md5(thetas_queue[i]).hexdigest() for i in range(len(thetas_queue))]
 
-        states_shape = states.shape
-        actions_shape = actions.shape
+        # While the following works, its way too slow
+        """batch_size, timesteps, action_dim = actions.shape
+        cached_means = np.zeros((batch_size, timesteps, action_dim))
+        param_key = hashlib.md5(thetas_queue[0].tobytes()).hexdigest()
 
-        flattened_states = states.reshape(-1, states_shape[-1])
-        state_keys = [hashlib.md5(flattened_states[i].tobytes()).hexdigest() for i in range(len(flattened_states))]
+        for batch_idx in range(batch_size):
+            for step_idx in range(timesteps):
+                # Get the state at position [i, j, ...]
+                state = states[batch_idx, step_idx]
+                # Flatten if needed and compute hash
+                flattened_state = state.flatten() if hasattr(state, 'flatten') else state
+                state_key = hashlib.md5(flattened_state.tobytes()).hexdigest()
 
-        # dimensions for the cache:
-        # (num_thetas, batch_size, timesteps, action_dim)
-        cached_means = np.zeros((len(thetas_queue), ) + actions_shape)
-        """for i, param_key in enumerate(param_keys):
-            for state_key in state_keys:
                 try:
-                    cached_means[i] = (self.mean_cache[param_key][state_key])
+                    # Check if the mean is already cached
+                    cached_means[batch_idx, step_idx] = self.mean_cache[param_key][state_key]
                 except KeyError:
-                    means_list.append(np.nan)"""
+                    cached_means[batch_idx, step_idx] = np.nan
+                
+        cache_miss_mask = np.isnan(cached_means[:, :, 0]) # misses are True, hence we need to hide what we didnt miss
+        expanded_mask = np.broadcast_to(~cache_miss_mask[:, :, np.newaxis], states.shape) # we perform complement such that the mask has True on cache hits
+        masked_states = np.ma.array(states, mask=expanded_mask) #cache hits are now hidden
 
-
-        #means_list = [[self.mean_cache[param_key][state_key] for state_key in state_keys] for param_key in param_keys]
-        #mean_list = [[self.mean_cache[param_keys[i]][state_keys[j]]] for j in range(length_state_keys)] for i in range(length_param_keys)]
         
-        
-        
-        #cache_hits = np.array(cache_hits).reshape(-1, actions_shape[-2])
-        #means_test = np.array(means_list).reshape(actions_shape)
-
-        #action_deviations_test = actions - means_test
+        means_test = np.ma.dot(masked_states, thetas_queue.reshape(self.dim_action, self.dim_state).T) # computes masked multiply
+        update_mask = np.broadcast_to(cache_miss_mask[:, :, np.newaxis], cached_means.shape)
+        cached_means = np.where(update_mask, means_test.data, cached_means) #inserts the new means into the cached means."""
         
         # Broadcasting to compute action deviations
         # (num_thetas, timesteps, action_dim)
@@ -167,12 +204,6 @@ class LinearGaussianPolicy(BasePolicy, ABC):
 
         elif actions.ndim == 3:
             action_deviations = actions - means
-            #param_keys = [hashlib.md5(thetas_queue[i]).hexdigest() for i in range(len(thetas_queue))]
-            #means_test = np.array([list(self.mean_cache[param_keys[i]].values()) for i in range(len(param_keys))]).reshape(actions.shape)
-            #action_deviations_test = actions - means_test
-
-            #log_fact = -np.log(np.sqrt(2 * np.pi) * self.std_dev)
-            #log_probs_test = log_fact - (action_deviations_test ** 2) / (2 * self.var)
 
         
 
@@ -181,24 +212,18 @@ class LinearGaussianPolicy(BasePolicy, ABC):
 
         #log probs has dimension batch-size, timesteps, action_dim
         log_probs = log_fact - (action_deviations ** 2) / (2 * self.var)
-        log_probs_sum = np.sum(log_probs, axis=(1, 2))
 
-        #log_probs_test = log_fact - (action_deviations_test ** 2) / (2 * self.var)
-        #log_probs_sum_test = np.sum(log_probs_test, axis=(-2, -1))
+        return np.sum(log_probs, axis=(1, 2))
+    
 
-
-        
-        # Sum over both timesteps and action dimensions
-        return log_probs_sum
-
-
-    def compute_score(self, state, action) -> np.array:
+    def compute_score(self, state, action, cached = False) -> np.array:
         if self.std_dev == 0:
             return super().compute_score(state, action)
 
-        state_key = hashlib.md5(state.tobytes()).hexdigest()
-        mean = self.mean_cache[self.current_param_key][state_key]
-
+        if cached:
+            mean = self.calculate_mean_cached(state)
+        else:
+            mean = self.calculate_mean(state)
 
         #state = np.ravel(state)
         action_deviation = action - mean

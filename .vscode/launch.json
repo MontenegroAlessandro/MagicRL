@@ -10,18 +10,18 @@
             "request": "launch",
             "program": "run.py",
             "args": [
-                "--alg", "off_pg",
+                "--alg", "pg",
                 "--env", "swimmer",
                 "--var", "0.3",
                 "--horizon", "200",
                 "--ite", "1000",
                 "--n_trials", "1",
                 "--clip", "0",
-                "--batch", "10",
+                "--batch", "100",
                 //"--pol", "nn",
                 "--lr", "0.003",
-                "--weight_type", "MIS",
-                "--window_length", "8",
+                //"--weight_type", "MIS",
+                //"--window_length", "8",
 
             ],
             "console": "integratedTerminal"
