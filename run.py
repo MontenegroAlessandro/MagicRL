@@ -5,6 +5,7 @@ from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
 from art import *
+from torch.utils.tensorboard import SummaryWriter
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -134,6 +135,14 @@ parser.add_argument(
     type=str,
     choices=["BH", "MIS"]
 )
+parser.add_argument(
+    "--tensorboard",
+    help="Enable TensorBoard logging",
+    type=int,
+    default=1,
+    choices=[0, 1]
+)
+
 
 args = parser.parse_args()
 
@@ -155,6 +164,11 @@ else:
 
 # Build
 base_dir = args.dir
+
+#tensorboard
+if args.tensorboard:
+    writer = SummaryWriter(log_dir=f"tensorboard/tensorboard_logs")
+
 
 for i in range(args.n_trials):
     np.random.seed(i)
@@ -307,7 +321,6 @@ for i in range(args.n_trials):
                 n_actions=a_dim,
                 hidden_neurons=[32, 32],
                 feature_fun=None,
-                squash_fun=None,
                 param_init=None,
                 bias=False,
                 activation=torch.tanh,
@@ -467,7 +480,8 @@ for i in range(args.n_trials):
             n_jobs=args.n_workers,
             window_length=args.window_length,
             test=bool(args.test),
-            weight_type=args.weight_type
+            weight_type=args.weight_type,
+            writer = writer if args.tensorboard else None,
         )
         alg = OffPolicyGradient(**alg_parameters)
     else:

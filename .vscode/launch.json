@@ -12,16 +12,16 @@
             "args": [
                 "--alg", "off_pg",
                 "--env", "swimmer",
-                "--var", "0.1",
-                "--horizon", "100",
+                "--var", "0.3",
+                "--horizon", "200",
                 "--ite", "1000",
                 "--n_trials", "1",
                 "--clip", "0",
-                "--batch", "4",
-                "--pol", "nn",
+                "--batch", "10",
+                //"--pol", "nn",
                 "--lr", "0.003",
                 "--weight_type", "MIS",
-                "--window_length", "3"
+                "--window_length", "8",
 
             ],
             "console": "integratedTerminal"

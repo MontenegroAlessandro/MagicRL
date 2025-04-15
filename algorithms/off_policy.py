@@ -40,7 +40,8 @@ class OffPolicyGradient:
             n_jobs: int = 1,
             window_length: int = 5,
             test: bool = False,
-            weight_type: str = "BH"
+            weight_type: str = "BH",
+            writer = None,
     ) -> None:
         """
         Summary:
@@ -121,6 +122,8 @@ class OffPolicyGradient:
         assert weight_type in ["BH", "MIS"], err_msg
         self.weight_type = weight_type
 
+        self.writer = writer
+
 
 
         check_directory_and_create(dir_name=directory)
@@ -200,7 +203,7 @@ class OffPolicyGradient:
                 self.policy.set_parameters(copy.deepcopy(self.thetas))
                 worker_dict = dict(
                     env=copy.deepcopy(self.env),
-                    pol=copy.deepcopy(self.policy),
+                    pol=self.pol,
                     dp=copy.deepcopy(self.data_processor),
                     # params=copy.deepcopy(self.thetas),
                     params=None,
@@ -294,6 +297,23 @@ class OffPolicyGradient:
             thetas_queue.append(np.array(self.thetas, dtype=np.float64))
             self.num_updates = len(thetas_queue)
 
+            if self.writer is not None:
+                """self.writer.add_scalar('Performance/performance', self.performance_idx[i], i)
+                self.writer.add_scalar('Performance/best_performance', self.best_performance_theta, i)
+                
+                # Track gradient information
+                self.writer.add_scalar('Gradients/magnitude', np.linalg.norm(estimated_gradient), i)
+                self.writer.add_histogram('Gradients/distribution', estimated_gradient, i)
+                
+                # Track parameter information
+                self.writer.add_scalar('Parameters/magnitude', np.linalg.norm(self.thetas), i)
+                self.writer.add_histogram('Parameters/distribution', self.thetas, i)
+
+                self.writer.add_histogram('Weights/importance_weights', importance_vector, i)
+                self.writer.add_histogram('Weights/D_vector', D_vector, i)
+                self.writer.add_histogram('Weights/alpha_vector', alpha_vector, i)
+                self.writer.add_histogram('Weights/lambda_vector', lambda_vector, i)"""
+
             # Log
             if self.verbose:
                 print("*" * 30)
@@ -318,6 +338,10 @@ class OffPolicyGradient:
             # reduce the exploration factor of the policy
             #self.policy.reduce_exploration()
         #self.sample_deterministic_curve()
+
+        if self.writer is not None:
+            self.writer.close()
+            
         return
     
     '''
@@ -359,7 +383,9 @@ class OffPolicyGradient:
         #then i need to recalculate all trajectories with respect to the new parameter
         self.policy.set_parameters(thetas=thetas_queue[theta_idx])
         old_trajectories = num_trajectories - self.batch_size
-        log_sums[theta_idx, :(old_trajectories)] = self.policy.compute_sum_all_log_pi(state_array[:old_trajectories], action_array[:old_trajectories], thetas_array[theta_idx].reshape(1, -1))
+        log_sums[theta_idx, :(old_trajectories)] = self.policy.compute_sum_all_log_pi(state_array[:old_trajectories], 
+                                                                                      action_array[:old_trajectories], 
+                                                                                      thetas_array[theta_idx].reshape(1, -1))
 
 
         if self.num_updates <= 1:
@@ -561,6 +587,9 @@ class OffPolicyGradient:
         current_theta_log_sums = self.policy.compute_sum_all_log_pi(state_array[:num_trajectories], action_array[:num_trajectories], thetas_array[theta_idx].reshape(1, -1))
 
 
+        #quick and dirty, FIX LATER
+        
+
         if self.num_updates <= 1:
             importance_vector = np.ones(self.batch_size, dtype=np.float64)
         else:
@@ -569,8 +598,9 @@ class OffPolicyGradient:
 
             #BEGIN of D estimation
             log_sum_stable = logsumexp(- 2 * log_diff_matrix, axis=1) #numerically stable sum of exponents, sums over elements in the same row
-            D_vector = np.exp(log_sum_stable).reshape(-1,1) / self.batch_size #remove log space and sample mean
-            #D_vector = np.abs(np.log(I_2)) + 1
+            D_vector= np.array([self.policy.compute_I_alpha(states_queue=state_array[i * self.batch_size : (i + 1) * self.batch_size ], 
+                                                current_param=thetas_array[theta_idx], past_param=thetas_array[i], alpha=2) 
+                                                for i in range(self.num_updates)]).reshape(-1,1)
 
             D_inverse = 1 / D_vector
             D_sum = np.sum(D_inverse)

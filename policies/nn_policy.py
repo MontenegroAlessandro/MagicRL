@@ -1,7 +1,7 @@
 """Implementation of a Linear Policy"""
 # todo make this modular and fully defined by the user
 # Libraries
-from policies import BasePolicy
+from policies import LinearGaussianPolicy
 from abc import ABC
 from policies.utils import NetIdx
 import numpy as np
@@ -101,22 +101,18 @@ class DeepGaussian:
     def __init__(self, n_states, n_actions, 
                  hidden_neurons=[], 
                  feature_fun=None, 
-                 squash_fun=None,
                  param_init=None,
                  bias=False,
                  activation=torch.tanh,
                  init=torch.nn.init.xavier_uniform_,
                  std_dev=1.0,
                  std_decay=0.0,
-                 std_min=1e-6,
-                 squash_grads=True):
+                 std_min=1e-6):
         
         self.n_states = n_states
         self.n_actions = n_actions
         self.feature_fun = feature_fun
-        self.squash_fun = squash_fun
         self.param_init = param_init
-        self.squash_grads = squash_grads
         self.std_dev = std_dev
         self.std_decay = std_decay
         self.std_min = std_min
@@ -133,24 +129,6 @@ class DeepGaussian:
         if param_init is not None:
             self.mlp.set_from_flat(param_init)
     
-    def forward(self, state):
-        """
-        Maps state to action mean
-        """
-        # Convert state to tensor if it's not already
-        if not isinstance(state, torch.Tensor):
-            state = torch.tensor(np.array(state, dtype=np.float64))
-            
-        if self.feature_fun is not None:
-            state = self.feature_fun(state)
-        
-        mean_action = self.mlp(state)
-        
-        if self.squash_fun is not None:
-            mean_action = self.squash_fun(mean_action)
-            
-        return mean_action
-    
     def draw_action(self, state):
         """
         Sample an action from the policy
@@ -159,7 +137,7 @@ class DeepGaussian:
         if not isinstance(state, torch.Tensor):
             state = torch.tensor(np.array(state, dtype=np.float64))
             
-        mean_action = self.forward(state)
+        mean_action = self.mlp(state)
         
         # Convert to numpy arrays for consistency with reference implementation
         means = np.array(mean_action.detach(), dtype=np.float64)
@@ -255,8 +233,8 @@ class DeepGaussian:
         
         # Calculate log probabilities for each state-action pair
         # For each pair in the batch, compute the log probability
-        log_probs = -0.5 * (((actions - action_means) / sigma) ** 2).sum(dim=1) - 0.5 * actions.size(1) * torch.log(2 * torch.pi * sigma ** 2)
-        return torch.sum(log_probs, dim=0).detach().cpu().numpy()
+        log_probs = -0.5 * (((actions - action_means) / sigma) ** 2) - 0.5 * torch.log(2 * torch.pi * sigma ** 2)
+        return torch.sum(log_probs, dim=(-1, -2)).detach().cpu().numpy()
     
     def compute_sum_all_log_pi(self, states, actions, thetas):
         if not isinstance(states, torch.Tensor):
@@ -318,6 +296,31 @@ class DeepGaussian:
         scores = np.array(all_trajectories_scores, dtype=np.float64)
         
         return scores
+    
 
+    def compute_I_alpha (self, states_queue, current_param, past_param, alpha=2):
+        if not isinstance(states_queue, torch.Tensor):
+            states_queue = torch.tensor(states_queue, dtype=torch.float64)
+
+        num_trajectories, horizon, _ = states_queue.shape
+        divergence_sum = 0.0
+
+        for trajectory_idx in range(num_trajectories):
+            trajectory_divergence = 1.0
+
+            for timestep in range(horizon):
+                state = states_queue[trajectory_idx, timestep]
+
+                self.mlp.set_parameters(current_param)
+                current_mean = self.mlp(state)
+
+                self.mlp.set_parameters(past_param)
+                past_mean = self.mlp(state)
+
+                trajectory_divergence *= torch.exp( - alpha * (1 - alpha) * torch.dot(current_mean - past_mean, current_mean - past_mean) / 2 * self.std_dev**2 )
+
+            divergence_sum += trajectory_divergence
+
+        return (divergence_sum / num_trajectories).detach().cpu().numpy()
 
 

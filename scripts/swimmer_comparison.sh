@@ -1,4 +1,4 @@
-python3 run.py --alg off_pg --env swimmer --n_workers 10 --var 0.1 --horizon 200 --ite 5000 --window_length 16 --n_trials 10 --clip 0 --batch 20 --weight_type 'MIS' --dir results/swimmer_comparison_5batch/
+python3 run.py --alg off_pg --env swimmer --n_workers 10 --var 0.1 --horizon 200 --ite 5000 --window_length 8 --n_trials 10 --clip 0 --batch 20 --weight_type 'MIS' --dir results/swimmer_comparison_5batch/
 
 python3 run.py --alg off_pg --env swimmer --n_workers 10 --var 0.1 --horizon 200 --ite 5000 --window_length 16 --n_trials 10 --clip 0 --batch 20 --weight_type 'BH' --dir results/swimmer_comparison_5batch/
 
