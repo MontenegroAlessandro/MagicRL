@@ -30,8 +30,6 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         super().__init__()
 
         # Attributes with checks
-        err_msg = "[GaussPolicy] parameters is None!"
-        assert parameters is not None, err_msg
         self.parameters = parameters
 
         err_msg = "[GaussPolicy] standard deviation is negative!"
@@ -60,12 +58,7 @@ class LinearGaussianPolicy(BasePolicy, ABC):
             return np.array(parameter @ state, dtype=np.float64)
         else:
             return np.array(state @ parameter, dtype=np.float64)
-        
-    #expects states in form timesteps x state_dim
-    def calculate_mean_full_trajectory(self, states):
-        return np.array(states @ self.parameters.T, dtype=np.float64)
-    
-    
+           
 
     def draw_action(self, state, return_mean = False) -> float:
         if len(state) != self.dim_state:
@@ -74,7 +67,7 @@ class LinearGaussianPolicy(BasePolicy, ABC):
             raise ValueError(err_msg)
         
 
-        mean = np.array(self.parameters @ state, dtype=np.float64)
+        mean = self.calculate_mean(state)
 
         action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
 
@@ -114,7 +107,7 @@ class LinearGaussianPolicy(BasePolicy, ABC):
 
     def compute_sum_log_pi(self, states, actions):
         
-        means = self.calculate_mean_full_trajectory(states) #means is now timesteps x action_dim
+        means = self.calculate_mean(states) #means is now timesteps x action_dim
 
         log_fact = -np.log(np.sqrt(2 * np.pi) * self.std_dev)
         log_prob = log_fact - ((actions - means) ** 2) / (2 * self.var)
@@ -122,7 +115,66 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         return np.sum(log_prob)
     
 
+    def compute_score(self, state, action) -> np.array:
+        if self.std_dev == 0:
+            return super().compute_score(state, action)
 
+        mean = self.calculate_mean(state)
+
+        #state = np.ravel(state)
+        action_deviation = action - mean
+        if self.multi_linear:
+            # state = np.tile(state, self.dim_action).reshape((self.dim_action, self.dim_state))
+            action_deviation = action_deviation[:, np.newaxis]
+        scores = (action_deviation * state) / (self.std_dev ** 2)
+        if self.multi_linear:
+            scores = np.ravel(scores)
+        return scores
+
+    def compute_score_trajectory(self, states, actions):
+        means = self.calculate_mean(states)
+        action_deviations = actions - means
+        scores = (action_deviations[:, :, np.newaxis] * states[:, np.newaxis, :]) / self.var
+        return scores.reshape(scores.shape[0], -1)
+
+    def compute_score_all_trajectories(self, states_queue, actions_queue):
+        """Compute the score function for multiple trajectories.
+        
+        Args:
+            states_queue: Array of shape (num_trajectories, timesteps, state_dim)
+            actions_queue: Array of shape (num_trajectories, timesteps, action_dim)
+            
+        Returns:
+            scores: Array of shape (num_trajectories, timesteps, action_dim * state_dim)
+        """
+        if states_queue.ndim == 2:
+            means = self.calculate_mean(states_queue) 
+            action_deviations = actions_queue - means
+            scores = (action_deviations[:, :, np.newaxis] * states_queue[:, np.newaxis, :]) / self.var
+            return scores.reshape(scores.shape[0], -1)
+        
+        # Multiple trajectories version
+        means = self.calculate_mean(states_queue)  # (num_trajectories, timesteps, action_dim)
+        action_deviations = actions_queue - means  # (num_trajectories, timesteps, action_dim)
+        
+        # Expand dimensions for broadcasting
+        action_deviations = action_deviations[:, :, :, np.newaxis]  # (num_trajectories, timesteps, action_dim, 1)
+        states_expanded = states_queue[:, :, np.newaxis, :]  # (num_trajectories, timesteps, 1, state_dim)
+        
+        # Compute scores
+        scores = (action_deviations * states_expanded) / self.var  # (num_trajectories, timesteps, action_dim, state_dim)
+        
+        # Reshape to (num_trajectories, timesteps, action_dim * state_dim)
+        return scores.reshape(scores.shape[0], scores.shape[1], -1)
+    
+    def diff(self, state):
+        raise NotImplementedError
+    
+
+
+
+
+#NEEDED FOR BH, THINK ABOUT REFACTORING
     def compute_sum_all_log_pi(self, states, actions, thetas_queue):
         """Compute sum of log probabilities for multiple parameter sets at once.
         
@@ -158,81 +210,5 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         log_probs = log_fact - (action_deviations ** 2) / (2 * self.var)
 
         return np.sum(log_probs, axis=(1, 2))
-    
 
-    def compute_score(self, state, action) -> np.array:
-        if self.std_dev == 0:
-            return super().compute_score(state, action)
-
-        mean = self.calculate_mean(state)
-
-        #state = np.ravel(state)
-        action_deviation = action - mean
-        if self.multi_linear:
-            # state = np.tile(state, self.dim_action).reshape((self.dim_action, self.dim_state))
-            action_deviation = action_deviation[:, np.newaxis]
-        scores = (action_deviation * state) / (self.std_dev ** 2)
-        if self.multi_linear:
-            scores = np.ravel(scores)
-        return scores
-
-    def compute_score_trajectory(self, states, actions):
-        means = states @ self.parameters.T
-        action_deviations = actions - means
-        scores = (action_deviations[:, :, np.newaxis] * states[:, np.newaxis, :]) / self.var
-        return scores.reshape(scores.shape[0], -1)
-
-    def compute_score_all_trajectories(self, states_queue, actions_queue):
-        """Compute the score function for multiple trajectories.
-        
-        Args:
-            states_queue: Array of shape (num_trajectories, timesteps, state_dim)
-            actions_queue: Array of shape (num_trajectories, timesteps, action_dim)
-            
-        Returns:
-            scores: Array of shape (num_trajectories, timesteps, action_dim * state_dim)
-        """
-        if states_queue.ndim == 2:
-            means = states_queue @ self.parameters.T
-            action_deviations = actions_queue - means
-            scores = (action_deviations[:, :, np.newaxis] * states_queue[:, np.newaxis, :]) / self.var
-            return scores.reshape(scores.shape[0], -1)
-        
-        # Multiple trajectories version
-        means = np.matmul(states_queue, self.parameters.T)  # (num_trajectories, timesteps, action_dim)
-        action_deviations = actions_queue - means  # (num_trajectories, timesteps, action_dim)
-        
-        # Expand dimensions for broadcasting
-        action_deviations = action_deviations[:, :, :, np.newaxis]  # (num_trajectories, timesteps, action_dim, 1)
-        states_expanded = states_queue[:, :, np.newaxis, :]  # (num_trajectories, timesteps, 1, state_dim)
-        
-        # Compute scores
-        scores = (action_deviations * states_expanded) / self.var  # (num_trajectories, timesteps, action_dim, state_dim)
-        
-        # Reshape to (num_trajectories, timesteps, action_dim * state_dim)
-        return scores.reshape(scores.shape[0], scores.shape[1], -1)
-    
-    def diff(self, state):
-        raise NotImplementedError
-    
-
-    def compute_I_alpha (self, states_queue, current_param, past_param, alpha=2):
-
-        num_trajectories, horizon, _ = states_queue.shape
-        divergence_sum = 0.0
-
-        for trajectory_idx in range(num_trajectories):
-            trajectory_divergence = 1.0
-
-            for timestep in range(horizon):
-                state = states_queue[trajectory_idx, timestep]
-
-                current_mean = np.array(current_param.reshape(self.dim_action, self.dim_state)  @ state, dtype=np.float64)
-                past_mean = np.array(past_param.reshape(self.dim_action, self.dim_state)  @ state, dtype=np.float64)
-
-                trajectory_divergence *= np.exp( - alpha * (1 - alpha) * np.dot(current_mean - past_mean, current_mean - past_mean) / 2 * self.std_dev**2 )
-
-            divergence_sum += trajectory_divergence
-
-        return divergence_sum / num_trajectories
 

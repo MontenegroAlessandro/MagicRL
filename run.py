@@ -317,10 +317,9 @@ for i in range(args.n_trials):
             )
         elif args.pol == "deep_gaussian":
             pol = DeepGaussian(
-                n_states=s_dim,
-                n_actions=a_dim,
+                dim_state=s_dim,
+                dim_action=a_dim,
                 hidden_neurons=[32, 32],
-                feature_fun=None,
                 param_init=None,
                 bias=False,
                 activation=torch.tanh,

@@ -19,6 +19,17 @@ import torch
 import torch.nn as nn
 
 
+def to_torch(x):
+    if isinstance(x, np.ndarray):
+        return torch.from_numpy(x).double()
+    return x
+    
+def to_numpy(x):
+    if isinstance(x, torch.Tensor):
+        return x.detach().cpu().numpy()
+    return x
+
+
 class MLPMapping(nn.Module):
     def __init__(self, d_in, d_out, hidden_neurons, 
                  bias=False, 
@@ -73,17 +84,6 @@ class MLPMapping(nn.Module):
             x = self.out(x)
         return x
     
-    def get_parameters(self):
-        """Get flattened parameters"""
-        return torch.nn.utils.parameters_to_vector(self.parameters())
-    
-    def set_parameters(self, params):
-        """Set parameters from flattened vector"""
-        # Convert to tensor if numpy array
-        if isinstance(params, np.ndarray):
-            params = torch.tensor(params, dtype=torch.float64)
-        torch.nn.utils.vector_to_parameters(params, self.parameters())
-    
     def zero_grad(self):
         """Zero all parameter gradients"""
         for param in self.parameters():
@@ -94,13 +94,12 @@ class MLPMapping(nn.Module):
         """Get total number of parameters"""
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
         
-class DeepGaussian:
+class DeepGaussian (LinearGaussianPolicy):
     """
     MLP mapping from states to action distributions
     """
-    def __init__(self, n_states, n_actions, 
-                 hidden_neurons=[], 
-                 feature_fun=None, 
+    def __init__(self, dim_state, dim_action, 
+                 hidden_neurons=[],  
                  param_init=None,
                  bias=False,
                  activation=torch.tanh,
@@ -109,16 +108,20 @@ class DeepGaussian:
                  std_decay=0.0,
                  std_min=1e-6):
         
-        self.n_states = n_states
-        self.n_actions = n_actions
-        self.feature_fun = feature_fun
+
+        super(DeepGaussian, self).__init__(
+            parameters = None, #we are using a NN so we want to make sure that we are not using any method in the base class that use parameters
+            std_dev = std_dev,
+            std_decay = std_decay,
+            std_min = std_min,
+            dim_state = dim_state,
+            dim_action = dim_action
+        )
+
         self.param_init = param_init
-        self.std_dev = std_dev
-        self.std_decay = std_decay
-        self.std_min = std_min
-        
+
         # Mean
-        self.mlp = MLPMapping(n_states, n_actions, 
+        self.mlp = MLPMapping(dim_state, dim_action, 
                              hidden_neurons, 
                              bias, 
                              activation, 
@@ -128,33 +131,16 @@ class DeepGaussian:
         
         if param_init is not None:
             self.mlp.set_from_flat(param_init)
-    
-    def draw_action(self, state):
-        """
-        Sample an action from the policy
-        """
-        # Convert state to tensor if it's not already
-        if not isinstance(state, torch.Tensor):
-            state = torch.tensor(np.array(state, dtype=np.float64))
-            
-        mean_action = self.mlp(state)
+
+        pass
+
+    def calculate_mean(self, state):
+        if state.ndim == 1:
+            return to_numpy(self.mlp(to_torch(state)))
+        else:
+            return to_numpy(self.mlp(to_torch(state)))
         
-        # Convert to numpy arrays for consistency with reference implementation
-        means = np.array(mean_action.detach(), dtype=np.float64)
-        action = np.array(
-            means + self.std_dev * np.random.normal(0, 1, self.n_actions),
-            dtype=np.float64
-        )
-        
-        return action
     
-    def diff(self, state):
-        """
-        Not implemented method (placeholder to match inheritance structure)
-        """
-        raise NotImplementedError
-    
-    # Method removed as it's not directly equivalent in the reference implementation
 
     def compute_log_pi(self, state, action):
         """
@@ -189,13 +175,16 @@ class DeepGaussian:
         """
         Set the parameters of the policy
         """
-        self.mlp.set_parameters(thetas)
+        if isinstance(thetas, np.ndarray):
+            thetas = torch.tensor(thetas, dtype=torch.float64)
+            
+        torch.nn.utils.vector_to_parameters(thetas, self.mlp.parameters())
     
     def get_parameters(self):
         """
         Get the parameters of the policy
         """
-        return self.mlp.get_parameters()
+        return torch.nn.utils.parameters_to_vector(self.mlp.parameters())
     
 
     def compute_sum_log_pi(self, states, actions):
@@ -322,5 +311,7 @@ class DeepGaussian:
             divergence_sum += trajectory_divergence
 
         return (divergence_sum / num_trajectories).detach().cpu().numpy()
+    
+
 
 

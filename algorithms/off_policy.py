@@ -549,6 +549,8 @@ class OffPolicyGradient:
         return np.sum(estimated_gradients, axis=0)
     
 
+
+
     '''
     ------------------------------------------------------------------------------------------------
     THE FOLLOWING SECTION CONTAINS ESTIMATOR FOR MIS
@@ -749,9 +751,9 @@ class OffPolicyGradient:
         if self.num_updates <= 1:
             importance_vector = np.ones(self.batch_size, dtype=np.float64)
         else:
-            D_vector= np.array([self.policy.compute_I_alpha(states_queue=state_array[i * self.batch_size : (i + 1) * self.batch_size ], 
-                                                current_param=thetas_array[theta_idx], past_param=thetas_array[i], alpha=2) 
-                                                for i in range(self.num_updates)]).reshape(-1,1) #remove log space and sample mean
+            D_vector= np.array([self.compute_I_alpha(states_queue=state_array[i * self.batch_size : (i + 1) * self.batch_size ], 
+                                                    past_param=thetas_array[i], alpha=2) 
+                                                    for i in range(self.num_updates)]).reshape(-1,1) #remove log space and sample mean
             #D_vector = np.abs(np.log(I_2)) + 1#renyi for alpha = 2
             D_inverse = 1 / D_vector
             D_sum = np.sum(D_inverse)
