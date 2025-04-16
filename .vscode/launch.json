@@ -17,7 +17,7 @@
                 "--ite", "1000",
                 "--n_trials", "1",
                 "--clip", "0",
-                "--batch", "100",
+                "--batch", "10",
                 "--pol", "nn",
                 "--lr", "0.003",
                 "--weight_type", "MIS",

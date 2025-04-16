@@ -9,6 +9,9 @@ import os
 
 import torch
 import torch.nn as nn
+from joblib import Parallel, delayed
+from concurrent.futures import ThreadPoolExecutor
+import copy
 
 
 
@@ -174,6 +177,28 @@ class DeepGaussian (LinearGaussianPolicy):
     
 
     def compute_score_all_trajectories(self, states_queue, actions_queue, means):
+        
+        # Initialize scores array
+        # Define a function to compute score for a single index
+        def compute_score_for_index(idx):
+            return idx, self.compute_score(states_queue[idx], actions_queue[idx])
+        
+        # Get all indices except the last dimension
+        indices = list(np.ndindex(states_queue.shape[:-1]))
+        
+        # Initialize the scores array
+        scores = np.zeros((states_queue.shape[:-1] + (self.tot_params, )), dtype=np.float64)
+        
+        # Parallelize the computation
+        results = Parallel(n_jobs=10, backend='loky')(delayed(compute_score_for_index)(idx) for idx in indices)
+        
+        # Populate the scores array with the results
+        for idx, score in results:
+            scores[idx] = score
+        
+        return scores
+    
+    def compute_score_all_trajectories_old(self, states_queue, actions_queue, means):
 
         scores = np.zeros((states_queue.shape[:-1] + (self.tot_params, )), dtype=np.float64)
 
