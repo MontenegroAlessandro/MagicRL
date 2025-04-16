@@ -2,12 +2,12 @@
 # Libraries
 from policies import BasePolicy
 from abc import ABC
-import numpy as np
 import copy
 import time
 from collections import defaultdict
 import hashlib
 from numpy.testing import assert_allclose
+import torch
 
 
 class LinearGaussianPolicy(BasePolicy, ABC):
@@ -48,16 +48,16 @@ class LinearGaussianPolicy(BasePolicy, ABC):
     
     def calculate_mean(self, state):
         if state.ndim == 1:
-            return np.array(self.parameters @ state, dtype=np.float64)
+            return (self.parameters @ state).to(dtype=torch.float64)
         else:
-            return np.array(state @ self.parameters.T, dtype=np.float64)
+            return (state @ self.parameters.T).to(dtype=torch.float64)
         
     def calculate_target_mean(self, state, parameter):
         parameter = parameter.reshape(self.dim_action, self.dim_state)
         if state.ndim == 1:
-            return np.array(parameter @ state, dtype=np.float64)
+            return (parameter @ state).to(dtype=torch.float64)
         else:
-            return np.array(state @ parameter.T, dtype=np.float64)
+            return np.array(state @ parameter, dtype=np.float64)
            
 
     def draw_action(self, state, return_mean = False) -> float:
@@ -137,7 +137,7 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         scores = (action_deviations[:, :, np.newaxis] * states[:, np.newaxis, :]) / self.var
         return scores.reshape(scores.shape[0], -1)
 
-    def compute_score_all_trajectories(self, states_queue, actions_queue, means):
+    def compute_score_all_trajectories(self, states_queue, actions_queue):
         """Compute the score function for multiple trajectories.
         
         Args:
@@ -147,11 +147,15 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         Returns:
             scores: Array of shape (num_trajectories, timesteps, action_dim * state_dim)
         """
-        action_deviations = actions_queue - means
-        
         if states_queue.ndim == 2:
+            means = self.calculate_mean(states_queue) 
+            action_deviations = actions_queue - means
             scores = (action_deviations[:, :, np.newaxis] * states_queue[:, np.newaxis, :]) / self.var
             return scores.reshape(scores.shape[0], -1)
+        
+        # Multiple trajectories version
+        means = self.calculate_mean(states_queue)  # (num_trajectories, timesteps, action_dim)
+        action_deviations = actions_queue - means  # (num_trajectories, timesteps, action_dim)
         
         # Expand dimensions for broadcasting
         action_deviations = action_deviations[:, :, :, np.newaxis]  # (num_trajectories, timesteps, action_dim, 1)

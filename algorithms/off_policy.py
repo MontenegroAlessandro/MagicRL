@@ -7,7 +7,7 @@ import numpy as np
 from envs.base_env import BaseEnv
 from policies import BasePolicy
 from data_processors import BaseProcessor, IdentityDataProcessor
-from algorithms.utils import OffPolicyTrajectoryResults, check_directory_and_create, LearnRates, matrix_shift
+from algorithms.utils import OffPolicyTrajectoryResults, check_directory_and_create, LearnRates, matrix_shift, Timer
 from algorithms.samplers import TrajectorySampler, off_pg_sampling_worker
 from joblib import Parallel, delayed
 import json
@@ -205,7 +205,7 @@ class OffPolicyGradient:
                 self.policy.set_parameters(copy.deepcopy(self.thetas))
                 worker_dict = dict(
                     env=copy.deepcopy(self.env),
-                    pol=self.pol,
+                    pol=copy.deepcopy(self.policy),
                     dp=copy.deepcopy(self.data_processor),
                     # params=copy.deepcopy(self.thetas),
                     params=None,
@@ -342,8 +342,8 @@ class OffPolicyGradient:
             #self.policy.reduce_exploration()
         #self.sample_deterministic_curve()
 
-        if self.writer is not None:
-            self.writer.close()
+        #if self.writer is not None:
+            #self.writer.close()
             
         return
     
@@ -406,7 +406,7 @@ class OffPolicyGradient:
         importance_vector = importance_vector / self.batch_size
 
         #compute g, using scores of the past trajectory with respect to the target distribution parameters
-        all_scores = self.policy.compute_score_all_trajectories(state_array, action_array)
+        all_scores = np.array([self.compute_single_trajectory_scores(state_queue[trajectory_idx], action_queue[trajectory_idx]) for trajectory_idx in range(num_trajectories)])
         all_gradients = self.calculate_all_g(reward_array, all_scores)
 
         estimated_gradients = importance_vector.reshape(-1, 1) * all_gradients
@@ -693,8 +693,10 @@ class OffPolicyGradient:
 
         importance_vector =  importance_vector / self.batch_size
 
+        self.policy.set_parameters(thetas=thetas_queue[theta_idx])
         #compute g, using scores of the past trajectory with respect to the target distribution parameters
-        all_scores = self.policy.compute_score_all_trajectories(state_array, action_array)
+        all_scores = self.policy.compute_score_all_trajectories(state_array, action_array, current_theta_means)
+
         all_gradients = self.calculate_all_g(reward_array, all_scores)
 
         estimated_gradients = importance_vector.reshape(-1, 1) * all_gradients
@@ -767,7 +769,8 @@ class OffPolicyGradient:
         importance_vector =  importance_vector / self.batch_size
 
         #compute g, using scores of the past trajectory with respect to the target distribution parameters
-        all_scores = self.policy.compute_score_all_trajectories(state_array, action_array)
+        self.policy.set_parameters(thetas=thetas_queue[theta_idx])
+        all_scores = np.array([self.compute_single_trajectory_scores(state_queue[trajectory_idx], action_queue[trajectory_idx]) for trajectory_idx in range(num_trajectories)])
         all_gradients = self.calculate_all_g(reward_array, all_scores)
 
         estimated_gradients = importance_vector.reshape(-1, 1) * all_gradients
@@ -861,8 +864,9 @@ class OffPolicyGradient:
     def compute_all_trajectory_products(self, state_queue, action_queue):
         """Compute probability products for all trajectories in parallel"""
         # Use existing n_jobs parameter from class initialization
-        products = Parallel(n_jobs=self.n_jobs, backend="loky")(
-            delayed(self.compute_trajectory_product)(state_sequence, action_sequence)
-            for state_sequence, action_sequence in zip(state_queue, action_queue)
-        )
+        products = []
+        for state_sequence, action_sequence in zip(state_queue, action_queue):
+            product = self.compute_trajectory_product(state_sequence, action_sequence)
+            products.append(product)
         return np.array(products)
+
