@@ -327,6 +327,7 @@ for i in range(args.n_trials):
                 std_dev=np.sqrt(args.var),
                 std_decay=0,
                 std_min=1e-6,
+                n_workers=args.n_workers,
             )
         else:
             raise ValueError("Invalid nn policy name.")

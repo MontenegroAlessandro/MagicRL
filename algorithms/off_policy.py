@@ -19,6 +19,7 @@ import collections
 from scipy.special import logsumexp
 import logging
 import time  # Add this at the top with other imports
+from logger.logger import Logger
 logger = logging.getLogger(__name__)
 
 # Class Implementation
@@ -854,6 +855,17 @@ class OffPolicyGradient:
         with io.open(name, 'w', encoding='utf-8') as f:
             f.write(json.dumps(results, ensure_ascii=False, indent=4))
             f.close()
+
+            logger2 = Logger(self.directory)
+            logger2.save_results(performance = self.performance_idx,
+                                best_theta = self.best_theta, 
+                                thetas_history = self.theta_history, 
+                                last_theta = self.thetas, 
+                                best_perf = self.best_performance_theta,
+                                performance_det = self.deterministic_curve)
+
+
+        
         return
     
     def compute_trajectory_product(self, state_sequence, action_sequence):

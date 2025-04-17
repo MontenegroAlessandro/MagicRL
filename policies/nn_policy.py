@@ -2,16 +2,11 @@
 # todo make this modular and fully defined by the user
 # Libraries
 from policies import LinearGaussianPolicy
-from abc import ABC
-from policies.utils import NetIdx
 import numpy as np
-import os
 
 import torch
 import torch.nn as nn
 from joblib import Parallel, delayed
-from concurrent.futures import ThreadPoolExecutor
-import copy
 
 
 
@@ -103,7 +98,8 @@ class DeepGaussian (LinearGaussianPolicy):
                  init=torch.nn.init.xavier_uniform_,
                  std_dev=1.0,
                  std_decay=0.0,
-                 std_min=1e-6):
+                 std_min=1e-6,
+                 n_workers=1):
         
 
         super(DeepGaussian, self).__init__(
@@ -116,6 +112,7 @@ class DeepGaussian (LinearGaussianPolicy):
         )
 
         self.param_init = param_init
+        self.n_workers = n_workers
 
         # Mean
         self.mlp = MLPMapping(dim_state, dim_action, 
@@ -190,7 +187,7 @@ class DeepGaussian (LinearGaussianPolicy):
         scores = np.zeros((states_queue.shape[:-1] + (self.tot_params, )), dtype=np.float64)
         
         # Parallelize the computation
-        results = Parallel(n_jobs=10, backend='loky')(delayed(compute_score_for_index)(idx) for idx in indices)
+        results = Parallel(n_jobs=self.n_workers, backend='loky')(delayed(compute_score_for_index)(idx) for idx in indices)
         
         # Populate the scores array with the results
         for idx, score in results:
