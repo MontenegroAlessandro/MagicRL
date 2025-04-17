@@ -5,7 +5,7 @@ import numpy as np
 import re
 
 def plot_performance():
-    results_dir = "results/pendulum_comparison_5batch/"
+    results_dir = "results/pendulum_MIS/window_5_batch/"
     # Create figure with higher DPI and larger size for better quality
     plt.figure(figsize=(12, 8), dpi=300)
     

@@ -10,17 +10,13 @@ from data_processors import BaseProcessor, IdentityDataProcessor
 from algorithms.utils import OffPolicyTrajectoryResults, check_directory_and_create, LearnRates, matrix_shift, Timer
 from algorithms.samplers import TrajectorySampler, off_pg_sampling_worker
 from joblib import Parallel, delayed
-import json
-import io
 from tqdm import tqdm
 import copy
 from adam.adam import Adam
 import collections
 from scipy.special import logsumexp
-import logging
-import time  # Add this at the top with other imports
 from logger.logger import Logger
-logger = logging.getLogger(__name__)
+
 
 # Class Implementation
 class OffPolicyGradient:
@@ -143,19 +139,8 @@ class OffPolicyGradient:
         self.window_length = np.min([window_length, self.ite])
         self.window_size = self.window_length * self.batch_size
 
-        # Print algorithm configuration
-        logger.info("\n" + "="*50)
-        logger.info("Initializing Off-Policy Gradient with parameters:")
-        logger.info(f"  - Window Length: {self.window_length}")
-        logger.info(f"  - Batch Size: {self.batch_size}")
-        logger.info(f"  - Learning Rate: {self.lr}")
-        logger.info(f"  - Learning Rate Strategy: {self.lr_strategy}")
-        logger.info(f"  - Number of Iterations: {self.ite}")
-        logger.info(f"  - Number of Workers: {self.n_jobs}")
-        logger.info(f"  - Environment: {self.env.__class__.__name__}")
-        logger.info(f"  - Horizon: {self.env.horizon}")
-        logger.info(f"  - Test Mode: {self.test}")
-        logger.info("="*50 + "\n")
+        # Logger to save results to file
+        self.trial_logger = Logger(self.directory)
 
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
@@ -181,6 +166,10 @@ class OffPolicyGradient:
 
     def learn(self) -> None:
         """Learning function"""
+
+        # Trial logger
+        trial_logger = Logger(self.directory)
+
         #initialize the queues
         action_queue = collections.deque(maxlen=int(self.window_size))
         state_queue = collections.deque(maxlen=int(self.window_size))
@@ -330,8 +319,8 @@ class OffPolicyGradient:
                 print("*" * 30)
 
             # Checkpoint
-            if self.time % self.checkpoint_freq == 0:
-                self.save_results()
+            #if self.time % self.checkpoint_freq == 0:
+            #    self.save_results()
 
             # save theta history
             self.theta_history[self.time, :] = copy.deepcopy(self.thetas)
@@ -342,7 +331,7 @@ class OffPolicyGradient:
             # reduce the exploration factor of the policy
             #self.policy.reduce_exploration()
         #self.sample_deterministic_curve()
-
+        
         #if self.writer is not None:
             #self.writer.close()
             
@@ -678,7 +667,7 @@ class OffPolicyGradient:
         else:
             #compute the difference between the log sums of the past trajectories and the log sum of the current trajectory
             #log diff matrix has shape (num_updates, batch_size)
-            log_diff_matrix = np.array(log_sums[:num_trajectories] - current_theta_log_sums, dtype=np.float64).reshape(-1, self.batch_size)
+            log_diff_matrix = np.array(log_sums[:num_trajectories] - current_theta_log_sums, dtype=np.float128).reshape(-1, self.batch_size)
 
             #BEGIN of D estimation
             D_vector = self.compute_all_I_alpha(current_means=current_theta_means, past_means=means[:num_trajectories], alpha=2).reshape(-1,1)
@@ -689,7 +678,7 @@ class OffPolicyGradient:
             lambda_vector = np.sqrt(2 * np.log(2/conf)  / (3 * num_trajectories * D_vector))
             #alpha_vector = 1 / (self.num_updates - 1 + D_vector)
             alpha_vector = D_inverse / D_sum
-            importance_vector = np.array(alpha_vector / ((1 - lambda_vector) * np.exp(log_diff_matrix) + lambda_vector), dtype=np.float64) #final importance ratio
+            importance_vector = np.array(alpha_vector / ((1 - lambda_vector) * np.exp(log_diff_matrix.astype(np.float128)) + lambda_vector), dtype=np.float64) #final importance ratio
             
 
         importance_vector =  importance_vector / self.batch_size
@@ -796,6 +785,22 @@ class OffPolicyGradient:
             print(f"Parameter configuration: {self.best_theta}")
             print("#" * 30)
         return
+    
+    def save_results(self) -> None:
+        """
+        Summary:
+            Saves the results of the learning process.
+        """
+        # save the results
+        self.trial_logger.save_results(
+            performance=self.performance_idx,
+            best_theta=self.best_theta, 
+            thetas_history=self.theta_history, 
+            last_theta=self.thetas, 
+            best_perf=self.best_performance_theta,
+            performance_det=self.deterministic_curve
+        )
+        return
 
     def sample_deterministic_curve(self):
         """
@@ -838,35 +843,6 @@ class OffPolicyGradient:
 
             # compute mean
             self.deterministic_curve[i] = np.mean(ite_perf)
-
-    def save_results(self) -> None:
-        """Save the results."""
-        results = {
-            "performance": np.array(self.performance_idx, dtype=float).tolist(),
-            "best_theta": np.array(self.best_theta, dtype=float).tolist(),
-            "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
-            "last_theta": np.array(self.thetas, dtype=float).tolist(),
-            "best_perf": float(self.best_performance_theta),
-            "performance_det": np.array(self.deterministic_curve, dtype=float).tolist()
-        }
-
-        # Save the json
-        name = self.directory + "/pg_results.json"
-        with io.open(name, 'w', encoding='utf-8') as f:
-            f.write(json.dumps(results, ensure_ascii=False, indent=4))
-            f.close()
-
-            logger2 = Logger(self.directory)
-            logger2.save_results(performance = self.performance_idx,
-                                best_theta = self.best_theta, 
-                                thetas_history = self.theta_history, 
-                                last_theta = self.thetas, 
-                                best_perf = self.best_performance_theta,
-                                performance_det = self.deterministic_curve)
-
-
-        
-        return
     
     def compute_trajectory_product(self, state_sequence, action_sequence):
         """Helper function to compute product for a single trajectory"""

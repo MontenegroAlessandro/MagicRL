@@ -12,6 +12,7 @@ from joblib import Parallel, delayed
 
 
 
+
 def to_torch(x):
     if isinstance(x, np.ndarray):
         return torch.from_numpy(x).double()
@@ -126,7 +127,7 @@ class DeepGaussian (LinearGaussianPolicy):
         if param_init is not None:
             self.mlp.set_from_flat(param_init)
 
-
+    #scores require grad calculation but we can skip this otherwise
     def calculate_mean(self, state, grad = False):
         if grad:
             return self.mlp(to_torch(state))
@@ -158,6 +159,7 @@ class DeepGaussian (LinearGaussianPolicy):
         action_mean = self.calculate_mean(state, grad)
         return torch.sum( -0.5 * (((action - action_mean) / sigma) ** 2) - 0.5 * torch.log(2 * torch.pi * sigma ** 2), -1)
     
+    #since we don't have a closed form solution for the gradient of the log pi, we need to use the autograd feature of pytorch
     def compute_score(self, state, action):
         """
         Compute the score function (gradient of log probability w.r.t. parameters)
@@ -172,10 +174,10 @@ class DeepGaussian (LinearGaussianPolicy):
         grads = torch.nn.utils.parameters_to_vector([p.grad for p in self.mlp.parameters()])
         return np.array(grads.detach(), dtype=np.float64)
     
-
+    # given a number of trajectories (num_trajectories, ), or batches of trajectories (batch_trajectory, num_trajectories, )
+    # finds the score of each trajectory keeping the same input shape
     def compute_score_all_trajectories(self, states_queue, actions_queue, means):
         
-        # Initialize scores array
         # Define a function to compute score for a single index
         def compute_score_for_index(idx):
             return idx, self.compute_score(states_queue[idx], actions_queue[idx])
@@ -195,6 +197,7 @@ class DeepGaussian (LinearGaussianPolicy):
         
         return scores
     
+    #OLD VERSION, TO BE REMOVED
     def compute_score_all_trajectories_old(self, states_queue, actions_queue, means):
 
         scores = np.zeros((states_queue.shape[:-1] + (self.tot_params, )), dtype=np.float64)

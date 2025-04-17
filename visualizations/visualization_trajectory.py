@@ -30,7 +30,7 @@ def extract_clean_label(folder_name):
     return None
 
 def plot_performance_by_trajectory():
-    results_dir = "results/pendulum_MIS"
+    results_dir = "results/pendulum_MIS/window_5_batch"
     plt.figure(figsize=(12, 8), dpi=300)
     plt.style.use('bmh')
     

@@ -15,6 +15,7 @@ import io
 from tqdm import tqdm
 import copy
 from adam.adam import Adam
+from logger.logger import Logger
 
 
 # Class Implementation
@@ -122,6 +123,8 @@ class PolicyGradient:
         self.parallel_computation = bool(self.n_jobs != 1)
         self.dim_action = self.env.action_dim
         self.dim_state = self.env.state_dim
+
+        self.trial_logger = Logger(self.directory)
 
         # Useful structures
         self.theta_history = np.zeros((self.ite, self.dim), dtype=np.float64)
@@ -272,7 +275,7 @@ class PolicyGradient:
             current_perf (np.float64): teh perforamance obtained by the current 
             theta configuraiton.
         """
-        if self.best_theta is None or self.best_performance_theta <= current_perf:
+        if self.best_theta is None or self.best_performance_theta < current_perf:
             self.best_performance_theta = current_perf
             self.best_theta = copy.deepcopy(self.thetas)
 
@@ -323,18 +326,12 @@ class PolicyGradient:
 
     def save_results(self) -> None:
         """Save the results."""
-        results = {
-            "performance": np.array(self.performance_idx, dtype=float).tolist(),
-            "best_theta": np.array(self.best_theta, dtype=float).tolist(),
-            "thetas_history": np.array(self.theta_history, dtype=float).tolist(),
-            "last_theta": np.array(self.thetas, dtype=float).tolist(),
-            "best_perf": float(self.best_performance_theta),
-            "performance_det": np.array(self.deterministic_curve, dtype=float).tolist()
-        }
-
-        # Save the json
-        name = self.directory + "/pg_results.json"
-        with io.open(name, 'w', encoding='utf-8') as f:
-            f.write(json.dumps(results, ensure_ascii=False, indent=4))
-            f.close()
+        self.trial_logger.save_results(
+            performance=self.performance_idx,
+            best_theta=self.best_theta, 
+            thetas_history=self.theta_history, 
+            last_theta=self.thetas, 
+            best_perf=self.best_performance_theta,
+            performance_det=self.deterministic_curve
+        )
         return
