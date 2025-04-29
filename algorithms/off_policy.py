@@ -746,12 +746,12 @@ class OffPolicyGradient:
             D_vector= np.array([self.compute_I_alpha(states_queue=state_array[i * self.batch_size : (i + 1) * self.batch_size ], 
                                                     past_param=thetas_array[i], alpha=2) 
                                                     for i in range(self.num_updates)]).reshape(-1,1) #remove log space and sample mean
-            #D_vector = np.abs(np.log(I_2)) + 1#renyi for alpha = 2
+            D_vector = np.power(D_vector, 1/2) #move to right power to match theory
             D_inverse = 1 / D_vector
             D_sum = np.sum(D_inverse)
 
             lambda_vector = np.sqrt(2 * np.log(2/conf)  / (3 * num_trajectories * D_vector))
-            #alpha_vector = 1 / (self.num_updates - 1 + D_vector)
+
             alpha_vector = D_inverse / D_sum
             importance_vector = np.array(alpha_vector * target_products / ((1 - lambda_vector) * behavioral_products + lambda_vector * target_products), dtype=np.float64) #final importance ratio
             

@@ -5,7 +5,12 @@ from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
 from art import *
-from torch.utils.tensorboard import SummaryWriter
+
+def sanitize_filename(filename):
+    # Replace any non-ASCII or control characters
+    import re
+    return re.sub(r'[^\x20-\x7E]', '', filename)
+
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -135,13 +140,6 @@ parser.add_argument(
     type=str,
     choices=["BH", "MIS"]
 )
-parser.add_argument(
-    "--tensorboard",
-    help="Enable TensorBoard logging",
-    type=int,
-    default=1,
-    choices=[0, 1]
-)
 
 
 args = parser.parse_args()
@@ -165,9 +163,6 @@ else:
 # Build
 base_dir = args.dir
 
-#tensorboard
-if args.tensorboard:
-    writer = SummaryWriter(log_dir=f"tensorboard/tensorboard_logs")
 
 
 for i in range(args.n_trials):
@@ -337,6 +332,7 @@ for i in range(args.n_trials):
     # dir_name += f"{tot_params}_var_{string_var}_trial_{i}"
     dir_name += f"{tot_params}_var_{string_var}"
     dir_name = base_dir + dir_name + "/" + dir_name + f"_trial_{i}"
+    dir_name = sanitize_filename(dir_name)
 
     """Algorithm"""
     if args.alg == "pgpe":
@@ -480,8 +476,7 @@ for i in range(args.n_trials):
             n_jobs=args.n_workers,
             window_length=args.window_length,
             test=bool(args.test),
-            weight_type=args.weight_type,
-            writer = writer if args.tensorboard else None,
+            weight_type=args.weight_type
         )
         alg = OffPolicyGradient(**alg_parameters)
     else:
