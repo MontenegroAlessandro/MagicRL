@@ -672,10 +672,12 @@ class OffPolicyGradient:
             #BEGIN of D estimation
             D_vector = self.compute_all_I_alpha(current_means=current_theta_means, past_means=means[:num_trajectories], alpha=2).reshape(-1,1)
 
+            D_vector = np.power(D_vector, 1/2) 
+
             D_inverse = 1 / D_vector
             D_sum = np.sum(D_inverse)
 
-            lambda_vector = np.sqrt(2 * np.log(2/conf)  / (3 * num_trajectories * D_vector))
+            lambda_vector = np.sqrt(4 * np.log(1/conf)  / (3 * num_trajectories * D_vector))
             #alpha_vector = 1 / (self.num_updates - 1 + D_vector)
             alpha_vector = D_inverse / D_sum
             importance_vector = np.array(alpha_vector / ((1 - lambda_vector) * np.exp(log_diff_matrix.astype(np.float128)) + lambda_vector), dtype=np.float64) #final importance ratio
@@ -746,7 +748,7 @@ class OffPolicyGradient:
             D_vector= np.array([self.compute_I_alpha(states_queue=state_array[i * self.batch_size : (i + 1) * self.batch_size ], 
                                                     past_param=thetas_array[i], alpha=2) 
                                                     for i in range(self.num_updates)]).reshape(-1,1) #remove log space and sample mean
-            D_vector = np.power(D_vector, 1/2) #move to right power to match theory
+            D_vector = np.power(D_vector, 1/2) #move to right power to match th
             D_inverse = 1 / D_vector
             D_sum = np.sum(D_inverse)
 

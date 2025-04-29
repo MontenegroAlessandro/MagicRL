@@ -218,7 +218,7 @@ def plot_performance_by_trajectory(csv_folders=None):
     - csv_folders: Dictionary mapping folder names to (algorithm_type, params) tuples
                   Example: {'storm_baseline': ('storm-pg', {'N': 100, 'B': 20})}
     """
-    results_dir = "results/pendulum_MIS/sensitivity_trajectory2"
+    results_dir = "results/pendulum_MIS/baselines"
     plt.figure(figsize=(12, 8), dpi=300)
     plt.style.use('bmh')
     
@@ -297,11 +297,9 @@ def plot_performance_by_trajectory(csv_folders=None):
 if __name__ == "__main__":
     # Define CSV folders with their algorithm types and parameters
     csv_folders = {
-        'storm-pg_25N_5B': ('storm-pg', {'N': 25, 'B': 5}),
-        'svrpg_100N_10B': ('svrpg', {'N': 100, 'B': 10, 'X': 10}),
+        'storm-pg_25N_10B': ('storm-pg', {'N': 25, 'B': 10}),
         'svrpg_50N_5B': ('svrpg', {'N': 50, 'B': 5, 'X': 10}),
         'srvrpg_50N_5B': ('svrpg', {'N': 50, 'B': 5, 'X': 10}),
-        'srvrpg_100N_10B': ('svrpg', {'N': 100, 'B': 10, 'X': 10})
         # Add more folders as needed
     }
     
