@@ -5,7 +5,7 @@ import numpy as np
 import re
 
 def plot_combined_performance(subsample_rate=50):
-    results_dir = "results/pendulum_MIS/sensitivity_trajectory/"
+    results_dir = "results/cartpole/sensitivity_trajectory2/"
     
     # Create a figure with two subplots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8), dpi=300)
@@ -146,7 +146,7 @@ def plot_combined_performance(subsample_rate=50):
     
     ax2.set_xlabel('Collected Trajectories', fontsize=12)
     ax2.set_ylabel('Average Performance', fontsize=12)
-    ax2.set_title('Trajectory Equalized Performance: PG vs Off-PG in Inverted Pendulum', fontsize=14, pad=20)
+    ax2.set_title('Trajectory Equalized Performance: PG vs Off-PG in Cartpole', fontsize=14, pad=20)
     ax2.set_xlim(0, 20000)
     ax2.grid(True, alpha=0.3)
     

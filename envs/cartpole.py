@@ -23,6 +23,8 @@ class ContCartPole(gym.Env):
 
     def __init__(self, horizon, gamma):
         # todo do better
+        self.with_costs = False
+        self.how_many_costs = 0
         self.horizon = horizon
         self.gamma = gamma
         self.action_bounds = [-10, 10]
@@ -91,7 +93,7 @@ class ContCartPole(gym.Env):
         x_dot = x_dot + self.tau * xacc
         theta = theta + self.tau * theta_dot
         theta_dot = theta_dot + self.tau * thetaacc
-        self.state = (x, x_dot[0], theta, theta_dot[0])
+        self.state = np.array([x, x_dot[0], theta, theta_dot[0]])
         done = (x < -self.x_threshold or x > self.x_threshold
                 or theta < -self.theta_threshold_radians or theta > self.theta_threshold_radians)
         done = bool(done)

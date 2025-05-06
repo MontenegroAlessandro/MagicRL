@@ -223,8 +223,8 @@ class PolicyGradient:
                 print("*" * 30)
 
             # Checkpoint
-            if self.time % self.checkpoint_freq == 0:
-                self.save_results()
+            #if self.time % self.checkpoint_freq == 0:
+            #    self.save_results()
 
             # save theta history
             self.theta_history[self.time, :] = copy.deepcopy(self.thetas)

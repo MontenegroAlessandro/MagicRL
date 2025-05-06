@@ -1,7 +1,4 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
@@ -19,13 +16,19 @@
                 "--clip", "0",
                 "--batch", "10",
                 "--pol", "nn",
-                "--lr", "0.003",
+                "--lr", "0.001",
                 "--weight_type", "MIS",
                 "--window_length", "8",
-                "--test", "1",
-
             ],
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
         }
     ]
 }

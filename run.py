@@ -56,7 +56,7 @@ parser.add_argument(
     help="The environment.",
     type=str,
     default="swimmer",
-    choices=["swimmer", "half_cheetah", "reacher", "humanoid", "ant", "hopper", "lqr", "pendulum"]
+    choices=["swimmer", "half_cheetah", "reacher", "humanoid", "ant", "hopper", "lqr", "pendulum", "cartpole"]
 )
 parser.add_argument(
     "--costs",
@@ -235,6 +235,10 @@ for i in range(args.n_trials):
         env_class = Pendulum
         env = env_class(horizon=args.horizon, gamma=args.gamma, render=False, clip=bool(args.clip))
         MULTI_LINEAR = True
+    elif args.env == "cartpole":
+        env_class = ContCartPole
+        env = env_class(horizon=args.horizon, gamma=args.gamma)
+        MULTI_LINEAR = True
     else:
         raise ValueError(f"Invalid env name.")
     s_dim = env.state_dim
@@ -331,9 +335,9 @@ for i in range(args.n_trials):
         raise ValueError(f"Invalid policy name.")
     # dir_name += f"{tot_params}_var_{string_var}_trial_{i}"
     dir_name += f"{tot_params}_var_{string_var}"
-    dir_name = base_dir + dir_name + "/" + dir_name + f"_trial_{i}"
+    dir_name = base_dir + dir_name + "/" + dir_name + f"_trial_{i+2}"
     dir_name = sanitize_filename(dir_name)
-
+    
     """Algorithm"""
     if args.alg == "pgpe":
         if args.var == 1:

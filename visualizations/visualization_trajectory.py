@@ -2,33 +2,7 @@ import json
 import matplotlib.pyplot as plt
 import os
 import numpy as np
-import re
 import pandas as pd
-
-def extract_clean_label(folder_name):
-    pattern = r'(off_pg|pg)_\d+_pendulum_\d+_adam_\d+_gaussian_batch_(\d+)_noclip(?:_window_(\d+)_?(BH|MIS))?_(\d+)_var_\d+'
-    match = re.search(pattern, folder_name)
-    
-    if match:
-        algorithm = match.group(1)
-        batch_size = int(match.group(2))
-        window = match.group(3) if match.group(3) else "N/A"
-        bh_or_mis = match.group(4) if match.group(4) else "N/A"
-        
-        # Create a clean label
-        if algorithm != "N/A":
-            clean_label = f"{algorithm} ("
-            if batch_size != "N/A":
-                clean_label += f"Batch_size={batch_size}"
-            if window != "N/A":
-                clean_label += f", Window={window}"
-            if bh_or_mis != "N/A":
-                clean_label += f", {bh_or_mis}"
-            clean_label += ")"
-            
-        # Return both the clean label and batch size
-        return clean_label, batch_size
-    return None, None
 
 def calculate_trajectories(algorithm_type, num_episodes, params):
     """
@@ -70,10 +44,10 @@ def calculate_trajectories(algorithm_type, num_episodes, params):
         
         trajectories = []
         while len(trajectories) < num_episodes:
-            trajectories.append(N)
-            for _ in range(X):
+            trajectories.append(N) #snapshot
+            for _ in range(X - 1):
                 if len(trajectories) < num_episodes:
-                    trajectories.append(B)
+                    trajectories.append(B) #minibatch
     else:
         # For unknown algorithm types, require at least B
         if 'B' not in params:
@@ -88,48 +62,51 @@ def calculate_trajectories(algorithm_type, num_episodes, params):
     # Truncate to requested number of episodes
     return cumulative[:num_episodes]
 
-def load_json_data(results_dir):
+def load_json_data(results_dir, json_folders):
     """
     Load performance data from JSON files in the results directory.
-    Returns a dictionary mapping experiment labels to performance statistics and batch sizes.
+    
+    Parameters:
+    - results_dir: Base directory containing experiment folders
+    - json_folders: Dictionary mapping folder names to batch sizes
+                  Example: {'storm_experiment1': 10, 'storm_experiment2': 20}
+    
+    Returns:
+    - Dictionary mapping batch sizes to lists of (label, mean_perf, std_perf, batch_size) tuples
     """
     experiment_data = {}
     
-    for experiment_dir in os.listdir(results_dir):
-        experiment_path = os.path.join(results_dir, experiment_dir)
+    for folder_name, batch_size in json_folders.items():
+        experiment_path = os.path.join(results_dir, folder_name)
         if not os.path.isdir(experiment_path):
+            print(f"Warning: Folder not found: {experiment_path}")
             continue
-        
-        # Extract clean label using the regex pattern
-        clean_label, batch_size = extract_clean_label(experiment_dir)
-        if clean_label is None:
-            continue
-        
-        # Extract batch size directly from the folder name for grouping
-        if batch_size not in experiment_data:
-            experiment_data[batch_size] = []
-        
+            
         performances = []
         
+        # Process each trial directory
         for trial_dir in os.listdir(experiment_path):
             trial_path = os.path.join(experiment_path, trial_dir)
             if not os.path.isdir(trial_path):
                 continue
                 
             results_file = os.path.join(trial_path, "pg_results.json")
-            if not os.path.exists(results_file):
-                continue
-                
-            with open(results_file, 'r') as f:
-                data = json.load(f)
-                performances.append(data['performance'])
-                
+            if os.path.exists(results_file):
+                with open(results_file, 'r') as f:
+                    data = json.load(f)
+                    performances.append(data['performance'])
+        
         if performances:
+            # Calculate statistics
             performances = np.array(performances)
             mean_perf = np.mean(performances, axis=0)
             std_perf = np.std(performances, axis=0)
-            experiment_data[batch_size].append((clean_label, mean_perf, std_perf, batch_size))
-    
+            
+            # Add to data dictionary
+            if batch_size not in experiment_data:
+                experiment_data[batch_size] = []
+            experiment_data[batch_size].append((folder_name, mean_perf, std_perf, batch_size))
+            
     return experiment_data
 
 def load_csv_data(base_dir, folder, algorithm_type, trajectory_params):
@@ -210,61 +187,57 @@ def load_csv_data(base_dir, folder, algorithm_type, trajectory_params):
     
     return csv_data
 
-def plot_performance_by_trajectory(csv_folders=None):
+def plot_performance_by_trajectory(json_folders=None, csv_folders=None):
     """
     Plot performance data by trajectory, combining JSON and CSV data sources.
     
     Parameters:
+    - json_folders: Dictionary mapping folder names to batch sizes
+                  Example: {'storm_experiment1': 10, 'storm_experiment2': 20}
     - csv_folders: Dictionary mapping folder names to (algorithm_type, params) tuples
                   Example: {'storm_baseline': ('storm-pg', {'N': 100, 'B': 20})}
     """
-    results_dir = "results/pendulum_MIS/baselines"
+    results_dir = "results/swimmer_MIS_nn/final"
     plt.figure(figsize=(12, 8), dpi=300)
     plt.style.use('bmh')
     
-    # Load JSON data
-    experiment_data = load_json_data(results_dir)
+    experiment_data = {}
+    
+    # Load JSON data if specified
+    if json_folders:
+        json_data = load_json_data(results_dir, json_folders)
+        # Update experiment_data with JSON data
+        for batch_size, entries in json_data.items():
+            if batch_size not in experiment_data:
+                experiment_data[batch_size] = []
+            experiment_data[batch_size].extend(entries)
     
     # Load CSV data if specified
     if csv_folders:
         for folder, (algorithm_type, params) in csv_folders.items():
             csv_data = load_csv_data(results_dir, folder, algorithm_type, params)
-            
-            # Merge CSV data with JSON data
             for batch_size, entries in csv_data.items():
                 if batch_size not in experiment_data:
                     experiment_data[batch_size] = []
                 experiment_data[batch_size].extend(entries)
     
-    # Sort within each batch size group to ensure consistent color ordering
-    for batch_size in experiment_data:
-        experiment_data[batch_size].sort(key=lambda x: x[0])
-    
     # Plot the data
     for batch_size, experiments in sorted(experiment_data.items()):
-        for clean_label, mean_perf, std_perf, actual_batch in experiments:
-            # Check if this is CSV data (based on the label matching a folder name)
-            is_csv_data = csv_folders and clean_label in csv_folders
-            
-            if is_csv_data:
-                # Use the exact trajectory parameters provided for CSV data
-                algorithm_type, params = csv_folders[clean_label]
-                # Calculate cumulative trajectories based on exact algorithm parameters
-                x_values = calculate_trajectories(
-                    algorithm_type, 
-                    len(mean_perf), 
-                    params
-                )
+        for label, mean_perf, std_perf, actual_batch in experiments:
+            # Determine x-axis values
+            if csv_folders and label in csv_folders:
+                # Use trajectory calculation for CSV data
+                algorithm_type, params = csv_folders[label]
+                x_values = calculate_trajectories(algorithm_type, len(mean_perf), params)
             else:
-                # For JSON data, use the standard approach from the original code
-                effective_x = np.arange(0, len(mean_perf) * batch_size, batch_size)
-                x_values = effective_x
+                # Simple batch size multiplication for JSON data
+                x_values = np.arange(0, len(mean_perf) * batch_size, batch_size)
             
-            # Ensure x_values and mean_perf have the same length
+            # Ensure x_values and mean_perf have same length
             x_values = x_values[:len(mean_perf)]
             
-            # Use the clean_label directly for the plot legend
-            line = plt.plot(x_values, mean_perf, label=clean_label, linewidth=2)[0]
+            # Plot the line
+            line = plt.plot(x_values, mean_perf, label=label, linewidth=2)[0]
             plt.fill_between(
                 x_values,
                 mean_perf - std_perf,
@@ -275,11 +248,9 @@ def plot_performance_by_trajectory(csv_folders=None):
     
     plt.xlabel('Collected Trajectories', fontsize=12)
     plt.ylabel('Average Performance', fontsize=12)
-    plt.title('Trajectory Equalized Performance: PG vs Off-PG in Inverted Pendulum', fontsize=14, pad=20)
-
-    plt.xlim(0, 5000)  # Adjusted x-axis limit for better visibility
+    plt.title('Trajectory Equalized Performance in Swimmer', fontsize=14, pad=20)
     
-    # Improve legend with sorting and formatting
+    # Create legend
     handles, labels = plt.gca().get_legend_handles_labels()
     labels, handles = zip(*sorted(zip(labels, handles)))
     plt.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
@@ -287,20 +258,24 @@ def plot_performance_by_trajectory(csv_folders=None):
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     
-    # Create directory if it doesn't exist
+    # Save figure
     save_path = os.path.join('visualizations', 'performance_by_trajectory_with_baselines.png')
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.close()
 
 if __name__ == "__main__":
+    # Define JSON folders with their batch sizes
+    json_folders = {
+        'TRPG_20B': 20,
+    }
+    
     # Define CSV folders with their algorithm types and parameters
     csv_folders = {
         'storm-pg_25N_10B': ('storm-pg', {'N': 25, 'B': 10}),
-        'svrpg_50N_5B': ('svrpg', {'N': 50, 'B': 5, 'X': 10}),
-        'srvrpg_50N_5B': ('svrpg', {'N': 50, 'B': 5, 'X': 10}),
-        # Add more folders as needed
+        'svrpg_110N_10B': ('svrpg', {'N': 110, 'B': 10, 'X': 10}),
+        'srvrpg_110N_10B': ('svrpg', {'N': 110, 'B': 10, 'X': 10}),
+        'def-pg_55N_5B': ('def-pg', {'B': 10}),
     }
     
-    plot_performance_by_trajectory(csv_folders)
+    plot_performance_by_trajectory(json_folders, csv_folders)

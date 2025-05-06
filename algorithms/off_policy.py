@@ -185,7 +185,7 @@ class OffPolicyGradient:
         # for MIS: each element is the log sum of the trajectory under its behavioral distribution
         elif self.weight_type == "MIS":
             log_sums = np.zeros(self.window_size, dtype=np.float64)
-            #we need one r
+            #action means
             means = np.zeros((self.window_size, self.env.horizon, self.dim_action), dtype=np.float64)
 
         for i in tqdm(range(self.ite)):
@@ -197,7 +197,6 @@ class OffPolicyGradient:
                     env=copy.deepcopy(self.env),
                     pol=copy.deepcopy(self.policy),
                     dp=copy.deepcopy(self.data_processor),
-                    # params=copy.deepcopy(self.thetas),
                     params=None,
                     starting_state=None,
                     thetas_queue=thetas_queue,
@@ -667,20 +666,21 @@ class OffPolicyGradient:
         else:
             #compute the difference between the log sums of the past trajectories and the log sum of the current trajectory
             #log diff matrix has shape (num_updates, batch_size)
-            log_diff_matrix = np.array(log_sums[:num_trajectories] - current_theta_log_sums, dtype=np.float128).reshape(-1, self.batch_size)
+            log_diff_matrix = np.array(log_sums[:num_trajectories] - current_theta_log_sums, dtype=np.longdouble).reshape(-1, self.batch_size)
 
             #BEGIN of D estimation
             D_vector = self.compute_all_I_alpha(current_means=current_theta_means, past_means=means[:num_trajectories], alpha=2).reshape(-1,1)
+
+            lambda_vector = np.sqrt(4 * np.log(1/conf)  / (3 * num_trajectories * D_vector))
 
             D_vector = np.power(D_vector, 1/2) 
 
             D_inverse = 1 / D_vector
             D_sum = np.sum(D_inverse)
 
-            lambda_vector = np.sqrt(4 * np.log(1/conf)  / (3 * num_trajectories * D_vector))
             #alpha_vector = 1 / (self.num_updates - 1 + D_vector)
             alpha_vector = D_inverse / D_sum
-            importance_vector = np.array(alpha_vector / ((1 - lambda_vector) * np.exp(log_diff_matrix.astype(np.float128)) + lambda_vector), dtype=np.float64) #final importance ratio
+            importance_vector = np.array(alpha_vector / ((1 - lambda_vector) * np.exp(log_diff_matrix.astype(np.longdouble)) + lambda_vector), dtype=np.float64) #final importance ratio
             
 
         importance_vector =  importance_vector / self.batch_size
