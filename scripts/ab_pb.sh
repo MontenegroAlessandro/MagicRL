@@ -3,7 +3,7 @@ python3 run.py \
     --dir /Users/ale/Desktop/results/ \
     --ite 5000 \
     --alg pgpe \
-    --var 0.0004 \
+    --var 0.5 \
     --pol linear \
     --env reacher \
     --horizon 50 \
@@ -12,5 +12,5 @@ python3 run.py \
     --lr_strategy adam \
     --n_workers 5 \
     --batch 100 \
-    --n_trials 5 \
+    --n_trials 1 \
     --clip 0

@@ -1,20 +1,20 @@
 cd ..
 # python run_phases.py \
-#   --learn 1 \
-#   --sigma_lr 0.1 \
+#   --learn 0 \
+#   --sigma_lr 0.01 \
 #   --sigma_lr_strategy adam \
 #   --phases 25 \
-#   --sigma_exponent 5.0 \
-#   --sigma_init 0.5 \
-#   --dir /Users/ale/Desktop/results/ \
-#   --ite 200 \
-#   --alg pg \
+#   --sigma_exponent 1 \
+#   --sigma_init 1 \
+#   --dir /Users/ale/Desktop/results/sens/ \
+#   --ite 40 \
+#   --alg pgpe \
 #   --var 1.0 \
 #   --pol linear \
-#   --env reacher \
-#   --horizon 50 \
+#   --env ip \
+#   --horizon 100 \
 #   --gamma 1.0 \
-#   --lr 0.001 \
+#   --lr 0.01 \
 #   --lr_strategy adam \
 #   --n_workers 5 \
 #   --batch 100 \
@@ -22,20 +22,19 @@ cd ..
 #   --n_trials 5 
 
 python run_phases.py \
-  --learn 1 \
-  --sigma_lr 0.1 \
+  --learn 0 \
+  --sigma_lr 0.01 \
   --sigma_lr_strategy adam \
-  --phases 1250 \
+  --phases 10 \
   --sigma_exponent 1 \
   --sigma_init 1 \
-  --sigma_param exp \
-  --dir /Users/ale/Desktop/results/ \
-  --ite 1 \
-  --alg pg \
+  --dir /Users/ale/Desktop/results/sens/ \
+  --ite 100 \
+  --alg pgpe \
   --var 1.0 \
   --pol linear \
   --env ip \
-  --horizon 200 \
+  --horizon 100 \
   --gamma 1.0 \
   --lr 0.01 \
   --lr_strategy adam \
@@ -43,3 +42,93 @@ python run_phases.py \
   --batch 100 \
   --clip 0 \
   --n_trials 5 
+
+python run_phases.py \
+  --learn 0 \
+  --sigma_lr 0.01 \
+  --sigma_lr_strategy adam \
+  --phases 1000 \
+  --sigma_exponent 1 \
+  --sigma_init 1 \
+  --dir /Users/ale/Desktop/results/sens/ \
+  --ite 1 \
+  --alg pgpe \
+  --var 1.0 \
+  --pol linear \
+  --env ip \
+  --horizon 100 \
+  --gamma 1.0 \
+  --lr 0.01 \
+  --lr_strategy adam \
+  --n_workers 5 \
+  --batch 100 \
+  --clip 0 \
+  --n_trials 5
+
+# python run_phases.py \
+#   --learn 0 \
+#   --sigma_lr 0.01 \
+#   --sigma_lr_strategy adam \
+#   --phases 25 \
+#   --sigma_exponent 1 \
+#   --sigma_init 1 \
+#   --dir /Users/ale/Desktop/results/sens/ \
+#   --ite 40 \
+#   --alg pg \
+#   --var 1.0 \
+#   --pol linear \
+#   --env ip \
+#   --horizon 100 \
+#   --gamma 1.0 \
+#   --lr 0.01 \
+#   --lr_strategy adam \
+#   --n_workers 5 \
+#   --batch 100 \
+#   --clip 0 \
+#   --n_trials 5 
+
+python run_phases.py \
+  --learn 0 \
+  --sigma_lr 0.01 \
+  --sigma_lr_strategy adam \
+  --phases 10 \
+  --sigma_exponent 1 \
+  --sigma_init 1 \
+  --sigma_param exp \
+  --dir /Users/ale/Desktop/results/sens/ \
+  --ite 100 \
+  --alg pg \
+  --var 1.0 \
+  --pol linear \
+  --env ip \
+  --horizon 100 \
+  --gamma 1.0 \
+  --lr 0.01 \
+  --lr_strategy adam \
+  --n_workers 5 \
+  --batch 100 \
+  --clip 0 \
+  --n_trials 5
+
+python run_phases.py \
+  --learn 0 \
+  --sigma_lr 0.01 \
+  --sigma_lr_strategy adam \
+  --phases 1000 \
+  --sigma_exponent 1 \
+  --sigma_init 1 \
+  --sigma_param exp \
+  --dir /Users/ale/Desktop/results/sens/ \
+  --ite 1 \
+  --alg pg \
+  --var 1.0 \
+  --pol linear \
+  --env ip \
+  --horizon 100 \
+  --gamma 1.0 \
+  --lr 0.01 \
+  --lr_strategy adam \
+  --n_workers 5 \
+  --batch 100 \
+  --clip 0 \
+  --n_trials 5

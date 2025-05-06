@@ -302,11 +302,11 @@ for i in range(args.n_trials):
     elif args.pol in ["nn", "deep_gaussian"]:
         if not huge:
             net = nn.Sequential(
-                nn.Linear(s_dim, 32, bias=False),
+                nn.Linear(s_dim, 16, bias=False),
                 nn.Tanh(),
-                nn.Linear(32, 32, bias=False),
+                nn.Linear(16, 16, bias=False),
                 nn.Tanh(),
-                nn.Linear(32, a_dim, bias=False)
+                nn.Linear(16, a_dim, bias=False)
             )
             model_desc = dict(
                 layers_shape=[(s_dim, 32), (32, 32), (32, a_dim)]

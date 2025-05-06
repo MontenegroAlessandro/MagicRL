@@ -233,7 +233,8 @@ for i in range(args.n_trials):
     elif args.pol == "gaussian":
         tot_params = s_dim * a_dim
         # var = np.sqrt(args.var * np.ones(a_dim))
-        std = np.sqrt(args.var)
+        # std = np.sqrt(args.var)
+        std = args.var
         pol = LinearGaussianPolicy(
             parameters=np.zeros(tot_params),
             dim_state=s_dim,
@@ -291,7 +292,7 @@ for i in range(args.n_trials):
                 output_size=a_dim,
                 model=copy.deepcopy(net),
                 model_desc=copy.deepcopy(model_desc),
-                std_dev=np.sqrt(args.var),
+                std_dev=args.var,#np.sqrt(args.var),
                 std_decay=0,
                 std_min=1e-6
             )
@@ -406,7 +407,7 @@ for i in range(args.n_trials):
             init_theta = np.random.normal(0, 1, tot_params)
         pol.set_parameters(init_theta)
         b_pol = copy.deepcopy(pol)
-        b_pol.sigma_noise = np.sqrt(args.var)
+        b_pol.sigma_noise = args.var # np.sqrt(args.var)
         alg_parameters = dict(
             ite=args.ite,
             directory=dir_name,

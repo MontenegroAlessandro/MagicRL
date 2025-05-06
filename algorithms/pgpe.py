@@ -226,7 +226,7 @@ class PGPE:
                 # std = np.float64(np.exp(self.rho[RhoElem.STD]))
                 std = self.rho[RhoElem.STD]
                 std = np.clip(std - self.std_decay, self.std_min, np.inf)
-                self.rho[RhoElem.STD, :] = np.log(std)
+                self.rho[RhoElem.STD, :] = std # np.log(std)
 
         # Sample the deterministic curve
         if self.save_det:
