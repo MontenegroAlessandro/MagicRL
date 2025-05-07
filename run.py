@@ -412,6 +412,8 @@ for i in range(args.n_trials):
     elif args.alg == "pg":
         if args.pol == "gaussian":
             init_theta = [0] * tot_params
+        elif args.pol == "deep_gaussian":
+            init_theta = pol.get_parameters().detach().numpy()
         else:
             init_theta = np.random.normal(0, 1, tot_params)
         alg_parameters = dict(
@@ -462,6 +464,8 @@ for i in range(args.n_trials):
     elif args.alg == "off_pg":
         if args.pol == "gaussian":
             init_theta = [0] * tot_params
+        elif args.pol == "deep_gaussian":
+            init_theta = pol.get_parameters().detach().numpy()
         else:
             init_theta = np.random.normal(0, 1, tot_params)
         alg_parameters = dict(

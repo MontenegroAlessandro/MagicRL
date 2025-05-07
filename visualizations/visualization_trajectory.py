@@ -100,7 +100,7 @@ def load_json_data(results_dir, json_folders):
             # Calculate statistics
             performances = np.array(performances)
             mean_perf = np.mean(performances, axis=0)
-            std_perf = np.std(performances, axis=0)
+            std_perf = np.std(performances, axis=0) * 1.96 / np.sqrt(5)
             
             # Add to data dictionary
             if batch_size not in experiment_data:
@@ -174,7 +174,7 @@ def load_csv_data(base_dir, folder, algorithm_type, trajectory_params):
     
     # Calculate mean and std across all CSV files
     csv_mean = np.mean(all_csv_performances, axis=0)
-    csv_std = np.std(all_csv_performances, axis=0)
+    csv_std = np.std(all_csv_performances, axis=0) * 1.96 / np.sqrt(5)
     
     # Use provided batch size from trajectory params
     batch_size = trajectory_params['B']  # Will raise KeyError if missing
@@ -242,7 +242,7 @@ def plot_performance_by_trajectory(json_folders=None, csv_folders=None):
                 x_values,
                 mean_perf - std_perf,
                 mean_perf + std_perf,
-                alpha=0.2,
+                alpha=0.1,
                 color=line.get_color()
             )
     
@@ -268,14 +268,15 @@ if __name__ == "__main__":
     # Define JSON folders with their batch sizes
     json_folders = {
         'TRPG_20B': 20,
+        'PG_20B': 20,
     }
     
     # Define CSV folders with their algorithm types and parameters
     csv_folders = {
-        'storm-pg_25N_10B': ('storm-pg', {'N': 25, 'B': 10}),
+        #'storm-pg_25N_10B': ('storm-pg', {'N': 25, 'B': 10}),
         'svrpg_110N_10B': ('svrpg', {'N': 110, 'B': 10, 'X': 10}),
         'srvrpg_110N_10B': ('svrpg', {'N': 110, 'B': 10, 'X': 10}),
-        'def-pg_55N_5B': ('def-pg', {'B': 10}),
+        #'def-pg_55N_5B': ('def-pg', {'B': 10}),
     }
     
     plot_performance_by_trajectory(json_folders, csv_folders)

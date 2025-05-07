@@ -644,7 +644,7 @@ class OffPolicyGradient:
         num_trajectories = len(state_queue)
         estimated_gradients = np.zeros((num_trajectories, self.dim), dtype=np.float64)
 
-        conf = 0.05
+        conf = 0.2
 
         #convert the queues to numpy arrays
         reward_array = np.array(reward_queue, dtype=np.float64)
