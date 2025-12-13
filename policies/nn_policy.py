@@ -15,7 +15,7 @@ from joblib import Parallel, delayed
 
 def to_torch(x):
     if isinstance(x, np.ndarray):
-        return torch.from_numpy(x).double().to(torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
+        return torch.from_numpy(x).double()
     return x
     
 def to_numpy(x):
@@ -122,7 +122,7 @@ class DeepGaussian (LinearGaussianPolicy):
                              hidden_neurons, 
                              bias, 
                              activation, 
-                             init).to(self.device)
+                             init)
         
         self.tot_params = self.mlp.tot_parameters()
         
@@ -223,5 +223,5 @@ class DeepGaussian (LinearGaussianPolicy):
         """
         Get the parameters of the policy
         """
-        return torch.nn.utils.parameters_to_vector(self.mlp.parameters()).cpu()
+        return torch.nn.utils.parameters_to_vector(self.mlp.parameters())
     
