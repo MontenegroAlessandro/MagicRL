@@ -116,7 +116,7 @@ class OffPolicyGradient:
         self.data_processor = data_processor
 
         err_msg = "[PG] weight_type not valid!"
-        assert weight_type in ["BH", "MIS"], err_msg
+        assert weight_type in ["BH", "MIS", "RPG"], err_msg
         self.weight_type = weight_type
 
         self.writer = writer
@@ -183,7 +183,7 @@ class OffPolicyGradient:
         if self.weight_type == "BH":
             log_sums = np.zeros((self.window_length, self.window_size), dtype=np.float64)
         # for MIS: each element is the log sum of the trajectory under its behavioral distribution
-        elif self.weight_type == "MIS":
+        else:
             log_sums = np.zeros(self.window_size, dtype=np.float64)
             #action means
             means = np.zeros((self.window_size, self.env.horizon, self.dim_action), dtype=np.float64)
@@ -236,7 +236,7 @@ class OffPolicyGradient:
 
                 if self.weight_type == "BH":
                     log_sums[:self.num_updates, batch_start + j] = np.array(res[j][OffPolicyTrajectoryResults.LogSumList], dtype=np.float64)
-                elif self.weight_type == "MIS":
+                else:
                     log_sums[batch_start + j] = np.array(res[j][OffPolicyTrajectoryResults.LogSumList], dtype=np.float64)
                     means[batch_start + j] = np.array(res[j][OffPolicyTrajectoryResults.MeanList], dtype=np.float64)
 
@@ -260,18 +260,25 @@ class OffPolicyGradient:
                     )
                     assert np.abs(np.sum(estimated_gradient) - np.sum(test_gradient)) < 1e-6, "Sum of test gradient does not match sum of estimated gradient"
             
+            if self.weight_type == "RPG":
+                estimated_gradient, log_sums, means = self.calculate_g_RPG(
+                    action_queue=action_queue, state_queue=state_queue,
+                    thetas_queue=thetas_queue, reward_queue=reward_queue,
+                    log_sums=log_sums, means=means
+                )
+                if self.test:
+                    test_gradient = self.test_function_RPG(
+                        action_queue=action_queue, state_queue=state_queue,
+                        thetas_queue=thetas_queue, reward_queue=reward_queue
+                    )
+                    assert np.abs(np.sum(estimated_gradient) - np.sum(test_gradient)) < 1e-6, "Sum of test gradient does not match sum of estimated gradient"
+
             if self.weight_type == "MIS":
                 estimated_gradient, log_sums, means = self.calculate_g_MIS(
                     action_queue=action_queue, state_queue=state_queue,
                     thetas_queue=thetas_queue, reward_queue=reward_queue,
                     log_sums=log_sums, means=means
                 )
-                if self.test:
-                    test_gradient = self.test_function_MIS(
-                        action_queue=action_queue, state_queue=state_queue,
-                        thetas_queue=thetas_queue, reward_queue=reward_queue
-                    )
-                    assert np.abs(np.sum(estimated_gradient) - np.sum(test_gradient)) < 1e-6, "Sum of test gradient does not match sum of estimated gradient"
 
 
 
@@ -624,7 +631,7 @@ class OffPolicyGradient:
     
 
 
-    def calculate_g_MIS(self, action_queue: collections.deque,
+    def calculate_g_RPG(self, action_queue: collections.deque,
                                             state_queue: collections.deque, 
                                             thetas_queue: collections.deque, 
                                             reward_queue: collections.deque,
@@ -671,9 +678,9 @@ class OffPolicyGradient:
             #BEGIN of D estimation
             D_vector = self.compute_all_I_alpha(current_means=current_theta_means, past_means=means[:num_trajectories], alpha=2).reshape(-1,1)
 
-            lambda_vector = np.sqrt(4 * np.log(1/conf)  / (3 * num_trajectories * D_vector))
+            lambda_vector = np.sqrt(1  / ((num_trajectories / self.batch_size) * D_vector))
 
-            D_vector = np.power(D_vector, 1/2) 
+            D_vector = np.power(D_vector, 1/2)
 
             D_inverse = 1 / D_vector
             D_sum = np.sum(D_inverse)
@@ -699,10 +706,79 @@ class OffPolicyGradient:
             means = matrix_shift(means, -self.batch_size, fill_value=0) # shift up (rows)
 
         return np.sum(estimated_gradients, axis=0), log_sums, means
+    
+
+    def calculate_g_MIS(self, action_queue: collections.deque,
+                                            state_queue: collections.deque, 
+                                            thetas_queue: collections.deque, 
+                                            reward_queue: collections.deque,
+                                            log_sums: np.array,
+                                            means: np.array) -> tuple[np.array, np.array]:
+        """
+        Summary:
+            Calculate the importance sampling ratio.
+        Args:
+            action_trajectory (collections.deque): the action trajectory.
+            state_trajectory (collections.deque): the state trajectory.
+            thetas_queue (collections.deque): the thetas trajectory.
+            products (np.array): the products matrix.
+        Returns:
+            np.array: the importance sampling ratio.
+        """
+        num_trajectories = len(state_queue)
+        estimated_gradients = np.zeros((num_trajectories, self.dim), dtype=np.float64)
+
+        conf = 0.2
+
+        #convert the queues to numpy arrays
+        reward_array = np.array(reward_queue, dtype=np.float64)
+        state_array = np.array(state_queue, dtype=np.float64)
+        action_array = np.array(action_queue, dtype=np.float64)
+        thetas_array = np.array(thetas_queue, dtype=np.float64)
+
+        #last theta index for the row of the products matrix, it's the last theta from whcih trajectories were sampled.
+        theta_idx = self.num_updates - 1
+
+        #then i need to recalculate all trajectories with respect to the new parameter
+        self.policy.set_parameters(thetas=thetas_queue[theta_idx])
+        #at the moment log sums has length window_size
+        current_theta_log_sums, current_theta_means = self.compute_sum_all_log_pi(state_array[:num_trajectories], action_array[:num_trajectories])
+        
+
+        if self.num_updates <= 1:
+            importance_vector = np.ones(self.batch_size, dtype=np.float64)
+        else:
+            #compute the difference between the log sums of the past trajectories and the log sum of the current trajectory
+            #log diff matrix has shape (num_updates, batch_size)
+            log_diff_matrix = np.array(log_sums[:num_trajectories] - current_theta_log_sums, dtype=np.longdouble).reshape(-1, self.batch_size)
+
+            lambda_vector = 0
+
+            #alpha_vector = 1 / (self.num_updates - 1 + D_vector)
+            alpha_vector = 1 / self.num_updates
+            importance_vector = np.array(alpha_vector / ((1 - lambda_vector) * np.exp(log_diff_matrix.astype(np.longdouble)) + lambda_vector), dtype=np.float64) #final importance ratio
+            
+
+        importance_vector =  importance_vector / self.batch_size
+
+        self.policy.set_parameters(thetas=thetas_queue[theta_idx])
+        #compute g, using scores of the past trajectory with respect to the target distribution parameters
+        all_scores = self.policy.compute_score_all_trajectories(state_array, action_array, current_theta_means)
+
+        all_gradients = self.calculate_all_g(reward_array, all_scores)
+
+        estimated_gradients = importance_vector.reshape(-1, 1) * all_gradients
+
+        if self.num_updates >= self.window_length:
+            # In-place operations to modify the original products matrix 
+            log_sums = matrix_shift(log_sums.T, -self.batch_size, fill_value=0).T # shift left (columns)
+            means = matrix_shift(means, -self.batch_size, fill_value=0) # shift up (rows)
+
+        return np.sum(estimated_gradients, axis=0), log_sums, means
 
 
 
-    def test_function_MIS(self, action_queue: collections.deque,
+    def test_function_RPG(self, action_queue: collections.deque,
                                             state_queue: collections.deque, 
                                             thetas_queue: collections.deque, 
                                             reward_queue: collections.deque) -> np.array:

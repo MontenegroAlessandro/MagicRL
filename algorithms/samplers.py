@@ -392,7 +392,7 @@ class TrajectorySampler:
         if params is not None:
             self.pol.set_parameters(thetas=params)
 
-        if weight_type == 'MIS':
+        if weight_type == 'MIS' or weight_type == 'RPG':
             means = np.zeros(shape=(self.env.horizon, self.env.action_dim), dtype=np.float64)
 
         # act
@@ -408,7 +408,7 @@ class TrajectorySampler:
             if t == 0 and starting_action is not None:
                 a = starting_action
             else:
-                if weight_type == 'MIS':
+                if weight_type == 'MIS' or weight_type == 'RPG':
                     a, mean = self.pol.draw_action(state=features, return_mean=True)
                     means[t, :] = mean
                 else:
@@ -436,7 +436,7 @@ class TrajectorySampler:
             log_sums = self.pol.compute_sum_all_log_pi(states, actions, np.array(thetas_queue))
             return [perf, rewards, scores, states, actions, log_sums]
         #compute the log sum for the current theta
-        elif weight_type == 'MIS' and not deterministic:
+        elif (weight_type == 'MIS' or weight_type == 'RPG') and not deterministic:
             log_sum = self.pol.compute_sum_log_pi(states, actions)
             return [perf, rewards, scores, states, actions, log_sum, means]
 

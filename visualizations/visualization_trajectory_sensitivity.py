@@ -6,7 +6,7 @@ import numpy as np
 import re
 
 def plot_performance(subsample_rate=100):
-    results_dir = "results/pendulum_MIS/sensitivity_trajectory/"
+    results_dir = "results/pendulum_comparison_5batch/"
     # Create figure with higher DPI and larger size for better quality
     fig = plt.figure(figsize=(12, 8), dpi=300)
     

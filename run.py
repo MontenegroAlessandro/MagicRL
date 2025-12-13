@@ -138,7 +138,7 @@ parser.add_argument(
     "--weight_type",
     help="The type of weight to use in the off-policy gradient.",
     type=str,
-    choices=["BH", "MIS"]
+    choices=["BH", "MIS", "RPG"]
 )
 
 

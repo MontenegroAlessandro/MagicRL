@@ -197,7 +197,7 @@ def plot_performance_by_trajectory(json_folders=None, csv_folders=None):
     - csv_folders: Dictionary mapping folder names to (algorithm_type, params) tuples
                   Example: {'storm_baseline': ('storm-pg', {'N': 100, 'B': 20})}
     """
-    results_dir = "results/swimmer_MIS_nn/final"
+    results_dir = "results/cartpole"
     plt.figure(figsize=(12, 8), dpi=300)
     plt.style.use('bmh')
     
@@ -248,7 +248,7 @@ def plot_performance_by_trajectory(json_folders=None, csv_folders=None):
     
     plt.xlabel('Collected Trajectories', fontsize=12)
     plt.ylabel('Average Performance', fontsize=12)
-    plt.title('Trajectory Equalized Performance in Swimmer', fontsize=14, pad=20)
+    plt.title('Trajectory Equalized Performance in cartpole', fontsize=14, pad=20)
     
     # Create legend
     handles, labels = plt.gca().get_legend_handles_labels()
@@ -267,15 +267,19 @@ def plot_performance_by_trajectory(json_folders=None, csv_folders=None):
 if __name__ == "__main__":
     # Define JSON folders with their batch sizes
     json_folders = {
-        'TRPG_20B': 20,
-        'PG_20B': 20,
+        'BH_5B_8W': 5,
+        #'PG_5B': 5,
+        'RPG_5B_8W': 5,
+        'RPG_5B_8W_2': 5,
+        'MIS_5B_8W': 5,
+        
     }
     
     # Define CSV folders with their algorithm types and parameters
     csv_folders = {
         #'storm-pg_25N_10B': ('storm-pg', {'N': 25, 'B': 10}),
-        'svrpg_110N_10B': ('svrpg', {'N': 110, 'B': 10, 'X': 10}),
-        'srvrpg_110N_10B': ('svrpg', {'N': 110, 'B': 10, 'X': 10}),
+        #'svrpg_110N_10B': ('svrpg', {'N': 110, 'B': 10, 'X': 10}),
+        #'srvrpg_110N_10B': ('svrpg', {'N': 110, 'B': 10, 'X': 10}),
         #'def-pg_55N_5B': ('def-pg', {'B': 10}),
     }
     
