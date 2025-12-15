@@ -13,7 +13,7 @@ def load_json_data(results_dir):
     algorithm_data = {}
     
     # Define regex pattern for parsing directory names
-    pattern = r'(off_pg|pg)_(\d+)_([a-zA-Z0-9_]+)_(\d+)_adam_(\d+)_gaussian_batch_(\d+)_noclip(?:_window_(\d+)_(BH|MIS)_(\d+))?(?:_(\d+))?_var_(\d+)'
+    pattern = r'(off_pg|pg)_(\d+)_([a-zA-Z0-9_]+)_(\d+)_adam_(\d+)_gaussian_batch_(\d+)_noclip(?:_window_(\d+)_(BH|MIS|RPG)_(\d+))?(?:_(\d+))?_var_(\d+)'
     
     # Get all subdirectories in results
     for experiment_dir in os.listdir(results_dir):
@@ -160,7 +160,7 @@ def plot_performance(subsample_rate=1, specific_csv_folders=None):
     - specific_csv_folders: List of specific folder names to include, or None to include all folders with CSVs
     """
     # Base directory containing all experiment data
-    base_dir = "results/swimmer_MIS_nn/test/"
+    base_dir = "results/cartpole/window_sensitivity"
     
     # Load JSON data
     json_data = load_json_data(base_dir)
@@ -228,7 +228,7 @@ def plot_performance(subsample_rate=1, specific_csv_folders=None):
     plt.ylabel('Average Performance', fontsize=12)
     plt.title(f'Training Performance (Sampled every {subsample_rate} episodes)', fontsize=14, pad=20)
 
-    plt.xlim(0, 300)
+    #plt.xlim(0, 300)
 
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=10)
     plt.grid(True, alpha=0.3)

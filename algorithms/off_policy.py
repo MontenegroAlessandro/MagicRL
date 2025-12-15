@@ -678,7 +678,7 @@ class OffPolicyGradient:
             #BEGIN of D estimation
             D_vector = self.compute_all_I_alpha(current_means=current_theta_means, past_means=means[:num_trajectories], alpha=2).reshape(-1,1)
 
-            lambda_vector = np.sqrt(1  / ((num_trajectories / self.batch_size) * D_vector))
+            lambda_vector = np.sqrt(4 * np.log(1/conf)  / (3 * num_trajectories * D_vector))
 
             D_vector = np.power(D_vector, 1/2)
 
