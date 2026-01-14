@@ -343,11 +343,6 @@ class OffPolicyGradient:
             
         return
     
-    '''
-    ------------------------------------------------------------------------------------------------
-    THE FOLLOWING SECTION CONTAINST ESTIMATOR FOR BH
-    ------------------------------------------------------------------------------------------------
-    '''
     def calculate_g_BH(self, action_queue: collections.deque,
                                             state_queue: collections.deque, 
                                             thetas_queue: collections.deque, 
@@ -544,14 +539,6 @@ class OffPolicyGradient:
 
         return np.sum(estimated_gradients, axis=0)
     
-
-
-
-    '''
-    ------------------------------------------------------------------------------------------------
-    THE FOLLOWING SECTION CONTAINS ESTIMATOR FOR MIS
-    ------------------------------------------------------------------------------------------------
-    '''
 
     def compute_sum_all_log_pi(self, states, actions):
         """Compute sum of log probabilities for the current_parameter set.

@@ -1,5 +1,6 @@
 # Libraries
 import argparse
+import time
 from algorithms import PGPE, PolicyGradient, DeterministicPG, CPGPE, OffPolicyGradient
 from data_processors import IdentityDataProcessor
 from envs import *
@@ -307,13 +308,14 @@ for i in range(args.n_trials):
                 layers_shape=[(s_dim, 100), (100, 50), (50, 25), (25, a_dim)]
             )
         if args.pol == "nn":
-            pol = NeuralNetworkPolicy(
-                parameters=None,
-                input_size=s_dim,
-                output_size=a_dim,
-                model=copy.deepcopy(net),
-                model_desc=copy.deepcopy(model_desc)
-            )
+            # pol = NeuralNetworkPolicy(
+            #     parameters=None,
+            #     input_size=s_dim,
+            #     output_size=a_dim,
+            #     model=copy.deepcopy(net),
+            #     model_desc=copy.deepcopy(model_desc)
+            # )
+            raise ValueError("Invalid nn policy name.")
         elif args.pol == "deep_gaussian":
             pol = DeepGaussian(
                 dim_state=s_dim,
@@ -490,14 +492,16 @@ for i in range(args.n_trials):
     else:
         raise ValueError("Invalid algorithm name.")
     
-
     print(text2art(f"== {args.alg} TEST on {args.env} =="))
     print(text2art(f"Trial {i}"))
     print(args)
     print(text2art("Learn Start"))
+    start = time.perf_counter()
     alg.learn()
+    end_time = time.perf_counter() - start
     alg.save_results()
     if args.alg != "dpg":
         print(alg.performance_idx)
+        print(f"Time leapsed = {end_time}")
     if args.alg == "cpgpe":
         print(alg.cost_idx)
