@@ -350,11 +350,6 @@ class OffPolicyGradient:
             
         return
     
-    '''
-    ------------------------------------------------------------------------------------------------
-    THE FOLLOWING SECTION CONTAINST ESTIMATOR FOR BH
-    ------------------------------------------------------------------------------------------------
-    '''
     def calculate_g_BH(self, action_queue: collections.deque,
                                             state_queue: collections.deque, 
                                             thetas_queue: collections.deque, 
