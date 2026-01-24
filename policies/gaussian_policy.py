@@ -171,8 +171,8 @@ class LinearGaussianPolicy(BasePolicy, ABC):
 
 
 #NEEDED FOR BH, THINK ABOUT REFACTORING
-    def compute_sum_all_log_pi(self, states, actions, thetas_queue):
-        """Compute sum of log probabilities for multiple parameter sets at once.
+    def compute_sum_all_log_pi(self, states, actions):
+        """Compute sum of log probabilities for the current_parameter set.
         
         Args:
             states: Array of shape (batch_size, timesteps, state_dim)
@@ -182,13 +182,10 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         Returns:
             log_sums: Array of shape (num_thetas,) containing sum of log probs for each theta
         """
-        # Stack all parameters into a single array (num_thetas, action_dim, state_dim)
-        thetas = np.stack([theta.reshape(self.dim_action, self.dim_state) 
-                          for theta in thetas_queue])
         
-        # Compute means for all parameter sets at once
-        # (num_thetas, timesteps, action_dim)
-        means = np.matmul(states, thetas.transpose(0, 2, 1))
+        # Compute means for all batches at once
+        # (batch_size, timesteps, action_dim)
+        means = self.calculate_mean(states)
         
         # Broadcasting to compute action deviations
         # (num_thetas, timesteps, action_dim)
@@ -205,6 +202,6 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         #log probs has dimension batch-size, timesteps, action_dim
         log_probs = log_fact - (action_deviations ** 2) / (2 * self.var)
 
-        return np.sum(log_probs, axis=(1, 2))
+        return np.sum(log_probs, axis=(1, 2)), means
 
 

@@ -433,7 +433,14 @@ class TrajectorySampler:
         
         #compute the log sum for each theta in the queue
         if weight_type == 'BH' and not deterministic:
-            log_sums = self.pol.compute_sum_all_log_pi(states, actions, np.array(thetas_queue))
+            log_sums = []
+            for theta in thetas_queue:
+                self.pol.set_parameters(theta)
+                log_sums.append(np.squeeze(self.pol.compute_sum_all_log_pi(states, actions)[0]))
+            
+            log_sums = np.array(log_sums)
+
+            #log_sums = self.pol.compute_sum_all_log_pi(states, actions, np.array(thetas_queue))
             return [perf, rewards, scores, states, actions, log_sums]
         #compute the log sum for the current theta
         elif (weight_type == 'MIS' or weight_type == 'RPG') and not deterministic:

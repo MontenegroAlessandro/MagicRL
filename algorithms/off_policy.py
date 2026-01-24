@@ -271,7 +271,8 @@ class OffPolicyGradient:
                         action_queue=action_queue, state_queue=state_queue,
                         thetas_queue=thetas_queue, reward_queue=reward_queue
                     )
-                    assert np.abs(np.sum(estimated_gradient) - np.sum(test_gradient)) < 1e-6, "Sum of test gradient does not match sum of estimated gradient"
+                    assert np.abs(np.sum(estimated_gradient) - np.sum(test_gradient)) < 1e-6
+                    #assert np.max(np.abs(estimated_gradient - test_gradient)) < 1e-5, "Sum of test gradient does not match sum of estimated gradient"
 
             if self.weight_type == "MIS":
                 estimated_gradient, log_sums, means = self.calculate_g_MIS(
@@ -279,7 +280,13 @@ class OffPolicyGradient:
                     thetas_queue=thetas_queue, reward_queue=reward_queue,
                     log_sums=log_sums, means=means
                 )
-
+                    
+                if self.test:
+                    test_gradient = self.test_function_MIS(
+                        action_queue=action_queue, state_queue=state_queue,
+                        thetas_queue=thetas_queue, reward_queue=reward_queue
+                    )
+                    assert np.abs(np.sum(estimated_gradient) - np.sum(test_gradient)) < 1e-6
 
 
             # Update parameters
@@ -381,10 +388,8 @@ class OffPolicyGradient:
 
         #then i need to recalculate all trajectories with respect to the new parameter
         self.policy.set_parameters(thetas=thetas_queue[theta_idx])
-        old_trajectories = num_trajectories - self.batch_size
-        log_sums[theta_idx, :(old_trajectories)] = self.policy.compute_sum_all_log_pi(state_array[:old_trajectories], 
-                                                                                      action_array[:old_trajectories], 
-                                                                                      thetas_array[theta_idx].reshape(1, -1))
+        log_sums[theta_idx, :(num_trajectories)], means = self.policy.compute_sum_all_log_pi(state_array[:num_trajectories], 
+                                                                                      action_array[:num_trajectories])
 
 
         if self.num_updates <= 1:
@@ -402,7 +407,7 @@ class OffPolicyGradient:
         importance_vector = importance_vector / self.batch_size
 
         #compute g, using scores of the past trajectory with respect to the target distribution parameters
-        all_scores = np.array([self.compute_single_trajectory_scores(state_queue[trajectory_idx], action_queue[trajectory_idx]) for trajectory_idx in range(num_trajectories)])
+        all_scores = self.policy.compute_score_all_trajectories(state_array, action_array, means)
         all_gradients = self.calculate_all_g(reward_array, all_scores)
 
         estimated_gradients = importance_vector.reshape(-1, 1) * all_gradients
@@ -553,6 +558,7 @@ class OffPolicyGradient:
     ------------------------------------------------------------------------------------------------
     '''
 
+    #alternatively just use the one in the policy.
     def compute_sum_all_log_pi(self, states, actions):
         """Compute sum of log probabilities for the current_parameter set.
         
@@ -587,24 +593,25 @@ class OffPolicyGradient:
         return np.sum(log_probs, axis=(1, 2)), means
     
 
-    def compute_I_alpha (self, states_queue, past_param, alpha=2):
-
+    def compute_I_alpha(self, states_queue, past_param, alpha=2):
         num_trajectories, horizon, _ = states_queue.shape
         divergence_sum = 0.0
-
+        
         for trajectory_idx in range(num_trajectories):
-            trajectory_divergence = 1.0
-
+            log_trajectory_divergence = 0.0  # Start in log space
+            
             for timestep in range(horizon):
                 state = states_queue[trajectory_idx, timestep]
-
                 current_mean = self.policy.calculate_mean(state)
                 past_mean = self.policy.calculate_target_mean(state, past_param)
-
-                trajectory_divergence *= np.exp( - alpha * (1 - alpha) * np.dot(current_mean - past_mean, current_mean - past_mean) / 2 * self.policy.var )
-
-            divergence_sum += trajectory_divergence
-
+                
+                # Accumulate in log space
+                log_trajectory_divergence += (
+                    - alpha * (1 - alpha) * np.dot(current_mean - past_mean, current_mean - past_mean) / (2 * self.policy.var)
+                )
+            
+            divergence_sum += np.exp(log_trajectory_divergence)
+        
         return divergence_sum / num_trajectories
     
 
@@ -623,7 +630,7 @@ class OffPolicyGradient:
 
         mean_diff = current_means - past_means # shape: (num_trajectories, timesteps, action_dim)
 
-        timestep_divergence = np.exp(- alpha * (1 - alpha) * np.sum(mean_diff * mean_diff, axis=2) / 2 * self.policy.var) # shape: (num_trajectories, timesteps)
+        timestep_divergence = np.exp(- alpha * (1 - alpha) * np.sum(mean_diff * mean_diff, axis=2) / (2 * self.policy.var)) # shape: (num_trajectories, timesteps)
         
         trajectories_divergence = np.prod(timestep_divergence, axis=1).reshape(-1, self.batch_size) 
 
@@ -807,7 +814,7 @@ class OffPolicyGradient:
             behavioral_products[i * self.batch_size : (i + 1) * self.batch_size] = self.compute_all_trajectory_products(state_array[i * self.batch_size : (i + 1) * self.batch_size], action_array[i * self.batch_size : (i + 1) * self.batch_size])
 
         behavioral_products = behavioral_products.reshape(-1, self.batch_size)
-        conf = 0.05
+        conf = 0.2
 
         #last theta index for the row of the products matrix, it's the last theta from whcih trajectories were sampled.
         theta_idx = self.num_updates - 1
@@ -824,13 +831,79 @@ class OffPolicyGradient:
             D_vector= np.array([self.compute_I_alpha(states_queue=state_array[i * self.batch_size : (i + 1) * self.batch_size ], 
                                                     past_param=thetas_array[i], alpha=2) 
                                                     for i in range(self.num_updates)]).reshape(-1,1) #remove log space and sample mean
+
+            lambda_vector = np.sqrt(4 * np.log(1/conf)  / (3 * num_trajectories * D_vector))
+
             D_vector = np.power(D_vector, 1/2) #move to right power to match th
             D_inverse = 1 / D_vector
             D_sum = np.sum(D_inverse)
 
-            lambda_vector = np.sqrt(2 * np.log(2/conf)  / (3 * num_trajectories * D_vector))
 
             alpha_vector = D_inverse / D_sum
+            importance_vector = np.array(alpha_vector * target_products / ((1 - lambda_vector) * behavioral_products + lambda_vector * target_products), dtype=np.float64) #final importance ratio
+            
+
+        importance_vector =  importance_vector / self.batch_size
+
+        #compute g, using scores of the past trajectory with respect to the target distribution parameters
+        self.policy.set_parameters(thetas=thetas_queue[theta_idx])
+        all_scores = np.array([self.compute_single_trajectory_scores(state_queue[trajectory_idx], action_queue[trajectory_idx]) for trajectory_idx in range(num_trajectories)])
+        all_gradients = self.calculate_all_g(reward_array, all_scores)
+
+        estimated_gradients = importance_vector.reshape(-1, 1) * all_gradients
+
+        return np.sum(estimated_gradients, axis=0)
+    
+
+
+    def test_function_MIS(self, action_queue: collections.deque,
+                                            state_queue: collections.deque, 
+                                            thetas_queue: collections.deque, 
+                                            reward_queue: collections.deque) -> np.array:
+        """
+        Summary: original implementation with products for sanity check
+        """
+        num_trajectories = len(state_queue)
+        num_updates = len(thetas_queue)
+
+        
+        #convert the queues to numpy arrays
+        reward_array = np.array(reward_queue, dtype=np.float64)
+        state_array = np.array(state_queue, dtype=np.float64)
+        action_array = np.array(action_queue, dtype=np.float64)
+        thetas_array = np.array(thetas_queue, dtype=np.float64)
+
+
+        estimated_gradients = np.zeros((num_trajectories, self.dim), dtype=np.float64)
+        # initialize product matrix where row i contains the probability product under parameter theta_i
+        behavioral_products = np.zeros(num_trajectories, dtype=np.float64)
+
+        #for each batch in the window, compute the product of the probabilities
+        #products i contains the products of the probabilities under parameter theta_i for all trajectories
+        for i in range(num_updates):
+            self.policy.set_parameters(thetas=thetas_array[i])
+            behavioral_products[i * self.batch_size : (i + 1) * self.batch_size] = self.compute_all_trajectory_products(state_array[i * self.batch_size : (i + 1) * self.batch_size], action_array[i * self.batch_size : (i + 1) * self.batch_size])
+
+        behavioral_products = behavioral_products.reshape(-1, self.batch_size)
+        conf = 0.2
+
+        #last theta index for the row of the products matrix, it's the last theta from whcih trajectories were sampled.
+        theta_idx = self.num_updates - 1
+
+
+        #then i need to recalculate all trajectories with respect to the new parameter
+        self.policy.set_parameters(thetas=thetas_array[theta_idx])
+        target_products = self.compute_all_trajectory_products(state_array[:num_trajectories], action_array[:num_trajectories]).reshape(-1, self.batch_size)
+
+
+        if self.num_updates <= 1:
+            importance_vector = np.ones(self.batch_size, dtype=np.float64)
+        else:
+            lambda_vector = 0
+
+            #alpha_vector = 1 / (self.num_updates - 1 + D_vector)
+            alpha_vector = 1 / self.num_updates
+
             importance_vector = np.array(alpha_vector * target_products / ((1 - lambda_vector) * behavioral_products + lambda_vector * target_products), dtype=np.float64) #final importance ratio
             
 
