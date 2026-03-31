@@ -50,7 +50,9 @@ def pgpe_sampling_worker(
         dp: BaseProcessor = None,
         params: np.array = None,
         episodes_per_theta: int = None,
-        n_jobs: int = None
+        n_jobs: int = None,
+        seed: int = 0,
+        starting_state: np.array = None
 ) -> np.array:
     """Worker collecting trajectories for muliple sampling of parameters from the hyperpolicy.
 
@@ -81,7 +83,7 @@ def pgpe_sampling_worker(
         episodes_per_theta=episodes_per_theta,
         n_jobs=n_jobs
     )
-    res = parameter_sampler.collect_trajectories(params=params)
+    res = parameter_sampler.collect_trajectories(params=params, seed=seed, starting_state=starting_state)
     return res
 
 
@@ -134,7 +136,7 @@ class ParameterSampler:
 
         return
 
-    def collect_trajectories(self, params: np.array) -> list:
+    def collect_trajectories(self, params, seed, starting_state: np.array) -> list:
         """
         Summary:
             Collect the trajectories for a sampled parameter configurations.
@@ -148,6 +150,8 @@ class ParameterSampler:
         # sample a parameter configuration
         dim = len(params[RhoElem.MEAN])
         thetas = np.zeros(dim, dtype=np.float64)
+        np.random.seed(seed)
+
         for i in range(dim):
             # thetas[i] = np.random.normal(
             #     params[RhoElem.MEAN, i],
@@ -163,7 +167,7 @@ class ParameterSampler:
             raw_res = []
             for i in range(self.episodes_per_theta):
                 raw_res.append(self.trajectory_sampler.collect_trajectory(
-                    params=thetas, starting_state=None)
+                    params=thetas, starting_state=starting_state, seed=seed+i)
                 )
         else:
             worker_dict = dict(
@@ -171,14 +175,14 @@ class ParameterSampler:
                 pol=copy.deepcopy(self.pol),
                 dp=copy.deepcopy(self.dp),
                 params=copy.deepcopy(thetas),
-                starting_state=None
+                starting_state=starting_state,
             )
             # build the parallel functions
             delayed_functions = delayed(pg_sampling_worker)
 
             # parallel computation
             raw_res = Parallel(n_jobs=self.n_jobs, backend="loky")(
-                delayed_functions(**worker_dict) for _ in range(self.episodes_per_theta)
+                delayed_functions(**worker_dict, seed=seed+j, starting_state=starting_state) for j in range(self.episodes_per_theta)
             )
 
         # keep just the performance over each trajectory
@@ -242,7 +246,7 @@ class TrajectorySampler:
         return
 
     def collect_trajectory(
-            self, params: np.array = None, starting_state=None, starting_action=None
+            self, params: np.array = None, starting_state=None, starting_action=None, seed=0
     ) -> list:
         """
         Summary:
@@ -258,13 +262,13 @@ class TrajectorySampler:
                 np.array: vector of all the scores
         """
         # reset the environment
-        self.env.reset()
+        self.env.reset(seed=seed)
         if starting_state is not None:
             # self.env.state = copy.deepcopy(starting_state)
             self.env.set_state(starting_state)
-
+        
         # initialize parameters
-        np.random.seed()
+        np.random.seed(seed)
         perf = 0
         cost_perf = np.zeros(self.env.how_many_costs)
         rewards = np.zeros(self.env.horizon, dtype=np.float64)

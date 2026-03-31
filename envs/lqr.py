@@ -131,7 +131,7 @@ class LQR(BaseEnv, ABC):
 
         return LQR(A, B, Q, R, max_pos, max_action, random_init, episodic, gamma, horizon, initial_state)
 
-    def reset(self, state=None):
+    def reset(self, state=None, seed=None):
         if state is None:
             if self.random_init:
                 self.state = np.clip(
@@ -187,6 +187,8 @@ class LQR(BaseEnv, ABC):
     
     def set_state(self, state):
         return super().set_state(state)
+        # self.state = deepcopy(state)
+        # return self.state
 
     def get_optimal_K(self):
         """

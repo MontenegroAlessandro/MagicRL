@@ -36,7 +36,8 @@ class PolicyGradient:
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
             save_det: int = 0,
-            learn_std: int = 0
+            learn_std: int = 0,
+            seed: int = 0
     ) -> None:
         """
         Summary:
@@ -149,6 +150,9 @@ class PolicyGradient:
         # learn std
         self.learn_std = learn_std
         self.std_score = None
+
+        self.seed = seed
+
         return
 
     def learn(self) -> None:
@@ -173,13 +177,13 @@ class PolicyGradient:
 
                 # parallel computation
                 res = Parallel(n_jobs=self.n_jobs, backend="loky")(
-                    delayed_functions(**worker_dict) for _ in range(self.batch_size)
+                    delayed_functions(**worker_dict, seed=self.seed+j+i*self.batch_size) for j in range(self.batch_size)
                 )
 
             else:
                 res = []
                 for j in range(self.batch_size):
-                    tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas))
+                    tmp_res = self.sampler.collect_trajectory(params=copy.deepcopy(self.thetas), seed=self.seed+j+i*self.batch_size)
                     res.append(tmp_res)
 
             # Update performance

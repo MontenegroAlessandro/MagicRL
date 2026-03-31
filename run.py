@@ -1,10 +1,31 @@
 # Libraries
 import argparse
 from algorithms import PGPE, PolicyGradient, DeterministicPG, CPGPE
+from algorithms.pgpe_fd import PGPE as PGPEFD
+from algorithms.policy_gradient_fd import PolicyGradient as PolicyGradientFD
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
 from art import *
+import datetime
+import numpy as np
+import random
+import torch
+
+def print_policy_parameters(policy):
+    if isinstance(policy, NeuralNetworkPolicy):
+        print("Policy parameters:")
+        print(policy.get_parameters())
+    elif isinstance(policy, DeepGaussian):
+        print("Policy parameters:")
+        print(policy.get_parameters())
+        print("Policy std dev:", policy.std_dev)
+    elif isinstance(policy, LinearGaussianPolicy):
+        print("Policy parameters:")
+        print(policy.get_parameters())
+        print("Policy std dev:", policy.std_dev)
+    else:
+        print("Policy type not recognized for printing parameters.")
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -24,7 +45,7 @@ parser.add_argument(
     help="The algorithm to use.",
     type=str,
     default="pgpe",
-    choices=["pgpe", "pg", "dpg", "cpgpe"]
+    choices=["pgpe", "pgpe_fd", "pg", "pg_fd", "dpg", "cpgpe"]
 )
 parser.add_argument(
     "--var",
@@ -37,7 +58,7 @@ parser.add_argument(
     help="The policy used.",
     type=str,
     default="linear",
-    choices=["linear", "nn", "big_nn"]
+    choices=["linear", "nn", "big_nn", "deep_gaussian"]
 )
 parser.add_argument(
     "--env",
@@ -115,6 +136,20 @@ parser.add_argument(
     type=int,
     default=2
 )
+parser.add_argument(
+    "--starting_seed",
+    help="Starting seed value.",
+    type=int,
+    default=0
+)
+
+parser.add_argument(
+    "--fd_mode",
+    help="Finite difference mode for the PG-FD algorithm.",
+    type=str,
+    default="forward",
+    choices=["forward", "central", "five_point"]
+)
 
 args = parser.parse_args()
 
@@ -123,11 +158,17 @@ if args.pol == "big_nn":
     huge = True
     args.pol = "nn"
 
-if args.alg == "pg":
+if args.alg in ["pg", "pg_fd"]:
     if args.pol == "linear":
         args.pol = "gaussian"
     elif args.pol == "nn":
         args.pol = "deep_gaussian"
+
+policy_std = args.var
+
+if args.alg in ["pgpe", "pgpe_fd", "cpgpe"]:
+    if args.pol == "deep_gaussian":
+        policy_std = 0
 
 if args.var < 1:
     string_var = str(args.var).replace(".", "")
@@ -136,9 +177,15 @@ else:
 
 # Build
 base_dir = args.dir
+base_dir += "_" + datetime.datetime.now().strftime("%m_%d-%H_%M_%S_") + "seed_" + str(args.starting_seed) + "_"
 
 for i in range(args.n_trials):
+    i += args.starting_seed
+
+    torch.manual_seed(i)
     np.random.seed(i)
+    random.seed(i)
+
     dir_name = f"{args.alg}_{args.ite}_{args.env}_{args.horizon}_{args.lr_strategy}_"
     dir_name += f"{str(args.lr).replace('.', '')}_{args.pol}_batch_{args.batch}_"
     if args.clip:
@@ -204,7 +251,8 @@ for i in range(args.n_trials):
                 a_dim=args.lqr_action_dim,
                 horizon=args.horizon,
                 gamma=args.gamma,
-                scale_matrix=0.9
+                scale_matrix=0.9,
+                random_init=False,
             )
         MULTI_LINEAR = bool(args.lqr_action_dim > 1)
     else:
@@ -218,12 +266,12 @@ for i in range(args.n_trials):
     """Policy"""
     if args.pol == "linear":
         tot_params = s_dim * a_dim
-        """pol = LinearPolicy(
-            parameters=np.zeros(tot_params),
-            dim_state=s_dim,
-            dim_action=a_dim,
-            sigma_noise=0
-        )"""
+        # pol = LinearPolicy(
+        #     parameters=np.zeros(tot_params),
+        #     dim_state=s_dim,
+        #     dim_action=a_dim,
+        #     sigma_noise=0
+        # )
         pol = OldLinearPolicy(
             parameters=np.zeros(tot_params),
             dim_state=s_dim,
@@ -232,26 +280,16 @@ for i in range(args.n_trials):
         )
     elif args.pol == "gaussian":
         tot_params = s_dim * a_dim
-        # var = np.sqrt(args.var * np.ones(a_dim))
-        # std = np.sqrt(args.var)
-        std = args.var
+        # std = args.var
         pol = LinearGaussianPolicy(
             parameters=np.zeros(tot_params),
             dim_state=s_dim,
             dim_action=a_dim,
-            std_dev=std, #var,#np.sqrt(args.var),
+            std_dev=policy_std, #var,#np.sqrt(args.var),
             std_decay=0,
-            std_min=1e-5,
+            std_min=1e-6,
             multi_linear=MULTI_LINEAR
         )
-        """pol = LinearPolicy(
-            parameters=np.zeros(tot_params),
-            dim_state=s_dim,
-            dim_action=a_dim,
-            sigma_noise=np.sqrt(args.var),
-            sigma_decay=0,
-            sigma_min=1e-5
-        )"""
     elif args.pol in ["nn", "deep_gaussian"]:
         if not huge:
             net = nn.Sequential(
@@ -264,6 +302,7 @@ for i in range(args.n_trials):
             model_desc = dict(
                 layers_shape=[(s_dim, 32), (32, 32), (32, a_dim)]
             )
+            model = [32,32]
         else:
             net = nn.Sequential(
                 nn.Linear(s_dim, 100, bias=False),
@@ -277,24 +316,43 @@ for i in range(args.n_trials):
             model_desc = dict(
                 layers_shape=[(s_dim, 100), (100, 50), (50, 25), (25, a_dim)]
             )
+            model = [100, 50, 25]
         if args.pol == "nn":
             pol = NeuralNetworkPolicy(
-                parameters=None,
-                input_size=s_dim,
-                output_size=a_dim,
-                model=copy.deepcopy(net),
-                model_desc=copy.deepcopy(model_desc)
+                dim_state=s_dim,
+                dim_action=a_dim,
+                hidden_neurons=model,
+                param_init=None,
+                bias=False,
+                activation=torch.tanh,
+                init=torch.nn.init.xavier_uniform_,
+                n_workers=args.n_workers,
             )
         elif args.pol == "deep_gaussian":
+            # pol = DeepGaussian(
+            #     parameters=None,
+            #     input_size=s_dim,
+            #     output_size=a_dim,
+            #     model=copy.deepcopy(net),
+            #     model_desc=copy.deepcopy(model_desc),
+            #     # std_dev=args.var,# np.sqrt(args.var),
+            #     std_dev=policy_std,
+            #     std_decay=0,
+            #     std_min=1e-6
+            # )
             pol = DeepGaussian(
-                parameters=None,
-                input_size=s_dim,
-                output_size=a_dim,
-                model=copy.deepcopy(net),
-                model_desc=copy.deepcopy(model_desc),
-                std_dev=args.var,#np.sqrt(args.var),
+                dim_state=s_dim,
+                dim_action=a_dim,
+                hidden_neurons=model,
+                param_init=None,
+                bias=False,
+                activation=torch.tanh,
+                init=torch.nn.init.xavier_uniform_,
+                # std_dev=np.sqrt(args.var),
+                std_dev=policy_std,
                 std_decay=0,
-                std_min=1e-6
+                std_min=1e-6,
+                n_workers=args.n_workers,
             )
         else:
             raise ValueError("Invalid nn policy name.")
@@ -303,7 +361,9 @@ for i in range(args.n_trials):
         raise ValueError(f"Invalid policy name.")
     # dir_name += f"{tot_params}_var_{string_var}_trial_{i}"
     dir_name += f"{tot_params}_var_{string_var}"
-    dir_name = base_dir + dir_name + "/" + dir_name + f"_trial_{i}"
+    if args.alg == "pgpe_fd":
+        dir_name += f"_fd_{args.fd_mode}"
+    dir_name = base_dir + dir_name + "/" + f"_trial_{i}"
 
     """Algorithm"""
     if args.alg == "pgpe":
@@ -315,7 +375,8 @@ for i in range(args.n_trials):
         if args.pol == "linear":
             hp[0] = [0] * tot_params
         else:
-            hp[0] = np.random.normal(0, 1, tot_params)
+            # hp[0] = np.random.normal(0, 1, tot_params)
+            hp[0] = pol.get_parameters()
         # hp[1] = [np.log(np.sqrt(var_term))] * tot_params
         hp[1] = [var_term] * tot_params
         alg_parameters = dict(
@@ -330,15 +391,54 @@ for i in range(args.n_trials):
             directory=dir_name,
             verbose=False,
             natural=False,
-            checkpoint_freq=100,
+            checkpoint_freq=50,
             lr_strategy=args.lr_strategy,
             learn_std=False,
             std_decay=0,
             std_min=1e-6,
             n_jobs_param=args.n_workers,
-            n_jobs_traj=1
+            n_jobs_traj=1,
+            save_det=True,
+            seed=i,
+            starting_state=None
         )
         alg = PGPE(**alg_parameters)
+    elif args.alg == "pgpe_fd":
+        if args.var == 1:
+            var_term = 1.001
+        else:
+            var_term = args.var
+        hp = np.zeros((2, tot_params))
+        if args.pol == "linear":
+            hp[0] = [0] * tot_params
+        else:
+            hp[0] = np.random.normal(0, 1, tot_params)
+        hp[1] = [var_term] * tot_params
+        alg_parameters = dict(
+            lr=[args.lr],
+            initial_rho=hp,
+            ite=args.ite,
+            batch_size=args.batch,
+            episodes_per_theta=1,
+            env=env,
+            policy=pol,
+            data_processor=dp,
+            directory=dir_name,
+            verbose=False,
+            natural=False,
+            checkpoint_freq=50,
+            lr_strategy=args.lr_strategy,
+            learn_std=False,
+            std_decay=0,
+            std_min=1e-6,
+            n_jobs_param=args.n_workers,
+            n_jobs_traj=1,
+            save_det=True,
+            seed=i,
+            starting_state=None,
+            fd_mode=args.fd_mode
+        )
+        alg = PGPEFD(**alg_parameters)
     elif args.alg == "cpgpe":
         if args.var == 1:
             var_term = 1.001
@@ -397,9 +497,33 @@ for i in range(args.n_trials):
             verbose=False,
             natural=False,
             checkpoint_freq=100,
-            n_jobs=args.n_workers
+            n_jobs=args.n_workers,
+            seed=i
         )
         alg = PolicyGradient(**alg_parameters)
+    elif args.alg == "pg_fd":
+        if args.pol == "linear":
+            init_theta = [0] * tot_params
+        else:
+            init_theta = np.random.normal(0, 1, tot_params)
+        alg_parameters = dict(
+            lr=[args.lr],
+            lr_strategy=args.lr_strategy,
+            estimator_type="FD",
+            initial_theta=init_theta,
+            ite=args.ite,
+            batch_size=args.batch,
+            env=env,
+            policy=pol,
+            data_processor=dp,
+            directory=dir_name,
+            verbose=False,
+            natural=False,
+            checkpoint_freq=100,
+            n_jobs=args.n_workers,
+            seed=i
+        )
+        alg = PolicyGradientFD(**alg_parameters)
     elif args.alg == "dpg":
         if args.pol == "linear":
             init_theta = [0] * tot_params
@@ -434,6 +558,7 @@ for i in range(args.n_trials):
     print(text2art(f"== {args.alg} TEST on {args.env} =="))
     print(text2art(f"Trial {i}"))
     print(args)
+    print_policy_parameters(pol)
     print(text2art("Learn Start"))
     alg.learn()
     alg.save_results()
@@ -441,3 +566,5 @@ for i in range(args.n_trials):
         print(alg.performance_idx)
     if args.alg == "cpgpe":
         print(alg.cost_idx)
+
+

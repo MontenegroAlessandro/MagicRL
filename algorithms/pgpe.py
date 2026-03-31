@@ -37,7 +37,9 @@ class PGPE:
             std_min: float = 1e-4,
             n_jobs_param: int = 1,
             n_jobs_traj: int = 1,
-            save_det: int = 0
+            save_det: int = 0,
+            seed: int = 0,
+            starting_state: np.array = None
     ) -> None:
         """
         Args:
@@ -137,7 +139,7 @@ class PGPE:
 
         # Additional parameters
         if len(self.rho[RhoElem.STD]) != self.dim:
-            raise ValueError("[PGPE] different size in RHO for µ and σ.")
+            raise ValueError("[PGPE] different size in RHO for mu and sigma.")
         self.thetas = np.zeros((self.batch_size, self.dim), dtype=np.float64)
         self.time = 0
         self.performance_idx = np.zeros(ite, dtype=np.float64)
@@ -163,6 +165,9 @@ class PGPE:
         # Varaince learning
         self.std_score = None
 
+        self.seed = seed
+        self.starting_state = starting_state
+
         return
 
     def learn(self) -> None:
@@ -180,12 +185,12 @@ class PGPE:
                 )
                 delayed_functions = delayed(pgpe_sampling_worker)
                 res = Parallel(n_jobs=self.n_jobs_param)(
-                    delayed_functions(**worker_dict) for _ in range(self.batch_size)
+                    delayed_functions(**worker_dict, seed=self.seed+j+i*self.batch_size, starting_state=self.starting_state) for j in range(self.batch_size)
                 )
             else:
                 res = []
                 for j in range(self.batch_size):
-                    res.append(self.sampler.collect_trajectories(params=copy.deepcopy(self.rho)))
+                    res.append(self.sampler.collect_trajectories(params=copy.deepcopy(self.rho), seed=self.seed+j+i*self.batch_size, starting_state=self.starting_state))
 
             # post-processing of results
             performance_res = np.zeros(self.batch_size, dtype=np.float64)
@@ -459,7 +464,7 @@ class PGPE:
         """Function saving the results of the training procedure"""
         # Create the dictionary with the useful info
         results = {
-            "performance_rho": np.array(self.performance_idx, dtype=float).tolist(),
+            "performance": np.array(self.performance_idx, dtype=float).tolist(),
             "performance_thetas_per_rho": np.array(self.performance_idx_theta, dtype=float).tolist(),
             "best_theta": np.array(self.best_theta, dtype=float).tolist(),
             "best_rho": np.array(self.best_rho, dtype=float).tolist(),
@@ -469,7 +474,7 @@ class PGPE:
         }
 
         # Save the json
-        name = self.directory + "/pgpe_results.json"
+        name = self.directory + "/results.json"
         with io.open(name, 'w', encoding='utf-8') as f:
             f.write(json.dumps(results, ensure_ascii=False, indent=4))
             f.close()

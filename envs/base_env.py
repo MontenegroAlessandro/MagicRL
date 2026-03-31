@@ -88,4 +88,6 @@ class MujocoBase(BaseEnv, ABC):
         return self.gym_env.observation_space.sample()
     
     def set_state(self, state):
-        pass
+        self.state = copy.deepcopy(state)
+        return self.state
+

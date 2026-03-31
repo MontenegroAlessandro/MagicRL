@@ -4,6 +4,10 @@ from policies import BasePolicy
 from abc import ABC
 import numpy as np
 import copy
+import time
+from collections import defaultdict
+import hashlib
+from numpy.testing import assert_allclose
 
 
 class LinearGaussianPolicy(BasePolicy, ABC):
@@ -26,13 +30,12 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         super().__init__()
 
         # Attributes with checks
-        err_msg = "[GaussPolicy] parameters is None!"
-        assert parameters is not None, err_msg
         self.parameters = parameters
 
         err_msg = "[GaussPolicy] standard deviation is negative!"
-        # assert std_dev > 0, err_msg
+        assert std_dev > 0, err_msg
         self.std_dev = std_dev
+        self.var = std_dev ** 2
 
         # Additional attributes
         self.dim_state = dim_state
@@ -41,16 +44,37 @@ class LinearGaussianPolicy(BasePolicy, ABC):
         self.multi_linear = multi_linear
         self.std_decay = std_decay
         self.std_min = std_min
-
         return
+    
+    def calculate_mean(self, state):
+        if state.ndim == 1:
+            return np.array(self.parameters @ state, dtype=np.float64)
+        else:
+            return np.array(state @ self.parameters.T, dtype=np.float64)
+        
+    def calculate_target_mean(self, state, parameter):
+        parameter = parameter.reshape(self.dim_action, self.dim_state)
+        if state.ndim == 1:
+            return np.array(parameter @ state, dtype=np.float64)
+        else:
+            return np.array(state @ parameter.T, dtype=np.float64)
+           
 
-    def draw_action(self, state) -> float:
+    def draw_action(self, state, return_mean = False) -> float:
         if len(state) != self.dim_state:
             err_msg = "[GaussPolicy] the state has not the same dimension of the parameter vector:"
             err_msg += f"\n{len(state)} vs. {self.dim_state}"
             raise ValueError(err_msg)
-        mean = np.array(self.parameters @ state, dtype=np.float64)
+        
+
+        mean = self.calculate_mean(state)
+
         action = np.array(np.random.normal(mean, self.std_dev), dtype=np.float64)
+
+        #some algorithms can cache mean and reuse
+        if return_mean:
+            return action, mean
+        
         return action
 
     def reduce_exploration(self):
@@ -65,55 +89,117 @@ class LinearGaussianPolicy(BasePolicy, ABC):
     def get_parameters(self):
         return self.parameters
     
+    
     def compute_pi(self, state, action):
-        mean = np.array(self.parameters @ state, dtype=np.float64)
-        if self.multi_linear:
-            fact = 1 / (np.sqrt(2 * np.pi) + self.std_dev[:, np.newaxis])
-            prob = fact * np.exp(- ((action - mean)**2) / (2 * (self.std_dev[:, np.newaxis] ** 2)))
-        else:
-            fact = 1 / (np.sqrt(2 * np.pi) + self.std_dev)
-            prob = fact * np.exp(- ((action - mean)**2) / (2 * (self.std_dev ** 2)))
-        return prob
+        mean = self.calculate_mean(state)
+        fact = 1 / (np.sqrt(2 * np.pi) * self.std_dev)
+        prob = fact * np.exp(-((action - mean) ** 2) / (2 * (self.std_dev ** 2)))
+        
+        return prob 
+
+    def compute_log_pi(self, state, action):
+        mean = self.calculate_mean(state)
+        
+        fact = 1 / (np.sqrt(2 * np.pi) * self.std_dev)
+        log_prob = np.log(fact) - ((action - mean) ** 2) / (2 * (self.var))
+        
+        return log_prob
+
+    def compute_sum_log_pi(self, states, actions):
+        
+        means = self.calculate_mean(states) #means is now timesteps x action_dim
+
+        log_fact = -np.log(np.sqrt(2 * np.pi) * self.std_dev)
+        log_prob = log_fact - ((actions - means) ** 2) / (2 * self.var)
+        
+        return np.sum(log_prob)
+    
 
     def compute_score(self, state, action) -> np.array:
-        # if self.std_dev.all() == 0:
-        #     return super().compute_score(state, action)
+        if self.std_dev == 0:
+            return super().compute_score(state, action)
 
-        state = np.ravel(state)
-        action_deviation = action - (self.parameters @ state)
+        mean = self.calculate_mean(state)
+
+        #state = np.ravel(state)
+        action_deviation = action - mean
         if self.multi_linear:
             # state = np.tile(state, self.dim_action).reshape((self.dim_action, self.dim_state))
             action_deviation = action_deviation[:, np.newaxis]
-            # scores = (action_deviation * state) / (self.std_dev[:, np.newaxis] ** 2)
-            scores = (action_deviation * state) / (self.std_dev ** 2)
-        else:
-            scores = (action_deviation * state) / (self.std_dev ** 2)
+        scores = (action_deviation * state) / (self.std_dev ** 2)
         if self.multi_linear:
             scores = np.ravel(scores)
         return scores
-    
-    def compute_score_exploration(self, state, action, e_parameterization_score = 0) -> np.array:
-        # if self.std_dev.all() == 0:
-        #     return super().compute_score(state, action)
 
-        state = np.ravel(state)
-        # action_deviation = np.power(action - (self.parameters @ state), 2)
-        action = np.atleast_1d(action)
-        dim = len(action)
-        action_deviation = np.linalg.norm(action - (self.parameters @ state)) ** 2
-        scores = (action_deviation - dim * (self.std_dev ** 2)) / (self.std_dev ** 3)
-        scores = scores * e_parameterization_score
-        # if self.multi_linear:
-        #     # state = np.tile(state, self.dim_action).reshape((self.dim_action, self.dim_state))
-        #     action_deviation = action_deviation[:, np.newaxis] - (self.std_dev[:,np.newaxis] ** 2)
-        #     scores = ((action_deviation) / (self.std_dev[:,np.newaxis] ** 3))
-        #     scores = np.ravel(scores) * e_parameterization_score
-        # else:
-        #     action_deviation = action_deviation - (self.std_dev ** 2)
-        #     scores = ((action_deviation) / (self.std_dev ** 3)) * e_parameterization_score
-        # if self.multi_linear:
-        #     scores = np.ravel(scores)
-        return scores
+    def compute_score_trajectory(self, states, actions):
+        means = self.calculate_mean(states)
+        action_deviations = actions - means
+        scores = (action_deviations[:, :, np.newaxis] * states[:, np.newaxis, :]) / self.var
+        return scores.reshape(scores.shape[0], -1)
+
+    def compute_score_all_trajectories(self, states_queue, actions_queue, means):
+        """Compute the score function for multiple trajectories.
+        
+        Args:
+            states_queue: Array of shape (num_trajectories, timesteps, state_dim)
+            actions_queue: Array of shape (num_trajectories, timesteps, action_dim)
+            
+        Returns:
+            scores: Array of shape (num_trajectories, timesteps, action_dim * state_dim)
+        """
+        action_deviations = actions_queue - means
+        
+        if states_queue.ndim == 2:
+            scores = (action_deviations[:, :, np.newaxis] * states_queue[:, np.newaxis, :]) / self.var
+            return scores.reshape(scores.shape[0], -1)
+        
+        # Expand dimensions for broadcasting
+        action_deviations = action_deviations[:, :, :, np.newaxis]  # (num_trajectories, timesteps, action_dim, 1)
+        states_expanded = states_queue[:, :, np.newaxis, :]  # (num_trajectories, timesteps, 1, state_dim)
+        
+        # Compute scores
+        scores = (action_deviations * states_expanded) / self.var  # (num_trajectories, timesteps, action_dim, state_dim)
+        
+        # Reshape to (num_trajectories, timesteps, action_dim * state_dim)
+        return scores.reshape(scores.shape[0], scores.shape[1], -1)
     
     def diff(self, state):
-        raise NotImplementedError 
+        raise NotImplementedError
+    
+
+
+
+
+#NEEDED FOR BH, THINK ABOUT REFACTORING
+    def compute_sum_all_log_pi(self, states, actions):
+        """Compute sum of log probabilities for the current_parameter set.
+        
+        Args:
+            states: Array of shape (batch_size, timesteps, state_dim)
+            actions: Array of shape (batch_size, timesteps, action_dim)
+            thetas_queue: target parameter,  of shape (action_dim, state_dim)
+            
+        Returns:
+            log_sums: Array of shape (num_thetas,) containing sum of log probs for each theta
+        """
+        
+        # Compute means for all batches at once
+        # (batch_size, timesteps, action_dim)
+        means = self.calculate_mean(states)
+        
+        # Broadcasting to compute action deviations
+        # (num_thetas, timesteps, action_dim)
+        if actions.ndim == 2:
+            action_deviations = actions[np.newaxis, :, :] - means
+
+
+        elif actions.ndim == 3:
+            action_deviations = actions - means
+
+        # Compute log probabilities
+        log_fact = -np.log(np.sqrt(2 * np.pi) * self.std_dev)
+
+        #log probs has dimension batch-size, timesteps, action_dim
+        log_probs = log_fact - (action_deviations ** 2) / (2 * self.var)
+
+        return np.sum(log_probs, axis=(1, 2)), means
