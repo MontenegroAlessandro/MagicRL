@@ -158,7 +158,7 @@ if args.pol == "big_nn":
     huge = True
     args.pol = "nn"
 
-if args.alg in ["pg", "pg_fd"]:
+if args.alg in ["pg"]:
     if args.pol == "linear":
         args.pol = "gaussian"
     elif args.pol == "nn":

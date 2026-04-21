@@ -451,10 +451,10 @@ class PolicyGradient:
             "last_theta": np.array(self.thetas, dtype=float).tolist(),
             "best_perf": float(self.best_performance_theta),
             "fd_gradient_history": np.array(self.fd_grad_history, dtype=float).tolist(),
-            "performance_det": np.array(self.deterministic_curve, dtype=float).tolist()
+            "deterministic_res": np.array(self.deterministic_curve, dtype=float).tolist()
         }
 
-        name = self.directory + "/pg_results.json"
+        name = self.directory + "/results.json"
         with io.open(name, 'w', encoding='utf-8') as f:
             f.write(json.dumps(results, ensure_ascii=False, indent=4))
             f.close()
