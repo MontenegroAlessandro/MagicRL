@@ -58,7 +58,7 @@ parser.add_argument(
     help="The policy used.",
     type=str,
     default="linear",
-    choices=["linear", "nn", "big_nn", "deep_gaussian"]
+    choices=["linear", "nn", "big_nn", "deep_gaussian", "gaussian"]
 )
 parser.add_argument(
     "--env",

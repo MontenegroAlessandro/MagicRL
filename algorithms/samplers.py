@@ -18,7 +18,8 @@ def pg_sampling_worker(
         starting_action: np.ndarray = None,
         pol_values: bool = False,
         learn_std: bool = False,
-        e_parameterization_score = None
+        e_parameterization_score = None,
+        seed: int = 0
 ) -> list:
     """Worker collecting a single trajectory.
 
@@ -40,7 +41,7 @@ def pg_sampling_worker(
         list: [performance, reward, scores]
     """
     trajectory_sampler = TrajectorySampler(env=env, pol=pol, data_processor=dp, pol_values=pol_values, learn_std=learn_std, e_parameterization_score=e_parameterization_score)
-    res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state, starting_action=starting_action)
+    res = trajectory_sampler.collect_trajectory(params=params, starting_state=starting_state, starting_action=starting_action, seed=seed)
     return res
 
 

@@ -33,8 +33,7 @@ class PolicyGradient:
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
             save_det: int = 0,
-                learn_std: int = 0,
-                seed: int = 0
+            seed: int = 0
     ) -> None:
         err_msg = "[PG-FD] lr must be positive!"
         assert lr[LearnRates.PARAM] > 0, err_msg
@@ -94,7 +93,6 @@ class PolicyGradient:
         if self.lr_strategy == "adam":
             self.adam_optimizer = Adam(self.lr, strategy="ascent")
 
-        self.learn_std = learn_std
         self.std_score = None
         self.seed = seed
 
@@ -178,6 +176,27 @@ class PolicyGradient:
             tail[i] = running
         return tail
 
+    def _sample_perturbations(self, horizon: int) -> np.ndarray:
+        eps = np.random.normal(
+            loc=0.0,
+            scale=1.0,
+            size=(horizon, self.dim_action)
+        ).astype(np.float64)
+
+        norms = np.linalg.norm(eps, axis=1, keepdims=True)
+        zero_norm_rows = norms.squeeze(-1) == 0
+        while np.any(zero_norm_rows):
+            eps[zero_norm_rows] = np.random.normal(
+                loc=0.0,
+                scale=1.0,
+                size=(np.sum(zero_norm_rows), self.dim_action)
+            ).astype(np.float64)
+            norms = np.linalg.norm(eps, axis=1, keepdims=True)
+            zero_norm_rows = norms.squeeze(-1) == 0
+
+        return eps / norms
+                
+
     def _policy_jacobian(self, features: np.ndarray) -> np.ndarray:
         saved_theta = copy.deepcopy(self.thetas)
 
@@ -217,90 +236,103 @@ class PolicyGradient:
 
         return jac
 
-    def _collect_perturbed_q_values(self, trajectories: list, iteration_idx: int) -> list:
-        perturbed_q_values = []
+    def _paired_rollout_forward(
+            self,
+            params: np.ndarray,
+            eps_traj: np.ndarray,
+            seed: int
+    ) -> dict:
+        env_nom = copy.deepcopy(self.env)
+        env_pert = copy.deepcopy(self.env)
+        pol_nom = copy.deepcopy(self.policy)
+        pol_pert = copy.deepcopy(self.policy)
+        dp_nom = copy.deepcopy(self.data_processor)
+        dp_pert = copy.deepcopy(self.data_processor)
 
-        for traj in trajectories:
-            rewards = traj["rewards"]
-            perturbed_q_values.append(np.zeros((len(rewards), self.dim_action), dtype=np.float64))
+        env_nom.reset(seed=seed)
+        env_pert.reset(seed=seed + 9973)
 
-        rollout_inputs = []
-        rollout_meta = []
+        pol_nom.set_parameters(thetas=copy.deepcopy(params))
+        pol_pert.set_parameters(thetas=copy.deepcopy(params))
 
-        for traj_idx, traj in enumerate(trajectories):
-            states = traj["states"]
-            actions = traj["actions"]
-            rewards = traj["rewards"]
+        rewards_nom = []
+        rewards_pert = []
+        features_nom = []
+        features_pert = []
+        eps_used = []
 
-            for t in range(len(rewards)):
-                state_t = states[t]
-                action_t = np.atleast_1d(actions[t])
+        perf_nom = 0.0
+        perf_pert = 0.0
 
-                remaining_horizon = self.env.horizon - t
-                if remaining_horizon <= 0:
-                    continue
+        for t in range(self.env.horizon):
+            state_nom = copy.deepcopy(env_nom.state)
+            state_pert = copy.deepcopy(env_pert.state)
 
-                for a_idx in range(self.dim_action):
-                    pert_action = copy.deepcopy(action_t)
-                    pert_action[a_idx] += self.fd_action_eps
+            feat_nom = np.array(dp_nom.transform(state=state_nom), dtype=np.float64)
+            feat_pert = np.array(dp_pert.transform(state=state_pert), dtype=np.float64)
 
-                    local_seed = (
-                        self.seed
-                        + iteration_idx * self.batch_size * self.env.horizon * self.dim_action
-                        + traj_idx * self.env.horizon * self.dim_action
-                        + t * self.dim_action
-                        + a_idx
-                    )
-                    rollout_inputs.append(dict(
-                        params=self.thetas,
-                        start_state=state_t,
-                        start_action=pert_action,
-                        max_horizon=remaining_horizon,
-                        return_trace=False,
-                        seed=local_seed
-                    ))
-                    rollout_meta.append((traj_idx, t, a_idx))
+            mu_nom = np.atleast_1d(np.array(pol_nom.draw_action(state=feat_nom), dtype=np.float64))
+            mu_pert = np.atleast_1d(np.array(pol_pert.draw_action(state=feat_pert), dtype=np.float64))
 
-        if len(rollout_inputs) == 0:
-            return perturbed_q_values
+            eps_t = np.atleast_1d(eps_traj[t])
+            action_nom = mu_nom
+            action_pert = mu_pert + self.fd_action_eps * eps_t
 
-        if self.parallel_computation:
-            rollout_results = Parallel(n_jobs=self.n_jobs, backend="loky")(
-                delayed(self._rollout)(**kwargs) for kwargs in rollout_inputs
-            )
-        else:
-            rollout_results = [self._rollout(**kwargs) for kwargs in rollout_inputs]
+            _, rew_nom, done_nom, _ = env_nom.step(action=action_nom)
+            _, rew_pert, done_pert, _ = env_pert.step(action=action_pert)
 
-        for idx, perf in enumerate(rollout_results):
-            traj_idx, t, a_idx = rollout_meta[idx]
-            perturbed_q_values[traj_idx][t, a_idx] = perf
+            perf_nom += (self.env.gamma ** t) * rew_nom
+            perf_pert += (self.env.gamma ** t) * rew_pert
 
-        return perturbed_q_values
+            rewards_nom.append(rew_nom)
+            rewards_pert.append(rew_pert)
+            features_nom.append(feat_nom)
+            features_pert.append(feat_pert)
+            eps_used.append(eps_t)
 
-    def _estimate_fd_gradient(self, trajectories: list, perturbed_q_values: list) -> np.ndarray:
+            if done_nom or done_pert:
+                break
+
+        return {
+            "perf_nom": float(perf_nom),
+            "perf_pert": float(perf_pert),
+            "rewards_nom": np.array(rewards_nom, dtype=np.float64),
+            "rewards_pert": np.array(rewards_pert, dtype=np.float64),
+            "features_nom": np.array(features_nom, dtype=np.float64),
+            "features_pert": np.array(features_pert, dtype=np.float64),
+            "eps": np.array(eps_used, dtype=np.float64)
+        }
+
+    def _estimate_fd_gradient(self, paired_trajectories: list) -> np.ndarray:
         estimated_gradient = np.zeros(self.dim, dtype=np.float64)
 
-        for traj_idx, traj in enumerate(trajectories):
-            states = traj["states"]
-            feats = traj["features"]
-            rewards = traj["rewards"]
+        for traj in paired_trajectories:
+            rewards_nom = traj["rewards_nom"]
+            rewards_pert = traj["rewards_pert"]
+            feats_nom = traj["features_nom"]
+            feats_pert = traj["features_pert"]
+            eps_seq = traj["eps"]
 
-            if len(rewards) == 0:
+            if len(rewards_nom) == 0 or len(rewards_pert) == 0:
                 continue
 
-            tail_returns = self._compute_tail_returns(rewards)
-            traj_q = perturbed_q_values[traj_idx]
+            horizon_t = min(len(rewards_nom), len(rewards_pert), len(eps_seq))
+            if horizon_t == 0:
+                continue
 
-            for t in range(len(rewards)):
-                feat_t = feats[t]
+            tail_nom = self._compute_tail_returns(rewards_nom[:horizon_t])
+            tail_pert = self._compute_tail_returns(rewards_pert[:horizon_t])
 
-                grad_q_action = np.zeros(self.dim_action, dtype=np.float64)
-                for a_idx in range(self.dim_action):
-                    pert_q = traj_q[t, a_idx]
-                    grad_q_action[a_idx] = (pert_q - tail_returns[t]) / self.fd_action_eps
+            for t in range(horizon_t):
+                jac_nom = self._policy_jacobian(features=feats_nom[t])
+                jac_pert = self._policy_jacobian(features=feats_pert[t])
 
-                jac_t = self._policy_jacobian(features=feat_t)
-                estimated_gradient += (self.env.gamma ** t) * (jac_t.T @ grad_q_action)
+                eps_t = np.atleast_1d(eps_seq[t])
+
+                term_nom = (jac_nom.T @ eps_t) * tail_nom[t]
+                term_pert = (jac_pert.T @ eps_t) * tail_pert[t]
+
+                estimated_gradient += (self.env.gamma ** t) * (term_pert - term_nom) / self.fd_action_eps
 
         estimated_gradient = estimated_gradient / self.batch_size
         return estimated_gradient
@@ -308,36 +340,34 @@ class PolicyGradient:
     def learn(self) -> None:
         """Learning function"""
         for i in tqdm(range(self.ite)):
+            np.random.seed(self.seed + i)
+            eps_batch = [self._sample_perturbations(self.env.horizon) for _ in range(self.batch_size)]
+
             if self.parallel_computation:
-                trajectories = Parallel(n_jobs=self.n_jobs, backend="loky")(
-                    delayed(self._rollout)(
+                paired_trajectories = Parallel(n_jobs=self.n_jobs, backend="loky")(
+                    delayed(self._paired_rollout_forward)(
                         params=self.thetas,
-                        return_trace=True,
+                        eps_traj=eps_batch[b],
                         seed=self.seed + b + i * self.batch_size
                     ) for b in range(self.batch_size)
                 )
             else:
-                trajectories = []
+                paired_trajectories = []
                 for b in range(self.batch_size):
-                    traj = self._rollout(
+                    traj = self._paired_rollout_forward(
                         params=self.thetas,
-                        return_trace=True,
+                        eps_traj=eps_batch[b],
                         seed=self.seed + b + i * self.batch_size
                     )
-                    trajectories.append(traj)
+                    paired_trajectories.append(traj)
 
-            perf_vector = np.array([traj["perf"] for traj in trajectories], dtype=np.float64)
+            perf_vector = np.array([traj["perf_nom"] for traj in paired_trajectories], dtype=np.float64)
 
             self.performance_idx[i] = np.mean(perf_vector)
             self.update_best_theta(current_perf=self.performance_idx[i])
 
-            perturbed_q_values = self._collect_perturbed_q_values(
-                trajectories=trajectories,
-                iteration_idx=i
-            )
             estimated_gradient = self._estimate_fd_gradient(
-                trajectories=trajectories,
-                perturbed_q_values=perturbed_q_values
+                paired_trajectories=paired_trajectories
             )
             self.fd_grad_history[i, :] = copy.deepcopy(estimated_gradient)
 
