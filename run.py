@@ -151,6 +151,22 @@ parser.add_argument(
     choices=["forward", "central", "five_point"]
 )
 
+parser.add_argument(
+    "--pg_fd_rollout_mode",
+    help="Rollout mode for PG-FD algorithm.",
+    type=str,
+    default="deterministic",
+    choices=["stochastic", "deterministic"]
+)
+
+parser.add_argument(
+    "--pg_fd_perturbation_scope",
+    help="Perturbation sampling scope for stochastic PG-FD.",
+    type=str,
+    default="trajectory",
+    choices=["step", "trajectory"]
+)
+
 args = parser.parse_args()
 
 huge = False
@@ -521,7 +537,11 @@ for i in range(args.n_trials):
             natural=False,
             checkpoint_freq=100,
             n_jobs=args.n_workers,
-            seed=i
+            seed=i,
+            fd_rollout_mode=args.pg_fd_rollout_mode,
+            fd_mode=args.fd_mode,
+            perturbation_scope=args.pg_fd_perturbation_scope,
+            fd_action_eps=args.var
         )
         alg = PolicyGradientFD(**alg_parameters)
     elif args.alg == "dpg":

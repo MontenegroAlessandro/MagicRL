@@ -33,7 +33,12 @@ class PolicyGradient:
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
             save_det: int = 0,
-            seed: int = 0
+            seed: int = 0,
+            fd_rollout_mode: str = "stochastic",
+            starting_state: np.ndarray = None,
+            fd_mode: str = "forward",
+            perturbation_scope: str = "step",
+            fd_action_eps: float = 1e-3,
     ) -> None:
         err_msg = "[PG-FD] lr must be positive!"
         assert lr[LearnRates.PARAM] > 0, err_msg
@@ -96,8 +101,28 @@ class PolicyGradient:
         self.std_score = None
         self.seed = seed
 
-        self.fd_action_eps = 1e-3
-        self.fd_theta_eps = 1e-4
+        if starting_state is None:
+            env_obj = copy.deepcopy(self.env)
+            env_obj.reset(seed=self.seed)
+            self.starting_state = copy.deepcopy(env_obj.state)
+        else:
+            self.starting_state = copy.deepcopy(starting_state)
+
+        err_msg = "[PG-FD] fd_rollout_mode not valid!"
+        assert fd_rollout_mode in ["stochastic", "deterministic"], err_msg
+        self.fd_rollout_mode = fd_rollout_mode
+
+        err_msg = "[PG-FD] fd_mode not valid!"
+        assert fd_mode in ["forward", "central", "five_point"], err_msg
+        self.fd_mode = fd_mode
+
+        err_msg = "[PG-FD] perturbation_scope not valid!"
+        assert perturbation_scope in ["step", "trajectory"], err_msg
+        self.perturbation_scope = perturbation_scope
+
+        # Sigma for action perturbation and theta perturbation in finite difference estimation
+        self.fd_action_eps = fd_action_eps
+        # self.fd_theta_eps = 1e-4
 
     def _set_env_state(self, env_obj, state):
         if hasattr(env_obj, "set_state"):
@@ -177,11 +202,18 @@ class PolicyGradient:
         return tail
 
     def _sample_perturbations(self, horizon: int) -> np.ndarray:
-        eps = np.random.normal(
-            loc=0.0,
-            scale=1.0,
-            size=(horizon, self.dim_action)
-        ).astype(np.float64)
+        if self.perturbation_scope == "trajectory":
+            eps = np.random.normal(
+                loc=0.0,
+                scale=1.0,
+                size=(1, self.dim_action)
+            ).astype(np.float64)
+        else:
+            eps = np.random.normal(
+                loc=0.0,
+                scale=1.0,
+                size=(horizon, self.dim_action)
+            ).astype(np.float64)
 
         norms = np.linalg.norm(eps, axis=1, keepdims=True)
         zero_norm_rows = norms.squeeze(-1) == 0
@@ -194,53 +226,83 @@ class PolicyGradient:
             norms = np.linalg.norm(eps, axis=1, keepdims=True)
             zero_norm_rows = norms.squeeze(-1) == 0
 
-        return eps / norms
+        eps = eps / norms
+        if self.perturbation_scope == "trajectory":
+            eps = np.repeat(eps, horizon, axis=0)
+
+        return eps
                 
 
+    # def _policy_jacobian(self, features: np.ndarray) -> np.ndarray:
+    #     # TODO capire
+    #     saved_theta = copy.deepcopy(self.thetas)
+    #     saved_std_dev = None
+    #     saved_sigma_noise = None
+
+    #     # Check std ---> TODO modificare fd_action_eps e fd_theta_eps
+    #     if hasattr(self.policy, "std_dev"):
+    #         saved_std_dev = copy.deepcopy(self.policy.std_dev)
+    #         self.policy.std_dev = 0
+    #     if hasattr(self.policy, "sigma_noise"):
+    #         saved_sigma_noise = copy.deepcopy(self.policy.sigma_noise)
+    #         try:
+    #             self.policy.sigma_noise = 0
+    #         except Exception:
+    #             self.policy.sigma_noise = np.array(0)
+
+    #     try:
+    #         jac = np.zeros((self.dim_action, self.dim), dtype=np.float64)
+    #         for p_idx in range(self.dim):
+    #             # Errore????
+    #             theta_plus = copy.deepcopy(saved_theta)
+    #             theta_minus = copy.deepcopy(saved_theta)
+    #             theta_plus[p_idx] += self.fd_theta_eps
+    #             theta_minus[p_idx] -= self.fd_theta_eps
+
+    #             # Capire cosa sta succedendo
+    #             self.policy.set_parameters(thetas=theta_plus)
+    #             action_plus = np.atleast_1d(np.array(self.policy.draw_action(state=features), dtype=np.float64))
+
+    #             self.policy.set_parameters(thetas=theta_minus)
+    #             action_minus = np.atleast_1d(np.array(self.policy.draw_action(state=features), dtype=np.float64))
+
+    #             jac[:, p_idx] = (action_plus - action_minus) / (2 * self.fd_theta_eps)
+    #     finally:
+    #         self.policy.set_parameters(thetas=saved_theta)
+    #         if saved_std_dev is not None:
+    #             self.policy.std_dev = saved_std_dev
+    #         if saved_sigma_noise is not None:
+    #             self.policy.sigma_noise = saved_sigma_noise
+
+    #     return jac
+
     def _policy_jacobian(self, features: np.ndarray) -> np.ndarray:
-        saved_theta = copy.deepcopy(self.thetas)
+        """
+        Exact Jacobian computation for a linear policy mu(s) = Theta * s.
+        Assumes self.thetas is a flattened array of shape (dim_action * dim_state).
+        """
+        dim_state = len(features)
+        
+        # Verify that the total parameter dimension matches the linear assumption
+        err_msg = f"Parameter dimension mismatch. Expected {self.dim_action * dim_state}, got {self.dim}."
+        assert self.dim == self.dim_action * dim_state, err_msg
 
-        saved_std_dev = None
-        saved_sigma_noise = None
-        if hasattr(self.policy, "std_dev"):
-            saved_std_dev = copy.deepcopy(self.policy.std_dev)
-            self.policy.std_dev = 0
-        if hasattr(self.policy, "sigma_noise"):
-            saved_sigma_noise = copy.deepcopy(self.policy.sigma_noise)
-            try:
-                self.policy.sigma_noise = 0
-            except Exception:
-                self.policy.sigma_noise = np.array(0)
-
-        try:
-            jac = np.zeros((self.dim_action, self.dim), dtype=np.float64)
-            for p_idx in range(self.dim):
-                theta_plus = copy.deepcopy(saved_theta)
-                theta_minus = copy.deepcopy(saved_theta)
-                theta_plus[p_idx] += self.fd_theta_eps
-                theta_minus[p_idx] -= self.fd_theta_eps
-
-                self.policy.set_parameters(thetas=theta_plus)
-                action_plus = np.atleast_1d(np.array(self.policy.draw_action(state=features), dtype=np.float64))
-
-                self.policy.set_parameters(thetas=theta_minus)
-                action_minus = np.atleast_1d(np.array(self.policy.draw_action(state=features), dtype=np.float64))
-
-                jac[:, p_idx] = (action_plus - action_minus) / (2 * self.fd_theta_eps)
-        finally:
-            self.policy.set_parameters(thetas=saved_theta)
-            if saved_std_dev is not None:
-                self.policy.std_dev = saved_std_dev
-            if saved_sigma_noise is not None:
-                self.policy.sigma_noise = saved_sigma_noise
-
-        return jac
+        jac = np.zeros((self.dim_action, self.dim), dtype=np.float64)
+        
+        # Construct the block-diagonal structure of the Jacobian
+        for j in range(self.dim_action):
+            start_idx = j * dim_state
+            end_idx = start_idx + dim_state
+            jac[j, start_idx:end_idx] = features
+            
+        return jac        
 
     def _paired_rollout_forward(
             self,
             params: np.ndarray,
             eps_traj: np.ndarray,
-            seed: int
+            seed: int,
+            starting_state: np.ndarray = None
     ) -> dict:
         env_nom = copy.deepcopy(self.env)
         env_pert = copy.deepcopy(self.env)
@@ -250,7 +312,10 @@ class PolicyGradient:
         dp_pert = copy.deepcopy(self.data_processor)
 
         env_nom.reset(seed=seed)
-        env_pert.reset(seed=seed + 9973)
+        env_pert.reset(seed=seed)
+        if starting_state is not None:
+            self._set_env_state(env_nom, starting_state)
+            self._set_env_state(env_pert, starting_state)
 
         pol_nom.set_parameters(thetas=copy.deepcopy(params))
         pol_pert.set_parameters(thetas=copy.deepcopy(params))
@@ -268,24 +333,30 @@ class PolicyGradient:
             state_nom = copy.deepcopy(env_nom.state)
             state_pert = copy.deepcopy(env_pert.state)
 
+            # Can be removed
             feat_nom = np.array(dp_nom.transform(state=state_nom), dtype=np.float64)
             feat_pert = np.array(dp_pert.transform(state=state_pert), dtype=np.float64)
 
+            # Sample action
             mu_nom = np.atleast_1d(np.array(pol_nom.draw_action(state=feat_nom), dtype=np.float64))
             mu_pert = np.atleast_1d(np.array(pol_pert.draw_action(state=feat_pert), dtype=np.float64))
 
+            # Apply perturbation 
             eps_t = np.atleast_1d(eps_traj[t])
             action_nom = mu_nom
             action_pert = mu_pert + self.fd_action_eps * eps_t
 
+            # Step envs
             _, rew_nom, done_nom, _ = env_nom.step(action=action_nom)
             _, rew_pert, done_pert, _ = env_pert.step(action=action_pert)
-
+            
+            # Update discounted performance
             perf_nom += (self.env.gamma ** t) * rew_nom
             perf_pert += (self.env.gamma ** t) * rew_pert
 
             rewards_nom.append(rew_nom)
             rewards_pert.append(rew_pert)
+
             features_nom.append(feat_nom)
             features_pert.append(feat_pert)
             eps_used.append(eps_t)
@@ -303,36 +374,413 @@ class PolicyGradient:
             "eps": np.array(eps_used, dtype=np.float64)
         }
 
+    def _paired_rollout_central(
+            self,
+            params: np.ndarray,
+            eps_traj: np.ndarray,
+            seed: int,
+            starting_state: np.ndarray = None
+    ) -> dict:
+        env_nom = copy.deepcopy(self.env)
+        env_plus = copy.deepcopy(self.env)
+        env_minus = copy.deepcopy(self.env)
+        pol_nom = copy.deepcopy(self.policy)
+        pol_plus = copy.deepcopy(self.policy)
+        pol_minus = copy.deepcopy(self.policy)
+        dp_nom = copy.deepcopy(self.data_processor)
+        dp_plus = copy.deepcopy(self.data_processor)
+        dp_minus = copy.deepcopy(self.data_processor)
+
+        env_nom.reset(seed=seed)
+        env_plus.reset(seed=seed)
+        env_minus.reset(seed=seed)
+
+        if starting_state is not None:
+            self._set_env_state(env_nom, starting_state)
+            self._set_env_state(env_plus, starting_state)
+            self._set_env_state(env_minus, starting_state)
+
+        pol_nom.set_parameters(thetas=copy.deepcopy(params))
+        pol_plus.set_parameters(thetas=copy.deepcopy(params))
+        pol_minus.set_parameters(thetas=copy.deepcopy(params))
+
+        rewards_nom = []
+        rewards_plus = []
+        rewards_minus = []
+        features_nom = []
+        features_plus = []
+        features_minus = []
+        eps_used = []
+
+        perf_nom = 0.0
+
+        for t in range(self.env.horizon):
+            state_nom = copy.deepcopy(env_nom.state)
+            state_plus = copy.deepcopy(env_plus.state)
+            state_minus = copy.deepcopy(env_minus.state)
+
+            feat_nom = np.array(dp_nom.transform(state=state_nom), dtype=np.float64)
+            feat_plus = np.array(dp_plus.transform(state=state_plus), dtype=np.float64)
+            feat_minus = np.array(dp_minus.transform(state=state_minus), dtype=np.float64)
+
+            mu_nom = np.atleast_1d(np.array(pol_nom.draw_action(state=feat_nom), dtype=np.float64))
+            mu_plus = np.atleast_1d(np.array(pol_plus.draw_action(state=feat_plus), dtype=np.float64))
+            mu_minus = np.atleast_1d(np.array(pol_minus.draw_action(state=feat_minus), dtype=np.float64))
+
+            eps_t = np.atleast_1d(eps_traj[t])
+            action_nom = mu_nom
+            action_plus = mu_plus + self.fd_action_eps * eps_t
+            action_minus = mu_minus - self.fd_action_eps * eps_t
+
+            _, rew_nom, done_nom, _ = env_nom.step(action=action_nom)
+            _, rew_plus, done_plus, _ = env_plus.step(action=action_plus)
+            _, rew_minus, done_minus, _ = env_minus.step(action=action_minus)
+
+            perf_nom += (self.env.gamma ** t) * rew_nom
+
+            rewards_nom.append(rew_nom)
+            rewards_plus.append(rew_plus)
+            rewards_minus.append(rew_minus)
+            features_nom.append(feat_nom)
+            features_plus.append(feat_plus)
+            features_minus.append(feat_minus)
+            eps_used.append(eps_t)
+
+            if done_nom or done_plus or done_minus:
+                break
+
+        return {
+            "perf_nom": float(perf_nom),
+            "rewards_nom": np.array(rewards_nom, dtype=np.float64),
+            "rewards_plus": np.array(rewards_plus, dtype=np.float64),
+            "rewards_minus": np.array(rewards_minus, dtype=np.float64),
+            "features_nom": np.array(features_nom, dtype=np.float64),
+            "features_plus": np.array(features_plus, dtype=np.float64),
+            "features_minus": np.array(features_minus, dtype=np.float64),
+            "eps": np.array(eps_used, dtype=np.float64)
+        }
+
+    def _rollout_deterministic_set(
+            self,
+            params: np.ndarray,
+            seed: int,
+            starting_state: np.ndarray = None
+    ) -> dict:
+        env_nom = copy.deepcopy(self.env)
+        pol_nom = copy.deepcopy(self.policy)
+        dp_nom = copy.deepcopy(self.data_processor)
+
+        env_nom.reset(seed=seed)
+        if starting_state is not None:
+            self._set_env_state(env_nom, starting_state)
+        pol_nom.set_parameters(thetas=copy.deepcopy(params))
+
+        rewards_nom = []
+        features_nom = []
+        perf_nom = 0.0
+
+        for t in range(self.env.horizon):
+            state_nom = copy.deepcopy(env_nom.state)
+            feat_nom = np.array(dp_nom.transform(state=state_nom), dtype=np.float64)
+            mu_nom = np.atleast_1d(np.array(pol_nom.draw_action(state=feat_nom), dtype=np.float64))
+
+            _, rew_nom, done_nom, _ = env_nom.step(action=mu_nom)
+
+            perf_nom += (self.env.gamma ** t) * rew_nom
+            rewards_nom.append(rew_nom)
+            features_nom.append(feat_nom)
+
+            if done_nom:
+                break
+
+        rewards_perturbed = []
+        perf_perturbed = []
+
+        for i in range(self.dim_action):
+            env_pert = copy.deepcopy(self.env)
+            pol_pert = copy.deepcopy(self.policy)
+            dp_pert = copy.deepcopy(self.data_processor)
+
+            env_pert.reset(seed=seed)
+            if starting_state is not None:
+                self._set_env_state(env_pert, starting_state)
+            pol_pert.set_parameters(thetas=copy.deepcopy(params))
+
+            eps_i = np.zeros(self.dim_action, dtype=np.float64)
+            eps_i[i] = 1.0
+
+            rewards_i = []
+            perf_i = 0.0
+
+            for t in range(self.env.horizon):
+                state_pert = copy.deepcopy(env_pert.state)
+                feat_pert = np.array(dp_pert.transform(state=state_pert), dtype=np.float64)
+                mu_pert = np.atleast_1d(np.array(pol_pert.draw_action(state=feat_pert), dtype=np.float64))
+                action_pert = mu_pert + self.fd_action_eps * eps_i
+
+                _, rew_pert, done_pert, _ = env_pert.step(action=action_pert)
+
+                perf_i += (self.env.gamma ** t) * rew_pert
+                rewards_i.append(rew_pert)
+
+                if done_pert:
+                    break
+
+            rewards_perturbed.append(np.array(rewards_i, dtype=np.float64))
+            perf_perturbed.append(float(perf_i))
+
+        return {
+            "perf_nom": float(perf_nom),
+            "perf_perturbed": np.array(perf_perturbed, dtype=np.float64),
+            "rewards_nom": np.array(rewards_nom, dtype=np.float64),
+            "rewards_perturbed": rewards_perturbed,
+            "features_nom": np.array(features_nom, dtype=np.float64)
+        }
+
+    def _rollout_deterministic_set_central(
+            self,
+            params: np.ndarray,
+            seed: int,
+            starting_state: np.ndarray = None
+    ) -> dict:
+        env_nom = copy.deepcopy(self.env)
+        pol_nom = copy.deepcopy(self.policy)
+        dp_nom = copy.deepcopy(self.data_processor)
+
+        env_nom.reset(seed=seed)
+        if starting_state is not None:
+            self._set_env_state(env_nom, starting_state)
+        pol_nom.set_parameters(thetas=copy.deepcopy(params))
+
+        rewards_nom = []
+        features_nom = []
+        perf_nom = 0.0
+
+        for t in range(self.env.horizon):
+            state_nom = copy.deepcopy(env_nom.state)
+            feat_nom = np.array(dp_nom.transform(state=state_nom), dtype=np.float64)
+            mu_nom = np.atleast_1d(np.array(pol_nom.draw_action(state=feat_nom), dtype=np.float64))
+
+            _, rew_nom, done_nom, _ = env_nom.step(action=mu_nom)
+
+            perf_nom += (self.env.gamma ** t) * rew_nom
+            rewards_nom.append(rew_nom)
+            features_nom.append(feat_nom)
+
+            if done_nom:
+                break
+
+        rewards_plus = []
+        rewards_minus = []
+
+        for i in range(self.dim_action):
+            env_plus = copy.deepcopy(self.env)
+            env_minus = copy.deepcopy(self.env)
+            pol_plus = copy.deepcopy(self.policy)
+            pol_minus = copy.deepcopy(self.policy)
+            dp_plus = copy.deepcopy(self.data_processor)
+            dp_minus = copy.deepcopy(self.data_processor)
+
+            env_plus.reset(seed=seed)
+            env_minus.reset(seed=seed)
+            if starting_state is not None:
+                self._set_env_state(env_plus, starting_state)
+                self._set_env_state(env_minus, starting_state)
+            pol_plus.set_parameters(thetas=copy.deepcopy(params))
+            pol_minus.set_parameters(thetas=copy.deepcopy(params))
+
+            eps_i = np.zeros(self.dim_action, dtype=np.float64)
+            eps_i[i] = 1.0
+
+            rewards_i_plus = []
+            rewards_i_minus = []
+
+            for t in range(self.env.horizon):
+                state_plus = copy.deepcopy(env_plus.state)
+                state_minus = copy.deepcopy(env_minus.state)
+                feat_plus = np.array(dp_plus.transform(state=state_plus), dtype=np.float64)
+                feat_minus = np.array(dp_minus.transform(state=state_minus), dtype=np.float64)
+                mu_plus = np.atleast_1d(np.array(pol_plus.draw_action(state=feat_plus), dtype=np.float64))
+                mu_minus = np.atleast_1d(np.array(pol_minus.draw_action(state=feat_minus), dtype=np.float64))
+
+                action_plus = mu_plus + self.fd_action_eps * eps_i
+                action_minus = mu_minus - self.fd_action_eps * eps_i
+
+                _, rew_plus, done_plus, _ = env_plus.step(action=action_plus)
+                _, rew_minus, done_minus, _ = env_minus.step(action=action_minus)
+
+                rewards_i_plus.append(rew_plus)
+                rewards_i_minus.append(rew_minus)
+
+                if done_plus or done_minus:
+                    break
+
+            rewards_plus.append(np.array(rewards_i_plus, dtype=np.float64))
+            rewards_minus.append(np.array(rewards_i_minus, dtype=np.float64))
+
+        return {
+            "perf_nom": float(perf_nom),
+            "rewards_nom": np.array(rewards_nom, dtype=np.float64),
+            "rewards_plus": rewards_plus,
+            "rewards_minus": rewards_minus,
+            "features_nom": np.array(features_nom, dtype=np.float64)
+        }
+
     def _estimate_fd_gradient(self, paired_trajectories: list) -> np.ndarray:
         estimated_gradient = np.zeros(self.dim, dtype=np.float64)
 
         for traj in paired_trajectories:
+            # Extract data from trajectory
             rewards_nom = traj["rewards_nom"]
             rewards_pert = traj["rewards_pert"]
             feats_nom = traj["features_nom"]
             feats_pert = traj["features_pert"]
             eps_seq = traj["eps"]
 
+            # Utile????
             if len(rewards_nom) == 0 or len(rewards_pert) == 0:
                 continue
-
+            
+            # Utile????
             horizon_t = min(len(rewards_nom), len(rewards_pert), len(eps_seq))
             if horizon_t == 0:
                 continue
-
+            
+            # Utile????
             tail_nom = self._compute_tail_returns(rewards_nom[:horizon_t])
             tail_pert = self._compute_tail_returns(rewards_pert[:horizon_t])
 
             for t in range(horizon_t):
+                # Compute policy Jacobian at time t for nominal and perturbed trajectories
                 jac_nom = self._policy_jacobian(features=feats_nom[t])
                 jac_pert = self._policy_jacobian(features=feats_pert[t])
 
+                # Retrive perturbation at time t
                 eps_t = np.atleast_1d(eps_seq[t])
 
+                # Compute FD gradient contribution at time t
                 term_nom = (jac_nom.T @ eps_t) * tail_nom[t]
                 term_pert = (jac_pert.T @ eps_t) * tail_pert[t]
 
+                print("DEBUG SHAPE: ", jac_nom.shape, jac_pert.shape)
+                print("DEBUG VALUE: ", jac_nom, jac_pert)
+                # term_nom = jac_nom * tail_nom[t]
+                # term_pert = jac_pert * tail_pert[t]
                 estimated_gradient += (self.env.gamma ** t) * (term_pert - term_nom) / self.fd_action_eps
+
+                print("DEBUG SHAPE: ", term_nom.shape, term_pert.shape, eps_t.shape, estimated_gradient.shape, tail_nom[t].shape, tail_pert[t].shape)
+                print("DEBUG VALUE: ", term_nom, term_pert, eps_t, estimated_gradient, tail_nom[t], tail_pert[t])
+                input()
+        # Mean over batch
+        estimated_gradient = estimated_gradient / self.batch_size
+        return estimated_gradient
+
+    def _estimate_fd_gradient_central(self, paired_trajectories: list) -> np.ndarray:
+        estimated_gradient = np.zeros(self.dim, dtype=np.float64)
+
+        for traj in paired_trajectories:
+            rewards_plus = traj["rewards_plus"]
+            rewards_minus = traj["rewards_minus"]
+            feats_plus = traj["features_plus"]
+            feats_minus = traj["features_minus"]
+            eps_seq = traj["eps"]
+
+            if len(rewards_plus) == 0 or len(rewards_minus) == 0:
+                continue
+
+            horizon_t = min(len(rewards_plus), len(rewards_minus), len(eps_seq))
+            if horizon_t == 0:
+                continue
+
+            tail_plus = self._compute_tail_returns(rewards_plus[:horizon_t])
+            tail_minus = self._compute_tail_returns(rewards_minus[:horizon_t])
+
+            for t in range(horizon_t):
+                jac_plus = self._policy_jacobian(features=feats_plus[t])
+                jac_minus = self._policy_jacobian(features=feats_minus[t])
+
+                eps_t = np.atleast_1d(eps_seq[t])
+
+                term_plus = (jac_plus.T @ eps_t) * tail_plus[t]
+                term_minus = (jac_minus.T @ eps_t) * tail_minus[t]
+
+                estimated_gradient += (self.env.gamma ** t) * (term_plus - term_minus) / (2.0 * self.fd_action_eps)
+
+        estimated_gradient = estimated_gradient / self.batch_size
+        return estimated_gradient
+
+    def _estimate_fd_gradient_deterministic(self, trajectories: list) -> np.ndarray:
+        estimated_gradient = np.zeros(self.dim, dtype=np.float64)
+
+        for traj in trajectories:
+            rewards_nom = traj["rewards_nom"]
+            feats_nom = traj["features_nom"]
+            rewards_perturbed = traj["rewards_perturbed"]
+
+            if len(rewards_nom) == 0:
+                continue
+
+            horizon_t = len(rewards_nom)
+            for i in range(self.dim_action):
+                horizon_t = min(horizon_t, len(rewards_perturbed[i]))
+
+            if horizon_t == 0:
+                continue
+
+            tail_nom = self._compute_tail_returns(rewards_nom[:horizon_t])
+            tail_perturbed = [
+                self._compute_tail_returns(rewards_perturbed[i][:horizon_t])
+                for i in range(self.dim_action)
+            ]
+
+            for t in range(horizon_t):
+                jac_nom = self._policy_jacobian(features=feats_nom[t])
+
+                delta_returns = np.zeros(self.dim_action, dtype=np.float64)
+                for i in range(self.dim_action):
+                    delta_returns[i] = (tail_perturbed[i][t] - tail_nom[t]) / self.fd_action_eps
+
+                estimated_gradient += (self.env.gamma ** t) * (jac_nom.T @ delta_returns)
+
+        estimated_gradient = estimated_gradient / self.batch_size
+        return estimated_gradient
+
+    def _estimate_fd_gradient_deterministic_central(self, trajectories: list) -> np.ndarray:
+        estimated_gradient = np.zeros(self.dim, dtype=np.float64)
+
+        for traj in trajectories:
+            rewards_nom = traj["rewards_nom"]
+            feats_nom = traj["features_nom"]
+            rewards_plus = traj["rewards_plus"]
+            rewards_minus = traj["rewards_minus"]
+
+            if len(rewards_nom) == 0:
+                continue
+
+            horizon_t = len(rewards_nom)
+            for i in range(self.dim_action):
+                horizon_t = min(horizon_t, len(rewards_plus[i]), len(rewards_minus[i]))
+
+            if horizon_t == 0:
+                continue
+
+            tail_plus = [
+                self._compute_tail_returns(rewards_plus[i][:horizon_t])
+                for i in range(self.dim_action)
+            ]
+            tail_minus = [
+                self._compute_tail_returns(rewards_minus[i][:horizon_t])
+                for i in range(self.dim_action)
+            ]
+
+            for t in range(horizon_t):
+                jac_nom = self._policy_jacobian(features=feats_nom[t])
+
+                delta_returns = np.zeros(self.dim_action, dtype=np.float64)
+                for i in range(self.dim_action):
+                    delta_returns[i] = (tail_plus[i][t] - tail_minus[i][t]) / (2.0 * self.fd_action_eps)
+
+                estimated_gradient += (self.env.gamma ** t) * (jac_nom.T @ delta_returns)
 
         estimated_gradient = estimated_gradient / self.batch_size
         return estimated_gradient
@@ -340,35 +788,111 @@ class PolicyGradient:
     def learn(self) -> None:
         """Learning function"""
         for i in tqdm(range(self.ite)):
-            np.random.seed(self.seed + i)
-            eps_batch = [self._sample_perturbations(self.env.horizon) for _ in range(self.batch_size)]
+            if self.fd_rollout_mode == "stochastic":
+                # np.random.seed(self.seed + i)
 
-            if self.parallel_computation:
-                paired_trajectories = Parallel(n_jobs=self.n_jobs, backend="loky")(
-                    delayed(self._paired_rollout_forward)(
-                        params=self.thetas,
-                        eps_traj=eps_batch[b],
-                        seed=self.seed + b + i * self.batch_size
-                    ) for b in range(self.batch_size)
-                )
+                # Sample from the unit sphere for each time step and each trajectory in the batch
+                eps_batch = [self._sample_perturbations(self.env.horizon) for _ in range(self.batch_size)]
+
+                # TODO check for loops
+                if self.fd_mode == "forward":
+                    if self.parallel_computation:
+                        trajectories = Parallel(n_jobs=self.n_jobs, backend="loky")(
+                            delayed(self._paired_rollout_forward)(
+                                params=self.thetas,
+                                eps_traj=eps_batch[b],
+                                seed=self.seed+i*self.batch_size,
+                                starting_state=self.starting_state
+                            ) for b in range(self.batch_size)
+                        )
+                    else:
+                        trajectories = []
+                        for b in range(self.batch_size):
+                            traj = self._paired_rollout_forward(
+                                params=self.thetas,
+                                eps_traj=eps_batch[b],
+                                seed=self.seed+i*self.batch_size,
+                                starting_state=self.starting_state
+                            )
+                            trajectories.append(traj)
+
+                    estimated_gradient = self._estimate_fd_gradient(paired_trajectories=trajectories)
+                elif self.fd_mode == "central":
+                    if self.parallel_computation:
+                        trajectories = Parallel(n_jobs=self.n_jobs, backend="loky")(
+                            delayed(self._paired_rollout_central)(
+                                params=self.thetas,
+                                eps_traj=eps_batch[b],
+                                seed=self.seed+i*self.batch_size,
+                                starting_state=self.starting_state
+                            ) for b in range(self.batch_size)
+                        )
+                    else:
+                        trajectories = []
+                        for b in range(self.batch_size):
+                            traj = self._paired_rollout_central(
+                                params=self.thetas,
+                                eps_traj=eps_batch[b],
+                                seed=self.seed+i*self.batch_size,
+                                starting_state=self.starting_state
+                            )
+                            trajectories.append(traj)
+
+                    estimated_gradient = self._estimate_fd_gradient_central(paired_trajectories=trajectories)
+                else:
+                    raise NotImplementedError("[PG-FD] five_point mode not implemented for stochastic rollout.")
+
+            # Deterministic case ---> TODO remove useless methods and add determinism as a parameter in the rollout methods
             else:
-                paired_trajectories = []
-                for b in range(self.batch_size):
-                    traj = self._paired_rollout_forward(
-                        params=self.thetas,
-                        eps_traj=eps_batch[b],
-                        seed=self.seed + b + i * self.batch_size
-                    )
-                    paired_trajectories.append(traj)
+                if self.fd_mode == "forward":
+                    if self.parallel_computation:
+                        trajectories = Parallel(n_jobs=self.n_jobs, backend="loky")(
+                            delayed(self._rollout_deterministic_set)(
+                                params=self.thetas,
+                                seed=self.seed,
+                                starting_state=self.starting_state
+                            ) for b in range(self.batch_size)
+                        )
+                    else:
+                        trajectories = []
+                        for b in range(self.batch_size):
+                            traj = self._rollout_deterministic_set(
+                                params=self.thetas,
+                                seed=self.seed,
+                                starting_state=self.starting_state
+                            )
+                            trajectories.append(traj)
 
-            perf_vector = np.array([traj["perf_nom"] for traj in paired_trajectories], dtype=np.float64)
+                    estimated_gradient = self._estimate_fd_gradient_deterministic(trajectories=trajectories)
+                elif self.fd_mode == "central":
+                    if self.parallel_computation:
+                        trajectories = Parallel(n_jobs=self.n_jobs, backend="loky")(
+                            delayed(self._rollout_deterministic_set_central)(
+                                params=self.thetas,
+                                seed=self.seed,
+                                starting_state=self.starting_state
+                            ) for b in range(self.batch_size)
+                        )
+                    else:
+                        trajectories = []
+                        for b in range(self.batch_size):
+                            traj = self._rollout_deterministic_set_central(
+                                params=self.thetas,
+                                seed=self.seed,
+                                starting_state=self.starting_state
+                            )
+                            trajectories.append(traj)
+
+                    estimated_gradient = self._estimate_fd_gradient_deterministic_central(trajectories=trajectories)
+                else:
+                    raise NotImplementedError("[PG-FD] five_point mode not implemented for deterministic rollout.")
+
+            # Extract nominal performance for each trajectory and compute the mean performance across the batch
+            perf_vector = np.array([traj["perf_nom"] for traj in trajectories], dtype=np.float64)
 
             self.performance_idx[i] = np.mean(perf_vector)
             self.update_best_theta(current_perf=self.performance_idx[i])
 
-            estimated_gradient = self._estimate_fd_gradient(
-                paired_trajectories=paired_trajectories
-            )
             self.fd_grad_history[i, :] = copy.deepcopy(estimated_gradient)
 
             if self.lr_strategy == "constant":
