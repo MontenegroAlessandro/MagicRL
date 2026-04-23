@@ -495,10 +495,6 @@ for i in range(args.n_trials):
         )
         alg = CPGPE(**alg_parameters)
     elif args.alg == "pg":
-        if args.pol == "gaussian":
-            init_theta = [0] * tot_params
-        else:
-            init_theta = np.random.normal(0, 1, tot_params)
         alg_parameters = dict(
             lr=[args.lr],
             lr_strategy=args.lr_strategy,
@@ -518,15 +514,10 @@ for i in range(args.n_trials):
         )
         alg = PolicyGradient(**alg_parameters)
     elif args.alg == "pg_fd":
-        if args.pol == "linear":
-            init_theta = [0] * tot_params
-        else:
-            init_theta = np.random.normal(0, 1, tot_params)
         alg_parameters = dict(
             lr=[args.lr],
             lr_strategy=args.lr_strategy,
             estimator_type="FD",
-            initial_theta=init_theta,
             ite=args.ite,
             batch_size=args.batch,
             env=env,

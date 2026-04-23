@@ -204,7 +204,7 @@ class NeuralNetworkPolicy(LinearGaussianPolicy):
                               hidden_neurons,
                               bias,
                               activation,
-                              init)
+                              init).double()
 
         self.tot_params = self.mlp.tot_parameters()
 

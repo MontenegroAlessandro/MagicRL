@@ -24,7 +24,6 @@ class PolicyGradient:
             self, lr: np.array = None,
             lr_strategy: str = "constant",
             estimator_type: str = "REINFORCE",
-            initial_theta: np.array = None,
             ite: int = 100,
             batch_size: int = 1,
             env: BaseEnv = None,
@@ -95,18 +94,15 @@ class PolicyGradient:
         assert estimator_type in ["REINFORCE", "GPOMDP"], err_msg
         self.estimator_type = estimator_type
 
-        err_msg = "[PG] initial_theta has not been specified!"
-        assert initial_theta is not None, err_msg
-        self.thetas = np.array(initial_theta)
+        err_msg = "[PG] policy is None."
+        assert policy is not None, err_msg
+        self.policy = policy
+        self.thetas = self.policy.get_parameters()
         self.dim = len(self.thetas)
 
         err_msg = "[PG] env is None."
         assert env is not None, err_msg
         self.env = env
-
-        err_msg = "[PG] policy is None."
-        assert policy is not None, err_msg
-        self.policy = policy
 
         err_msg = "[PG] data processor is None."
         assert data_processor is not None, err_msg
