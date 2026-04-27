@@ -499,7 +499,6 @@ for i in range(args.n_trials):
             lr=[args.lr],
             lr_strategy=args.lr_strategy,
             estimator_type="GPOMDP",
-            initial_theta=init_theta,
             ite=args.ite,
             batch_size=args.batch,
             env=env,
@@ -514,6 +513,11 @@ for i in range(args.n_trials):
         )
         alg = PolicyGradient(**alg_parameters)
     elif args.alg == "pg_fd":
+        if args.pg_fd_rollout_mode == "deterministic":
+            perturbation_scope = "trajectory"
+        else:
+            perturbation_scope = args.pg_fd_perturbation_scope
+    
         alg_parameters = dict(
             lr=[args.lr],
             lr_strategy=args.lr_strategy,
@@ -531,7 +535,7 @@ for i in range(args.n_trials):
             seed=i,
             fd_rollout_mode=args.pg_fd_rollout_mode,
             fd_mode=args.fd_mode,
-            perturbation_scope=args.pg_fd_perturbation_scope,
+            perturbation_scope=perturbation_scope,
             fd_action_eps=args.var
         )
         alg = PolicyGradientFD(**alg_parameters)

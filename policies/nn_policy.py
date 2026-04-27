@@ -415,10 +415,6 @@ class DeepGaussian (LinearGaussianPolicy):
             thetas = torch.tensor(thetas, dtype=torch.float64)
             
         torch.nn.utils.vector_to_parameters(thetas, self.mlp.parameters())
-    
+        
     def get_parameters(self):
-        """
-        Get the parameters of the policy
-        """
-        return torch.nn.utils.parameters_to_vector(self.mlp.parameters())
-    
+        return to_numpy(torch.nn.utils.parameters_to_vector(self.mlp.parameters()))
