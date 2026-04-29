@@ -282,6 +282,7 @@ class PolicyGradient:
         gamma_seq = (gamma * np.ones(horizon, dtype=np.float64)) ** (np.arange(horizon))
         rolling_scores = np.cumsum(score_trajectory, axis=1)
         reward_trajectory = reward_trajectory[:, :, np.newaxis] * rolling_scores
+
         estimated_gradient = np.mean(
             np.sum(gamma_seq[:, np.newaxis] * reward_trajectory, axis=1),
             axis=0)

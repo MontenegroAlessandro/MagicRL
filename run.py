@@ -180,7 +180,7 @@ if args.alg in ["pg"]:
     elif args.pol == "nn":
         args.pol = "deep_gaussian"
 
-policy_std = args.var
+policy_std = np.sqrt(args.var)
 
 if args.alg in ["pgpe", "pgpe_fd", "cpgpe"]:
     if args.pol == "deep_gaussian":
@@ -536,7 +536,7 @@ for i in range(args.n_trials):
             fd_rollout_mode=args.pg_fd_rollout_mode,
             fd_mode=args.fd_mode,
             perturbation_scope=perturbation_scope,
-            fd_action_eps=args.var
+            fd_action_delta=args.var
         )
         alg = PolicyGradientFD(**alg_parameters)
     elif args.alg == "dpg":
