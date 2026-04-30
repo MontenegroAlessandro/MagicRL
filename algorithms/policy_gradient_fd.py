@@ -350,8 +350,6 @@ class PolicyGradient:
         features_minus = []
         eps_used = []
 
-        perf_nom = 0.0
-
         for t in range(self.env.horizon):
             state_plus = copy.deepcopy(env_plus.state)
             state_minus = copy.deepcopy(env_minus.state)
@@ -380,7 +378,6 @@ class PolicyGradient:
                 break
 
         return {
-            "perf_nom": float(perf_nom),
             "rewards_plus": np.array(rewards_plus, dtype=np.float64),
             "rewards_minus": np.array(rewards_minus, dtype=np.float64),
             "features_plus": np.array(features_plus, dtype=np.float64),
@@ -993,12 +990,9 @@ class PolicyGradient:
         """Learning function"""
         for i in tqdm(range(self.ite)):
             if self.fd_rollout_mode == "stochastic":
-                # np.random.seed(self.seed + i)
-
                 # Sample from the unit sphere for each time step and each trajectory in the batch
                 eps_batch = [self._sample_perturbations(self.env.horizon) for _ in range(self.batch_size)]
 
-                # TODO check for loops
                 if self.fd_mode == "forward":
                     if self.parallel_computation:
                         trajectories = Parallel(n_jobs=self.n_jobs, backend="loky")(
@@ -1052,15 +1046,13 @@ class PolicyGradient:
                         estimated_gradient = self._estimate_fd_gradient_central_nn(paired_trajectories=trajectories)
                 else:
                     raise NotImplementedError("[PG-FD] five_point mode not implemented for stochastic rollout.")
-
-            # Deterministic case ---> TODO remove useless methods and add determinism as a parameter in the rollout methods
             else:
                 if self.fd_mode == "forward":
                     if self.parallel_computation:
                         trajectories = Parallel(n_jobs=self.n_jobs, backend="loky")(
                             delayed(self._rollout_deterministic_set)(
                                 params=self.thetas,
-                                seed=self.seed,
+                                seed=self.seed+i*self.batch_size+b,
                                 starting_state=self.starting_state
                             ) for b in range(self.batch_size)
                         )
@@ -1069,7 +1061,7 @@ class PolicyGradient:
                         for b in range(self.batch_size):
                             traj = self._rollout_deterministic_set(
                                 params=self.thetas,
-                                seed=self.seed,
+                                seed=self.seed+i*self.batch_size+b,
                                 starting_state=self.starting_state
                             )
                             trajectories.append(traj)
