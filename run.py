@@ -517,7 +517,7 @@ for i in range(args.n_trials):
             perturbation_scope = "trajectory"
         else:
             perturbation_scope = args.pg_fd_perturbation_scope
-    
+        
         alg_parameters = dict(
             lr=[args.lr],
             lr_strategy=args.lr_strategy,

@@ -630,29 +630,21 @@ class PolicyGradient:
             for p in mlp.parameters()]
         )
         return grad_vec.detach().cpu().numpy()
-
+    
     def _build_surrogate_loss_central(self, paired_trajectories: list) -> "torch.Tensor":
-        """
-        Surrogate loss for stochastic central-difference FD estimator:
-
-            g = (1/B) Σ_b Σ_t γ^t · J(s_t)^T ε_t · ((G_t^+ - G_t^-)/(2δ))
-
-        obtained via dL/dθ with
-
-            L = (1/B) Σ_b Σ_t γ^t · dot(ε_t, μ_θ(s_t)) · ((G_t^+ - G_t^-)/(2δ)).
-        """
         mlp = self.policy.mlp
         mlp.eval()
 
         loss = torch.tensor(0.0, dtype=torch.float64)
 
         for traj in paired_trajectories:
-            feats_nom = traj["features_nom"]
+            feats_plus = traj["features_plus"]
+            feats_minus = traj["features_minus"]
             rewards_plus = traj["rewards_plus"]
             rewards_minus = traj["rewards_minus"]
             eps_seq = traj["eps"]
 
-            horizon_t = min(len(feats_nom), len(rewards_plus), len(rewards_minus), len(eps_seq))
+            horizon_t = min(len(feats_plus), len(feats_minus), len(rewards_plus), len(rewards_minus), len(eps_seq))
             if horizon_t == 0:
                 continue
 
@@ -661,17 +653,24 @@ class PolicyGradient:
 
             for t in range(horizon_t):
                 eps_t = to_torch(eps_seq[t]).detach()
-                delta_g_t = float((tail_plus[t] - tail_minus[t]) / (2.0 * self.fd_action_delta))
+                G_t_plus = float(tail_plus[t])
+                G_t_minus = float(tail_minus[t])
                 discount = self.env.gamma ** t
 
-                s_nom = to_torch(feats_nom[t])
-                mu_nom = mlp(s_nom)
+                s_plus = to_torch(feats_plus[t])
+                s_minus = to_torch(feats_minus[t])
+                mu_plus = mlp(s_plus)
+                mu_minus = mlp(s_minus)
 
-                loss = loss + discount * torch.dot(eps_t, mu_nom) * delta_g_t
+                loss = loss + discount * (
+                    torch.dot(eps_t, mu_plus) * G_t_plus - 
+                    torch.dot(eps_t, mu_minus) * G_t_minus
+                )
 
-        loss = loss / self.batch_size
+        # normalise by batch size and 2*delta
+        loss = loss / (self.batch_size * 2.0 * self.fd_action_delta)
         return loss
-
+    
     def _estimate_fd_gradient_central_nn(self, paired_trajectories: list) -> "np.ndarray":
         """
         Gradient estimator for NeuralNetworkPolicy via central-difference surrogate-loss autograd.
@@ -757,46 +756,42 @@ class PolicyGradient:
             for p in mlp.parameters()]
         )
         return grad_vec.detach().cpu().numpy()
-
-    def _build_surrogate_loss_central(self, paired_trajectories: list) -> "torch.Tensor":
+    
+    def _build_surrogate_loss_deterministic_central(self, trajectories: list) -> torch.Tensor:
         mlp = self.policy.mlp
         mlp.eval()
-
         loss = torch.tensor(0.0, dtype=torch.float64)
 
-        for traj in paired_trajectories:
-            feats_plus = traj["features_plus"]
-            feats_minus = traj["features_minus"]
+        for traj in trajectories:
+            feats_nom = traj["features_nom"]
             rewards_plus = traj["rewards_plus"]
             rewards_minus = traj["rewards_minus"]
-            eps_seq = traj["eps"]
 
-            horizon_t = min(len(feats_plus), len(feats_minus), len(rewards_plus), len(rewards_minus), len(eps_seq))
+            # Align horizons
+            horizon_t = len(feats_nom)
+            for i in range(self.dim_action):
+                horizon_t = min(horizon_t, len(rewards_plus[i]), len(rewards_minus[i]))
+
             if horizon_t == 0:
                 continue
 
-            tail_plus = self._compute_tail_returns(rewards_plus[:horizon_t])
-            tail_minus = self._compute_tail_returns(rewards_minus[:horizon_t])
+            # Compute G_t^+ and G_t^- for all dimensions
+            tail_plus = [self._compute_tail_returns(rewards_plus[i][:horizon_t]) for i in range(self.dim_action)]
+            tail_minus = [self._compute_tail_returns(rewards_minus[i][:horizon_t]) for i in range(self.dim_action)]
 
             for t in range(horizon_t):
-                eps_t = to_torch(eps_seq[t]).detach()
-                G_t_plus = float(tail_plus[t])
-                G_t_minus = float(tail_minus[t])
-                discount = self.env.gamma ** t
+                # Compute central FD derivative vector v_t
+                v_t = torch.tensor([
+                    (tail_plus[i][t] - tail_minus[i][t]) / (2.0 * self.fd_action_delta)
+                    for i in range(self.dim_action)
+                ], dtype=torch.float64).detach()
 
-                s_plus = to_torch(feats_plus[t])
-                s_minus = to_torch(feats_minus[t])
-                mu_plus = mlp(s_plus)
-                mu_minus = mlp(s_minus)
+                s_t = to_torch(feats_nom[t])
+                mu_t = mlp(s_t).double() # Enforce float64 to prevent truncation
+                
+                loss = loss + (self.env.gamma ** t) * torch.dot(v_t, mu_t)
 
-                loss = loss + discount * (
-                    torch.dot(eps_t, mu_plus) * G_t_plus - 
-                    torch.dot(eps_t, mu_minus) * G_t_minus
-                )
-
-        # normalise by batch size and 2*delta
-        loss = loss / (self.batch_size * 2.0 * self.fd_action_delta)
-        return loss
+        return loss / self.batch_size
 
     def _estimate_fd_gradient_deterministic_central_nn(self, trajectories: list) -> "np.ndarray":
         """
