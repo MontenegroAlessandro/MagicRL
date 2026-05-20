@@ -1,5 +1,4 @@
 # MagicRL :crystal_ball: :rocket:
-Magic as the AS Roma! :wolf:
 
 ## Set up the environment.
 (Attention is all) You need ( :joy: ) an `anaconda3` environment with python 3.11.5.
