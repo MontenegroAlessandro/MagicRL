@@ -1,7 +1,7 @@
 # MagicRL :crystal_ball: :rocket:
 
 ## Set up the environment.
-(Attention is all) You need ( :joy: ) an `anaconda3` environment with python 3.11.5.
+You need an `anaconda3` environment with python 3.11.5.
 ```bash
 conda create --name name python=3.11.5
 conda activate name
