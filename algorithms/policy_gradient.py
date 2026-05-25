@@ -34,7 +34,7 @@ class PolicyGradient:
             natural: bool = False,
             checkpoint_freq: int = 1,
             n_jobs: int = 1,
-            save_det: int = 0,
+            save_det: int = 1,
             learn_std: int = 0,
             seed: int = 0
     ) -> None:

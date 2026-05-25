@@ -9,3 +9,5 @@ from algorithms.samplers import *
 from algorithms.dpg import *
 from algorithms.policy_gradient_pd import *
 from algorithms.phased_pg import *
+from algorithms.policy_gradient_fd import *
+from algorithms.pg_fd_new import *

@@ -2,7 +2,8 @@
 import argparse
 from algorithms import PGPE, PolicyGradient, DeterministicPG, CPGPE
 from algorithms.pgpe_fd import PGPE as PGPEFD
-from algorithms.policy_gradient_fd import PolicyGradient as PolicyGradientFD
+from algorithms.policy_gradient_fd import PolicyGradientFD
+from algorithms.pg_fd_new import PolicyGradientFD_2
 from data_processors import IdentityDataProcessor
 from envs import *
 from policies import *
@@ -538,7 +539,7 @@ for i in range(args.n_trials):
             perturbation_scope=perturbation_scope,
             fd_action_delta=args.var
         )
-        alg = PolicyGradientFD(**alg_parameters)
+        alg = PolicyGradientFD_2(**alg_parameters)
     elif args.alg == "dpg":
         if args.pol == "linear":
             init_theta = [0] * tot_params
